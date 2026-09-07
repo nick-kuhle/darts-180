@@ -34,6 +34,8 @@ export interface GuidedCalibrationQuality {
 
 export interface DartShape {
   id: string;
+  /** A side-view shaft or a compact flight/occlusion seen from near the board centreline. */
+  kind: 'elongated' | 'compact';
   pixelCount: number;
   bounds: Readonly<{ left: number; top: number; right: number; bottom: number }>;
   center: ImagePoint;
@@ -48,7 +50,7 @@ export interface DartShape {
 export interface DartTipCandidate {
   id: string;
   shapeId: string;
-  endpoint: 'A' | 'B';
+  endpoint: 'A' | 'B' | 'center';
   imagePoint: ImagePoint;
   boardPoint: CanonicalPoint;
   zone: DartZone;
@@ -57,7 +59,7 @@ export interface DartTipCandidate {
   tipLikelihood: number;
   /** A heuristic shape/endpoint ranking, never a calibrated score probability. */
   confidence: number;
-  directionEvidence: 'only-endpoint-on-board' | 'ambiguous-endpoint';
+  directionEvidence: 'only-endpoint-on-board' | 'compact-local-change' | 'ambiguous-endpoint';
 }
 
 export type DifferenceStatus =
@@ -231,9 +233,10 @@ function assessFourPointCalibration(
 }
 
 /**
- * Finds a newly visible elongated shape by comparing a clear-board reference to a settled frame.
- * It intentionally returns candidates rather than silently recording a score. A finger, hand,
- * camera move, bounce-out, or stacked dart should stay in the review path.
+ * Finds a newly visible localized dart shape by comparing a clear-board reference to a settled
+ * frame. It supports both a side-view shaft and a compact flight/occlusion in a near-centreline
+ * camera view, but intentionally returns reviewable candidates rather than silently recording a
+ * score. A finger, hand, camera move, bounce-out, or stacked dart should stay in the review path.
  */
 export function analyzeDartDifference(
   reference: CameraFrame,
@@ -265,14 +268,19 @@ export function analyzeDartDifference(
   }
 
   const { width, height } = current;
-  const offsets = estimateChannelOffsets(reference, current);
-  const adaptiveNoise = estimateAdaptiveNoise(reference, current, offsets);
+  const adjustments = estimateChannelAdjustments(reference, current);
+  const adaptiveNoise = estimateAdaptiveNoise(reference, current, adjustments);
+  // A board-centreline camera often sees a dart flight as a compact local occlusion instead of a
+  // long shaft. Keep the floor low enough to preserve that subtle stable change, then let adaptive
+  // noise, shape checks, and the two-frame stability gate reject ordinary video noise.
   const differenceThreshold = clamp(
-    Math.max(options.minimumDifference ?? 22, adaptiveNoise * 3 + 8),
-    18,
+    Math.max(options.minimumDifference ?? 14, adaptiveNoise * 2.5 + 6),
+    14,
     72,
   );
-  const acceptedRadiusMm = options.acceptedRadiusMm ?? BOARD_RADII_MM.doubleOuter + 90;
+  // Keep enough margin for a dart shaft/flight that projects outside the double ring in an oblique
+  // view. Only a later candidate endpoint/centroid is allowed to score on the board itself.
+  const acceptedRadiusMm = options.acceptedRadiusMm ?? BOARD_RADII_MM.doubleOuter + 140;
   const mask = new Uint8Array(width * height);
   let changedPixels = 0;
 
@@ -281,9 +289,18 @@ export function analyzeDartDifference(
       const pixel = y * width + x;
       const offset = pixel * 4;
       const difference =
-        (Math.abs(current.rgba[offset]! - reference.rgba[offset]! - offsets.r) +
-          Math.abs(current.rgba[offset + 1]! - reference.rgba[offset + 1]! - offsets.g) +
-          Math.abs(current.rgba[offset + 2]! - reference.rgba[offset + 2]! - offsets.b)) /
+        (Math.abs(
+          current.rgba[offset]! -
+            (reference.rgba[offset]! * adjustments.r.gain + adjustments.r.offset),
+        ) +
+          Math.abs(
+            current.rgba[offset + 1]! -
+              (reference.rgba[offset + 1]! * adjustments.g.gain + adjustments.g.offset),
+          ) +
+          Math.abs(
+            current.rgba[offset + 2]! -
+              (reference.rgba[offset + 2]! * adjustments.b.gain + adjustments.b.offset),
+          )) /
         3;
       if (difference < differenceThreshold) continue;
 
@@ -332,9 +349,15 @@ export function analyzeDartDifference(
     Math.round(boardDiameterPixels * boardDiameterPixels * 0.00006),
   );
   const shapes = components
-    .map((component, index) => buildDartShape(component, index, width, homography, minimumLength))
+    .map((component, index) =>
+      buildDartShape(component, index, width, homography, minimumLength, boardDiameterPixels),
+    )
     .filter((shape): shape is DartShape => shape !== null)
-    .filter((shape) => shape.pixelCount >= minimumPixels)
+    .filter(
+      (shape) =>
+        shape.pixelCount >=
+        (shape.kind === 'compact' ? Math.max(minimumPixels, 42) : minimumPixels),
+    )
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 4);
 
@@ -342,7 +365,7 @@ export function analyzeDartDifference(
     return {
       status: 'ambiguous-change',
       message:
-        'A small change was found, but it did not look like a stable dart shaft. Tap the visible tip manually or wait and try again.',
+        'A small change was found, but it did not yet look like a stable dart shaft or compact flight. Hold still for another moment or use ordinary score correction.',
       differenceThreshold,
       changedPixels,
       changedFraction,
@@ -358,7 +381,7 @@ export function analyzeDartDifference(
     return {
       status: 'ambiguous-change',
       message:
-        'A dart-shaped change was found, but its endpoints could not be mapped safely onto the calibrated board. Recalibrate or select the visible tip manually.',
+        'A dart-like change was found, but it could not be mapped safely onto the board. Find the board again or use ordinary score correction.',
       differenceThreshold,
       changedPixels,
       changedFraction,
@@ -370,7 +393,7 @@ export function analyzeDartDifference(
   return {
     status: 'dart-candidate',
     message:
-      'Dart-shaped change found. Select the endpoint that is visibly the tip, or use Manual tip if neither marker is correct.',
+      'New dart/flight-shaped change found. Ranking its likely board entry point locally before proposing a correctable score.',
     differenceThreshold,
     changedPixels,
     changedFraction,
@@ -468,39 +491,88 @@ function luminanceAt(frame: CameraFrame, x: number, y: number): number {
   );
 }
 
-function estimateChannelOffsets(
+interface ChannelAdjustment {
+  gain: number;
+  offset: number;
+}
+
+type ChannelAdjustments = Readonly<{
+  r: ChannelAdjustment;
+  g: ChannelAdjustment;
+  b: ChannelAdjustment;
+}>;
+
+function estimateChannelAdjustments(
   reference: CameraFrame,
   current: CameraFrame,
-): {
-  r: number;
-  g: number;
-  b: number;
-} {
-  let r = 0;
-  let g = 0;
-  let b = 0;
+): ChannelAdjustments {
+  let referenceR = 0;
+  let referenceG = 0;
+  let referenceB = 0;
+  let currentR = 0;
+  let currentG = 0;
+  let currentB = 0;
+  let referenceRSquared = 0;
+  let referenceGSquared = 0;
+  let referenceBSquared = 0;
+  let referenceCurrentR = 0;
+  let referenceCurrentG = 0;
+  let referenceCurrentB = 0;
   let samples = 0;
   const step = Math.max(4, Math.round(Math.min(reference.width, reference.height) / 80));
   for (let y = 1; y < reference.height - 1; y += step) {
     for (let x = 1; x < reference.width - 1; x += step) {
       const offset = (y * reference.width + x) * 4;
-      r += current.rgba[offset]! - reference.rgba[offset]!;
-      g += current.rgba[offset + 1]! - reference.rgba[offset + 1]!;
-      b += current.rgba[offset + 2]! - reference.rgba[offset + 2]!;
+      const referenceRed = reference.rgba[offset]!;
+      const referenceGreen = reference.rgba[offset + 1]!;
+      const referenceBlue = reference.rgba[offset + 2]!;
+      const currentRed = current.rgba[offset]!;
+      const currentGreen = current.rgba[offset + 1]!;
+      const currentBlue = current.rgba[offset + 2]!;
+      referenceR += referenceRed;
+      referenceG += referenceGreen;
+      referenceB += referenceBlue;
+      currentR += currentRed;
+      currentG += currentGreen;
+      currentB += currentBlue;
+      referenceRSquared += referenceRed * referenceRed;
+      referenceGSquared += referenceGreen * referenceGreen;
+      referenceBSquared += referenceBlue * referenceBlue;
+      referenceCurrentR += referenceRed * currentRed;
+      referenceCurrentG += referenceGreen * currentGreen;
+      referenceCurrentB += referenceBlue * currentBlue;
       samples += 1;
     }
   }
   return {
-    r: samples === 0 ? 0 : r / samples,
-    g: samples === 0 ? 0 : g / samples,
-    b: samples === 0 ? 0 : b / samples,
+    r: linearChannelAdjustment(referenceR, currentR, referenceRSquared, referenceCurrentR, samples),
+    g: linearChannelAdjustment(referenceG, currentG, referenceGSquared, referenceCurrentG, samples),
+    b: linearChannelAdjustment(referenceB, currentB, referenceBSquared, referenceCurrentB, samples),
   };
+}
+
+function linearChannelAdjustment(
+  referenceSum: number,
+  currentSum: number,
+  referenceSquaredSum: number,
+  referenceCurrentSum: number,
+  samples: number,
+): ChannelAdjustment {
+  if (samples === 0) return { gain: 1, offset: 0 };
+  const referenceMean = referenceSum / samples;
+  const currentMean = currentSum / samples;
+  const variance = referenceSquaredSum / samples - referenceMean * referenceMean;
+  const covariance = referenceCurrentSum / samples - referenceMean * currentMean;
+  // A small global auto-exposure or white-balance change should not mask a newly inserted dart.
+  // Clamp the correction tightly so a local hand or dart cannot become the global explanation.
+  const gain = variance < 1 ? 1 : clamp(covariance / variance, 0.82, 1.18);
+  return { gain, offset: currentMean - referenceMean * gain };
 }
 
 function estimateAdaptiveNoise(
   reference: CameraFrame,
   current: CameraFrame,
-  offsets: Readonly<{ r: number; g: number; b: number }>,
+  adjustments: ChannelAdjustments,
 ): number {
   const values: number[] = [];
   const step = Math.max(6, Math.round(Math.min(reference.width, reference.height) / 70));
@@ -508,9 +580,18 @@ function estimateAdaptiveNoise(
     for (let x = 1; x < reference.width - 1; x += step) {
       const offset = (y * reference.width + x) * 4;
       values.push(
-        (Math.abs(current.rgba[offset]! - reference.rgba[offset]! - offsets.r) +
-          Math.abs(current.rgba[offset + 1]! - reference.rgba[offset + 1]! - offsets.g) +
-          Math.abs(current.rgba[offset + 2]! - reference.rgba[offset + 2]! - offsets.b)) /
+        (Math.abs(
+          current.rgba[offset]! -
+            (reference.rgba[offset]! * adjustments.r.gain + adjustments.r.offset),
+        ) +
+          Math.abs(
+            current.rgba[offset + 1]! -
+              (reference.rgba[offset + 1]! * adjustments.g.gain + adjustments.g.offset),
+          ) +
+          Math.abs(
+            current.rgba[offset + 2]! -
+              (reference.rgba[offset + 2]! * adjustments.b.gain + adjustments.b.offset),
+          )) /
           3,
       );
     }
@@ -592,6 +673,7 @@ function buildDartShape(
   width: number,
   homography: Homography,
   minimumLength: number,
+  boardDiameterPixels: number,
 ): DartShape | null {
   if (component.pixels.length < 3) return null;
   let sumX = 0;
@@ -632,7 +714,19 @@ function buildDartShape(
   }
   const lineLengthPixels = maximumProjection - minimumProjection;
   const aspectRatio = Math.sqrt(majorVariance / Math.max(minorVariance, 0.25));
-  if (lineLengthPixels < minimumLength || aspectRatio < 1.8) return null;
+  const elongated = lineLengthPixels >= minimumLength && aspectRatio >= 1.8;
+  // When the camera is close to the board centreline, the dart shaft is foreshortened and the
+  // visible flight/occlusion is compact rather than long. A localized compact change is useful as
+  // a deliberately low-confidence, correctable proposal, but cap its extent to avoid treating a
+  // hand or broad shadow as a dart.
+  const compactMinimumExtent = Math.max(7, boardDiameterPixels * 0.014);
+  const compactMaximumExtent = Math.max(34, boardDiameterPixels * 0.18);
+  const compact =
+    !elongated &&
+    lineLengthPixels >= compactMinimumExtent &&
+    lineLengthPixels <= compactMaximumExtent &&
+    aspectRatio < 2.55;
+  if (!elongated && !compact) return null;
 
   const endpoints: [ImagePoint, ImagePoint] = [
     {
@@ -657,14 +751,19 @@ function buildDartShape(
   const lengthScore = clamp((lineLengthPixels / minimumLength - 1) / 2.5, 0, 1);
   const aspectScore = clamp((aspectRatio - 1.8) / 4, 0, 1);
   const countScore = clamp(component.pixels.length / Math.max(60, minimumLength * 3), 0, 1);
-  const confidence = clamp(
-    0.18 + lengthScore * 0.38 + aspectScore * 0.3 + countScore * 0.14,
+  const compactExtentScore = clamp(
+    (lineLengthPixels - compactMinimumExtent) /
+      Math.max(1, compactMaximumExtent - compactMinimumExtent),
     0,
-    0.9,
+    1,
   );
+  const confidence = elongated
+    ? clamp(0.18 + lengthScore * 0.38 + aspectScore * 0.3 + countScore * 0.14, 0, 0.9)
+    : clamp(0.2 + compactExtentScore * 0.2 + countScore * 0.16, 0.16, 0.56);
 
   return {
     id: `shape-${index + 1}`,
+    kind: elongated ? 'elongated' : 'compact',
     pixelCount: component.pixels.length,
     bounds: {
       left: component.minX,
@@ -721,6 +820,33 @@ function measureEndpointWidths(
 }
 
 function candidatesForShape(shape: DartShape, homography: Homography): DartTipCandidate[] {
+  if (shape.kind === 'compact') {
+    const boardPoint = mapImagePointToBoard(shape.center, homography);
+    if (
+      boardPoint === null ||
+      Math.hypot(boardPoint.xMm, boardPoint.yMm) > BOARD_RADII_MM.doubleOuter + 12
+    ) {
+      return [];
+    }
+    // The actual tip may be hidden by a compact flight in a near-centreline view. The centroid is
+    // only an approximate entry location, deliberately kept below the normal high-confidence path
+    // so the DartCard is prominently reviewable.
+    return [
+      {
+        id: `${shape.id}-center`,
+        shapeId: shape.id,
+        endpoint: 'center',
+        imagePoint: shape.center,
+        boardPoint,
+        zone: decodeBoardPoint(boardPoint),
+        wireMarginMm: nearestWireMarginMm(boardPoint),
+        tipLikelihood: 0.36,
+        confidence: clamp(shape.confidence * 0.72, 0.12, 0.44),
+        directionEvidence: 'compact-local-change',
+      },
+    ];
+  }
+
   const mappedEndpoints = shape.endpoints.map((point) => mapImagePointToBoard(point, homography));
   const endpointOnBoard = mappedEndpoints.map(
     (point) => point !== null && Math.hypot(point.xMm, point.yMm) <= BOARD_RADII_MM.doubleOuter + 3,
@@ -782,8 +908,8 @@ export function selectAutomaticTipCandidate(
   return (
     [...candidates].sort((left, right) => {
       const directionDifference =
-        Number(right.directionEvidence === 'only-endpoint-on-board') -
-        Number(left.directionEvidence === 'only-endpoint-on-board');
+        directionEvidenceRank(right.directionEvidence) -
+        directionEvidenceRank(left.directionEvidence);
       if (directionDifference !== 0) return directionDifference;
       const likelihoodDifference = right.tipLikelihood - left.tipLikelihood;
       if (Math.abs(likelihoodDifference) > 0.0001) return likelihoodDifference;
@@ -795,6 +921,12 @@ export function selectAutomaticTipCandidate(
       return left.id.localeCompare(right.id);
     })[0] ?? null
   );
+}
+
+function directionEvidenceRank(evidence: DartTipCandidate['directionEvidence']): number {
+  if (evidence === 'only-endpoint-on-board') return 2;
+  if (evidence === 'compact-local-change') return 1;
+  return 0;
 }
 
 function deduplicateCandidates(candidates: readonly DartTipCandidate[]): DartTipCandidate[] {

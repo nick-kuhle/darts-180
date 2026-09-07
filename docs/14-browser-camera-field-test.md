@@ -19,7 +19,8 @@ photo download, manual frame-analysis action, or visible-tip click.
 
 1. **Start rear camera.** Mount the phone near the board centreline and tap **START REAR CAMERA**.
 2. **Wait for Board Found.** Keep the entire board and double ring visible. The browser looks for the
-   standard board’s red/green scoring bands, estimates the outer board shape, and draws a guide.
+   standard board’s repeated red/green double and treble scoring bands—not merely the outermost
+   colored object—then estimates the board shape and draws a guide.
 3. **Start Play.** With no darts in the board and people clear of the view, tap **START PLAY**. This
    stores the clear-board baseline in local memory and arms live scoring; the player has not
    calibrated anything.
@@ -40,8 +41,10 @@ every endpoint under every angle, flight, shadow, board surface, or occlusion.
 The browser’s automatic board fit is deliberately inspectable and conservative:
 
 1. samples the local camera frame for conventional saturated red and green board accents;
-2. estimates their center and principal ellipse/outer-double extent from the red/green pattern;
-3. requires two similar fits before accepting a board;
+2. finds the repeated, color-balanced outer-double and inner-treble band pair, so a red surround,
+   wall logo, or one colored object is not automatically treated as the board;
+3. estimates the band-pair center and principal ellipse, then requires two matching full guide shapes
+   before accepting a board;
 4. creates the same internal image-to-canonical-board mapping used by deterministic scoring; and
 5. retains an in-memory clear-board frame only when the player taps **START PLAY**.
 
@@ -52,11 +55,12 @@ of the camera image**. The visible `20 ↑` guide makes that assumption inspecta
 level with a normally oriented board. A future trained board/number-orientation model must replace
 this assumption before claiming arbitrary roll/board rotation support.
 
-After board finding, each dart is still a browser-local visual-change heuristic. It rejects broad
-motion, retains elongated newly visible shapes, projects endpoints through the canonical geometry,
-ranks board-containment and apparent endpoint-width/flight cues, and waits for the same candidate in
-two polls before recording an editable suggestion. It is not a learned tip detector or a calibrated
-score probability.
+After board finding, each dart is still a browser-local visual-change heuristic. It compensates a
+bounded global exposure/white-balance shift, rejects broad motion, retains elongated side-view shafts
+and compact near-centreline flight/occlusion changes, projects them through canonical geometry, and
+waits for a nearby same-zone candidate in two frames (with one-frame grace) before recording an
+editable suggestion. Compact-flight locations are intentionally low-confidence and reviewable. This
+is not a learned tip detector or a calibrated score probability.
 
 ## Required first-test envelope
 
@@ -71,7 +75,7 @@ feature accurate or broken.
 | Position | As close to the board centreline as practical; mount the camera level with the board’s 20-up orientation      |
 | Light    | Even diffuse room light; avoid glare that desaturates red/green bands or crosses wires                        |
 | Movement | Do not move the mount; step out of the view after every throw                                                 |
-| Darts    | One new dart at a time; wait for shaft movement to stop before expecting a score                              |
+| Darts    | One new dart at a time; wait for the dart/flight to stop moving before expecting a score                      |
 | Decision | Treat each local suggestion as correctable, especially close to a wire                                        |
 
 The browser can use a modestly elliptical color fit, but cannot make a tiny, blurred, heavily
@@ -80,9 +84,10 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
 ## Deploy and test on a physical device
 
 1. The browser field test and Vercel app-root preparation are merged in
-   [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) and
-   [PR #3](https://github.com/nick-kuhle/darts-180/pull/3). Open the Camera Play update in
-   [PR #4](https://github.com/nick-kuhle/darts-180/pull/4) or its Vercel Preview once available.
+   [PR #2](https://github.com/nick-kuhle/darts-180/pull/2),
+   [PR #3](https://github.com/nick-kuhle/darts-180/pull/3), and
+   [PR #5](https://github.com/nick-kuhle/darts-180/pull/5). Use the Vercel Preview for the follow-up
+   Camera Play reliability pull request once it is available.
 2. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable
    **Include files outside the Root Directory**. `apps/web/vercel.json` runs the monorepo-root install
    and web workspace build; no environment variables are required. See the
@@ -112,6 +117,20 @@ heuristic. Test direct top-level HTTPS deployments on actual iOS and Android har
 | Camera framing/resolution changed          | Existing baseline/mapping is no longer trustworthy         | Tap **FIND BOARD AGAIN**, wait for Board Found, then Start Play with an empty board                                                                           |
 | Unusual board colors / extreme perspective | Color heuristic cannot establish a usable automatic shape  | Open **Optional recovery & advanced diagnostics**; do not make it the normal player flow                                                                      |
 | Bounce-out/stacked/hidden dart             | One-camera visual difference is insufficiently isolated    | Record/correct manually; retain it as field-test failure evidence                                                                                             |
+
+## Report a real failure usefully
+
+A real-board failure is not a cue to keep moving the mount indefinitely. In the Camera Play build,
+the **AUTO BOARD FIND** panel reports board pixels, outer-band sectors, red/green sample counts, and
+its color-pattern cue. After **START PLAY**, the **LOCAL DETECTOR** panel reports whether it saw
+`no change`, `ambiguous change`, `camera moved or hand present`, or a candidate, plus changed pixels,
+frame fraction, threshold, and shape count.
+
+For a reproducible defect report, attach or securely retain (with the tester’s consent) an empty-board
+screenshot that includes the visible guide and auto-find panel; a same-mount still with one dart;
+the detector panel after the dart settles; device/browser; board model/colors/surround; and the known
+score. Do not treat a crystal-clear-looking view as sufficient evidence that the heuristic’s color
+or temporal assumptions succeeded.
 
 ## Controlled field-test record
 

@@ -153,17 +153,21 @@ The deployable web prototype now has a deliberately constrained, no-calibration 
 workspace for first real-board testing. It is not the production native runtime. On a fixed mounted
 browser camera, it:
 
-1. samples the conventional red/green scoring colors, estimates their center and principal outer
-   ellipse, and requires two comparable fits before creating an internal outer-double homography;
-2. draws that inferred board mapping as a full guide, checks board pixels, color-ring evidence,
-   guide proportions, and local image detail against the initial 480 px / approximately 55° envelope;
+1. samples conventional red/green accents and searches for their repeated, color-balanced double and
+   treble scoring-band pair rather than trusting the outermost colored pixel; this avoids fitting a
+   red surround or one coloured object as the board;
+2. estimates the band-pair center and ellipse, requires corresponding guide handles to agree in two
+   fits, then creates an internal outer-double homography; checks board pixels, band evidence, guide
+   proportions, and local image detail against the initial 480 px / approximately 55° envelope;
 3. asks the player only to keep the physical 20 upright in the camera image and tap **Start Play**
    with an empty board, which retains a volatile clear-board baseline and arms watching;
-4. compares each later settled frame with the current in-memory reference, masks local change around
-   the automatic board fit, and ranks elongated connected components as possible dart shafts;
-5. automatically chooses one internal endpoint/candidate, preferring one-end-on-board evidence then
-   an apparent endpoint-width/flight cue, and requires it to recur in two polls before it adds a
-   reviewable ordinary score proposal; and
+4. compares each later settled frame with the current in-memory reference after a bounded global
+   exposure/white-balance correction, masks local change around the automatic board fit, and ranks
+   both elongated side-view shafts and compact near-centreline flight/occlusion changes;
+5. automatically chooses one internal candidate, preferring a one-end-on-board shaft estimate and
+   otherwise emitting a deliberately low-confidence compact-centroid estimate; it requires a nearby
+   same-zone candidate across two frames (with one-frame grace) before adding a reviewable ordinary
+   score proposal; and
 6. updates its in-memory reference to include the accepted dart before looking for the next one, then
    provides a one-tap clear-board baseline for the next turn without asking the player to find the
    board again.
@@ -175,9 +179,11 @@ repeat, so this browser field test deliberately assumes a level, 20-up board; a 
 board/number-orientation model is still required for general automatic orientation. The browser
 heuristic rejects large changes as camera movement/hand presence and reports no-change or
 ambiguous-change instead of fabricating a score. Optional visual-guide gestures plus named-anchor
-advanced diagnostics remain recovery-only. It is useful for workflow and failure-data collection; it
-must not be marketed as auto-accept, trained vision, or a substitute for native pose, temporal, and
-trained entry-point inference. Operating instructions and failure handling are in
+advanced diagnostics remain recovery-only. These browser changes have synthetic coverage only; real
+camera failures must be collected as diagnostic evidence, not written off as a mounting problem. The
+bridge is useful for workflow and failure-data collection; it must not be marketed as auto-accept,
+trained vision, or a substitute for native pose, temporal, and trained entry-point inference.
+Operating instructions and failure handling are in
 [`14-browser-camera-field-test.md`](14-browser-camera-field-test.md).
 
 ### 4.4 Dart entry-point model

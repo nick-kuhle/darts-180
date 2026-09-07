@@ -38,7 +38,10 @@ import {
   type BoardFitPoints,
 } from '../lib/boardFit';
 
-const MAX_WORKING_EDGE = 960;
+// Keep more of a modern rear-camera frame than the original 960 px prototype cap: thin shafts and
+// compact flights need usable pixels after a full board is framed, while auto-board finding itself
+// still samples sparsely.
+const MAX_WORKING_EDGE = 1280;
 const MIN_HANDLE_HIT_RADIUS = 24;
 
 type CameraPhase =
@@ -106,7 +109,12 @@ export function SimpleCameraPlay({
   const fitRef = useRef<BoardFitPoints | null>(null);
   const activePointersRef = useRef(new Map<number, ImagePoint>());
   const gestureRef = useRef<GestureState | null>(null);
-  const stabilityRef = useRef<{ key: string; count: number } | null>(null);
+  const stabilityRef = useRef<{
+    zoneKey: string;
+    imagePoint: ImagePoint;
+    count: number;
+    misses: number;
+  } | null>(null);
   const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
   const recordingRef = useRef(false);
 
@@ -383,7 +391,10 @@ export function SimpleCameraPlay({
     };
 
     findBoard();
-    const interval = window.setInterval(findBoard, 550);
+    // Radial color-pattern fitting is intentionally more thorough than the old outermost-color
+    // estimate. It runs only until two fits agree, at a cadence that leaves a mobile browser time
+    // to render the live preview smoothly.
+    const interval = window.setInterval(findBoard, 800);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -492,7 +503,9 @@ export function SimpleCameraPlay({
       setAnalysis(nextAnalysis);
 
       if (nextAnalysis.status === 'no-change') {
-        stabilityRef.current = null;
+        const previous = stabilityRef.current;
+        stabilityRef.current =
+          previous !== null && previous.misses === 0 ? { ...previous, misses: 1 } : null;
         setLiveMessage('Watching the board. Throw one dart, then step clear while it settles.');
         return;
       }
@@ -511,25 +524,35 @@ export function SimpleCameraPlay({
         return;
       }
       if (nextAnalysis.status !== 'dart-candidate') {
-        stabilityRef.current = null;
+        const previous = stabilityRef.current;
+        stabilityRef.current =
+          previous !== null && previous.misses === 0 ? { ...previous, misses: 1 } : null;
         setLiveMessage(
-          'A change is visible, but it does not yet look like one settled dart. Waiting safely.',
+          'A change is visible, but it does not yet look like one settled dart or compact flight. Waiting safely.',
         );
         return;
       }
 
       const candidate = selectAutomaticTipCandidate(nextAnalysis.candidates);
       if (candidate === null) {
-        stabilityRef.current = null;
+        const previous = stabilityRef.current;
+        stabilityRef.current =
+          previous !== null && previous.misses === 0 ? { ...previous, misses: 1 } : null;
         setLiveMessage('A dart-like change needs another moment before a score can be proposed.');
         return;
       }
-      const key = `${candidate.shapeId}:${candidate.zone.ring}:${candidate.zone.segment ?? 'bull'}:${Math.round(candidate.imagePoint.x / 8)}:${Math.round(candidate.imagePoint.y / 8)}`;
+      // Component ordering and an elongated shaft's apparent endpoint can fluctuate by a few pixels
+      // between video frames. Stabilize the physical board zone plus nearby image location instead
+      // of the temporary connected-component id, otherwise a real settled dart can be held forever.
+      const zoneKey = `${candidate.zone.ring}:${candidate.zone.segment ?? 'bull'}`;
       const previous = stabilityRef.current;
-      const count = previous?.key === key ? previous.count + 1 : 1;
-      stabilityRef.current = { key, count };
+      const count =
+        previous?.zoneKey === zoneKey && distance(previous.imagePoint, candidate.imagePoint) <= 18
+          ? previous.count + 1
+          : 1;
+      stabilityRef.current = { zoneKey, imagePoint: candidate.imagePoint, count, misses: 0 };
       if (count < 2) {
-        setLiveMessage('Dart-shaped change found. Holding for one more settled frame…');
+        setLiveMessage('Dart/flight change found. Holding for one more settled frame…');
         return;
       }
 
@@ -990,7 +1013,7 @@ export function SimpleCameraPlay({
             REVIEW OR CORRECT SCORES
           </button>
 
-          {automaticFit !== null && (phase === 'finding-board' || phase === 'ready-to-play') && (
+          {automaticFit !== null && phase !== 'manual-fit' && (
             <p className={`camera-play-auto-state ${automaticFit.status}`}>
               <strong>AUTO BOARD FIND</strong>
               {automaticFit.message}
@@ -998,6 +1021,8 @@ export function SimpleCameraPlay({
                 <span>
                   {Math.round(automaticFit.estimatedBoardDiameterPixels)} px board ·{' '}
                   {automaticFit.outerAngularCoverage}/20 outer-band sectors ·{' '}
+                  {automaticFit.redPixelCount.toLocaleString()} red /{' '}
+                  {automaticFit.greenPixelCount.toLocaleString()} green samples ·{' '}
                   {Math.round(automaticFit.confidence * 100)}% color-pattern cue
                 </span>
               )}
@@ -1015,12 +1040,22 @@ export function SimpleCameraPlay({
 
           {analysis !== null && isWatching && (
             <p className="camera-play-engine-state">
-              <strong>LOCAL DETECTOR</strong>
-              {analysis.status === 'dart-candidate'
-                ? 'Settled dart-shaped change found; choosing its best internal endpoint.'
-                : analysis.status === 'camera-moved-or-hand-present'
-                  ? 'Broad movement held for safety.'
-                  : 'Waiting for one stable dart-shaped change.'}
+              <strong>LOCAL DETECTOR · {analysis.status.replaceAll('-', ' ').toUpperCase()}</strong>
+              <span>
+                {analysis.status === 'dart-candidate'
+                  ? analysis.shapes.some((shape) => shape.kind === 'compact')
+                    ? 'Settled compact flight/occlusion found; proposing a prominently reviewable board location.'
+                    : 'Settled dart-shaped change found; choosing its best internal endpoint.'
+                  : analysis.status === 'camera-moved-or-hand-present'
+                    ? 'Broad movement held for safety.'
+                    : analysis.message}
+              </span>
+              <small>
+                {analysis.changedPixels.toLocaleString()} changed px ·{' '}
+                {(analysis.changedFraction * 100).toFixed(2)}% of frame · threshold{' '}
+                {Math.round(analysis.differenceThreshold)} · {analysis.shapes.length} shape
+                {analysis.shapes.length === 1 ? '' : 's'}
+              </small>
             </p>
           )}
         </aside>

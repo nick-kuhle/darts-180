@@ -14,8 +14,10 @@ The foundation slice is delivered and merged through
 development API; local-only Capture/Annotation Labs; a deployable browser-local fixed-camera
 field-test scorer; manifest validation; synthetic scenes; and inspectable pose/temporal baselines.
 The active browser UX is Camera Play: automatic red/green board finding and one-action Start Play,
-with visual-guide gestures reserved for recovery rather than normal setup. The active delivery is
-[PR #4](https://github.com/nick-kuhle/darts-180/pull/4). The specific inventory and non-claims live
+with visual-guide gestures reserved for recovery rather than normal setup. The initial simplification
+merged in [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), followed by automatic board
+finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5). The follow-up real-board
+reliability remediation requires direct device evidence; the specific inventory and non-claims live
 in [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

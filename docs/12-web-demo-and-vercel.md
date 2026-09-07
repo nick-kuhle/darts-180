@@ -38,11 +38,13 @@ a static site.
 The initial foundation, browser field test, and Vercel/mobile camera deployment preparation are
 merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). The no-calibration automatic board-find
-update is [PR #4](https://github.com/nick-kuhle/darts-180/pull/4). Review each diff and its GitHub
-Actions result before using a build for external testing. No delivery credential is stored in source,
-Git configuration, or the remote URL; revoke any short-lived delivery token once the delivery is
-confirmed.
+[PR #3](https://github.com/nick-kuhle/darts-180/pull/3),
+[PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and
+[PR #5](https://github.com/nick-kuhle/darts-180/pull/5). A follow-up browser reliability
+remediation awaits review and direct field validation. Review each diff and its GitHub Actions result
+before using a build for external testing. No delivery
+credential is stored in source, Git configuration, or the remote URL; revoke any short-lived
+delivery token once the delivery is confirmed.
 
 ### 1. Import the repository into Vercel
 
