@@ -36,8 +36,11 @@ low-cost phone-first setup. Full design: [`docs/03-detection-engine.md`](docs/03
 - A runnable Expo/React Native **501 confirmation-flow demo**: automatic-looking dart cards,
   manual correction, double-out/bust logic, checkout hint, and a real camera-setup preview.
 - A polished, deployable **web prototype** with interactive manual board input, 501 and Cricket,
-  simulated camera-review states, event-style history, local-only Capture and Annotation Labs, and
-  Vercel static hosting/security configuration.
+  event-style history, local-only Capture and Annotation Labs, and Vercel static hosting/security
+  configuration.
+- An experimental browser-local **Camera Score** field-test workflow: fixed-camera preview, manual
+  four-double-bed calibration, transparent setup quality gates, clear-board reference, temporal
+  dart-shape/endpoint proposals, visible-tip fallback, deterministic scoring, and DartCard review.
 - Deterministic TypeScript rules for standard board geometry, X01 (straight/double/master in/out),
   Cricket (including correct bull marks), checkout routes, and correction-aware event projection,
   with executable tests.
@@ -55,8 +58,11 @@ For an exact done/next/non-claim snapshot, read
 ### What is deliberately **not** claimed yet
 
 There is no trained detection model, no production authentication, no durable database adapter,
-no DartCounter integration, and no guarantee of score accuracy. The mobile camera screen currently
-is a real preview; the score stream is a transparent simulation until the native CV milestone lands.
+no DartCounter integration, and no guarantee of score accuracy. The web Camera Score workspace is a
+transparent browser-local frame-difference field-test heuristic—not a production auto-scoring claim;
+the native score stream remains a transparent simulation until the native CV milestone lands. See
+[`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) for its required
+mount, calibration, review, privacy, and failure boundaries.
 
 ## Repository map
 

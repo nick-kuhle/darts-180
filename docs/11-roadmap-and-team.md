@@ -9,8 +9,9 @@ legal lead time. Parallelize discovery; do not skip gates.
 The foundation slice is delivered: a private GitHub `main` bootstrap and
 [initial foundation PR #1](https://github.com/nick-kuhle/darts-180/pull/1); CI; a playable web
 501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
-development API; local-only Capture/Annotation Labs; manifest validation; synthetic scenes; and
-inspectable pose/temporal baselines. The specific inventory and non-claims live in
+development API; local-only Capture/Annotation Labs; a deployable browser-local fixed-camera
+field-test scorer; manifest validation; synthetic scenes; and inspectable pose/temporal baselines.
+The specific inventory and non-claims live in
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

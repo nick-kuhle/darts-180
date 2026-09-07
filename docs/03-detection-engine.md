@@ -147,6 +147,30 @@ before/after-frame baselines under `ml/src/darts180_vision`. They use known/synt
 exercise contracts and failure capture; they are neither a learned runtime nor evidence of
 real-world auto-scoring performance.
 
+### 4.3.1 Implemented browser field-test bridge
+
+The deployable web prototype now also has a deliberately constrained **Camera Score** workspace for
+first real-board testing. It is not the production native runtime. On a fixed mounted browser camera,
+it:
+
+1. asks the player to click D20/D6/D3/D11 double-bed centres and solves the same image→canonical
+   homography used by the annotation tool;
+2. reports transparent browser heuristics for board pixels, cardinal-anchor compression, and local
+   image detail; blocks its field-test flow below the initial 480 px / approximately 55° envelope;
+3. retains a clear-board frame only in volatile browser memory;
+4. compares a later settled frame with that reference, masks local change around the calibrated board,
+   and ranks elongated connected components as possible dart shafts;
+5. renders both line endpoints where shaft direction is not provable, maps each through canonical
+   geometry, and requires the player to select a visible tip or click one manually; and
+6. adds only a reviewable proposal to the existing DartCard flow, then updates the in-memory
+   reference to include that accepted dart before looking for the next one.
+
+The browser heuristic rejects large changes as camera movement/hand presence and reports no-change or
+ambiguous-change instead of fabricating a score. It is useful for workflow, calibration, and failure
+data collection; it must not become an auto-accept source or substitute for native pose, temporal,
+and trained entry-point inference. Operating instructions and failure handling are in
+[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md).
+
 ### 4.4 Dart entry-point model
 
 **Do not train only an image → 0..60 score classifier.** It cannot generalize cleanly across board
