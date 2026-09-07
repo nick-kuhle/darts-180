@@ -119,13 +119,13 @@ docker compose -f infra/docker-compose.dev.yml up -d
 
 ## Private GitHub delivery
 
-The private repository at `https://github.com/nick-kuhle/darts-180.git` has a minimal protected-base
-bootstrap on `main`. The complete initial implementation is in
-[PR #1 — establish Darts 180 scoring and capture foundation](https://github.com/nick-kuhle/darts-180/pull/1).
+The private repository at `https://github.com/nick-kuhle/darts-180.git` has its initial foundation
+merged into `main` through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1). The browser
+Camera Score field-test extension is prepared on `camera-field-test` for its own review before a
+production deployment.
 
-Review the pull request, verify its GitHub Actions checks, and merge it into `main`. The working
-checkout tracks `initial-foundation` while that review is open. No credential is stored in this
-repository; revoke any short-lived delivery token after confirming the PR is available.
+Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
+is stored in this repository; revoke any short-lived delivery token after confirming a delivery.
 
 Before public launch, choose a licence/contributor policy, replace placeholder mobile package IDs
 (`com.yourcompany.darts180`), replace the temporary individual `CODEOWNERS` mapping with organization
