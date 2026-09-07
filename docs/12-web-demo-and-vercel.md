@@ -12,31 +12,33 @@ an unfinished camera API or claiming live AI scoring.
 - editable three-dart review cards;
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
-- an experimental browser-local **Camera Score** field-test flow: fixed-camera preview, manual
-  four-double-bed calibration, transparent setup gate, in-memory clear-board reference, temporal
-  dart-shape proposals, visible-tip fallback, and DartCard review;
+- an experimental browser-local **Camera Play** field-test flow: touch-fitted outer-board guide with
+  a clear 20 orientation marker; drag/tap, pinch, twist, and individual edge-handle adjustment;
+  one-tap baseline capture via **Calibrate & Play**; automatic temporal dart-shape proposals; and
+  ordinary DartCard correction when needed;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
   without uploading it anywhere;
 - a browser **Annotation Lab** that pairs that local JPEG/manifest, solves a manually clicked
   four-anchor homography, and downloads a local deterministic-label sidecar.
 
-It has **no account, database, raw camera upload, or trained CV model**. Camera Score includes an
+It has **no account, database, raw camera upload, or trained CV model**. Camera Play uses an
 inspectable fixed-camera frame-difference heuristic for controlled field testing, but it is not a
-trained entry-point model or an auto-scoring claim. The Capture and Annotation Labs keep their
+trained entry-point model or a proven auto-scoring claim. The normal flow makes an internal,
+deterministic best endpoint/candidate estimate rather than asking a player to identify a steel or
+soft dart tip; correction remains available for every score. Capture and Annotation Labs keep their
 media/labels browser-local until their user explicitly downloads them. Camera access is requested
 only after a click. That is intentional: it is safe to share as a product/UX prototype and deploy as
 a static site.
 
 ## Fastest Vercel path — founder steps
 
-The initial foundation and browser Camera Score workflow are merged in
-[PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
-[PR #2](https://github.com/nick-kuhle/darts-180/pull/2). The app-root Vercel deployment and
-camera-permission guidance update is open in
+The initial foundation, browser field test, and Vercel/mobile camera deployment preparation are
+merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
+[PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
 [PR #3](https://github.com/nick-kuhle/darts-180/pull/3). Review each diff and its GitHub Actions
-result before merging. No delivery credential is stored in
-source, Git configuration, or the remote URL; revoke any short-lived delivery token once the PR is
+result before using a build for external testing. No delivery credential is stored in source, Git
+configuration, or the remote URL; revoke any short-lived delivery token once the delivery is
 confirmed.
 
 ### 1. Import the repository into Vercel
@@ -63,19 +65,18 @@ Vercel function in its current development/in-memory form.
 
 ### 2. Create the HTTPS field-test preview
 
-After Vercel is connected to GitHub, it should create a Preview Deployment for
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). Open the Vercel check’s **Visit** link on
-that pull request, or select the `vercel-camera-deployment` deployment in Vercel’s **Deployments**
-tab.
+After Vercel is connected to GitHub, open the production deployment for `main` or a Preview
+Deployment for the current Camera Play pull request. Use the Vercel deployment’s **Visit** link.
 
 > **Do not use an embedded development preview for this test.** Arena’s preview iframe—and many
 > in-app browsers—cannot show a normal camera permission prompt. Open the resulting
 > `https://…vercel.app` URL directly in Safari or Chrome on the mounted phone/tablet.
 
-Camera permission is requested only after tapping **Start device camera**. If a direct HTTPS tab does
-not prompt, use that browser’s lock/camera controls to set Camera to **Allow**, reload the page, and
-try again. On iOS, check Safari’s website camera setting; on Android Chrome, check the site settings
-behind the lock icon.
+Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, fit the
+20-oriented guide around the outer double wire, then use **CALIBRATE & PLAY** with an empty board. If
+a direct HTTPS tab does not prompt, use that browser’s lock/camera controls to set Camera to
+**Allow**, reload the page, and try again. On iOS, check Safari’s website camera setting; on Android
+Chrome, check the site settings behind the lock icon.
 
 For the full mounted-device workflow, follow the
 [Browser camera field-test guide](14-browser-camera-field-test.md). The feature runs locally in the
@@ -84,8 +85,8 @@ browser and must stay in its stated fixed-mount, review-required envelope.
 ### 3. Share the preview URL
 
 Use it with a small group for controlled UX feedback. Say: “This is the Darts 180 experimental,
-browser-local camera field test; every candidate requires player review.” Avoid saying “AI scoring is
-live” or publishing an accuracy claim until held-out real-device evidence supports it.
+browser-local camera field test; every score remains correctable.” Avoid saying “AI scoring is live”
+or publishing an accuracy claim until held-out real-device evidence supports it.
 
 ## Vercel CLI option
 

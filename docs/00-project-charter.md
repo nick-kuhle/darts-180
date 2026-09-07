@@ -7,7 +7,7 @@
 
 ## 1. One-sentence mission
 
-Make a normal steel-tip dartboard feel like it has a fair, fast, player-controlled digital referee—using the phone people already own, without forcing them to buy a multi-camera ring.
+Make a normal dartboard feel like it has a fair, fast, player-controlled digital referee—using the phone people already own, without forcing them to buy a multi-camera ring. The normal setup interaction must not branch on whether a player throws steel-tip or soft-tip darts.
 
 ## 2. Problem we are solving
 
