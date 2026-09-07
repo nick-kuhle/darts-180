@@ -40,20 +40,33 @@ extrinsics.
 
 ### Screen states
 
-| State                     | What player sees                                       | System behavior                 |
-| ------------------------- | ------------------------------------------------------ | ------------------------------- |
-| Permission needed         | purpose + privacy, manual fallback                     | request only after intent       |
-| Looking for board         | animated guide and “show whole board”                  | pose detector running           |
-| Board found, quality poor | one dominant, actionable problem                       | quality diagnostics ranked      |
-| Board ready               | green status and stillness prompt                      | lock/calibrate pose             |
-| Calibration drift         | “board/camera moved—rechecking”                        | pause candidates, preserve game |
-| Unsupported               | manual-entry / reposition / later second-device option | never dead-end                  |
+| State                     | What player sees                                         | System behavior                            |
+| ------------------------- | -------------------------------------------------------- | ------------------------------------------ |
+| Permission needed         | purpose + privacy, manual fallback                       | request only after intent                  |
+| Looking for board         | animated, 20-oriented board guide and “show whole board” | pose detector running                      |
+| Fitting board             | drag/tap, pinch, twist, and four edge handles            | retain player-adjusted guide               |
+| Board found, quality poor | one dominant, actionable problem                         | quality diagnostics ranked                 |
+| Board ready               | one **Calibrate & Play** action                          | validate fit, retain baseline, arm scoring |
+| Calibration drift         | “board/camera moved—rechecking”                          | pause candidates, preserve game            |
+| Unsupported               | manual-entry / reposition / later second-device option   | never dead-end                             |
 
 ### Copy principles
 
 Say **“Move the phone 20 cm closer”**, not “insufficient resolution.” Say **“Reduce the glare on
 right side of board”**, not “quality 0.42.” Expert diagnostics may be revealed in a detail panel,
 never as the default message.
+
+### Normal board-fit interaction
+
+The player must never have to learn named board-point labels or a homography. The visible guide makes
+its top `20` orientation explicit. A player can drag it (or tap inside it to center it), pinch to
+resize, twist to orient, and pull individual outer-edge handles to match a skewed board. With the
+board empty, **Calibrate & Play** is the only normal calibration action: it validates the fit,
+retains a local baseline, and starts watching.
+
+The same interaction is presented for steel-tip and soft-tip darts. The runtime may use internal
+endpoint/shape evidence, but it must not ask the player to select a physical tip. Ordinary score-card
+correction is the safety route when a suggestion is wrong or ambiguous.
 
 ### Placement guidance
 
@@ -162,6 +175,8 @@ fallback, session outcome, and app/device performance. Do not log raw score vide
 
 ## 11. Prototype status
 
-The current `App.tsx` is deliberately a focused end-to-end interaction demo: simulated camera
+The native `apps/mobile` scaffold remains a focused end-to-end interaction demo: simulated camera
 candidates, editable DartCards, X01 scoring, camera permission/preview, and clear text saying that
-native frame scoring is not wired yet. It is a testing tool, not a deceptive fake of model accuracy.
+native frame scoring is not wired yet. The separate browser prototype now implements the touch-first
+Camera Play field-test interaction, but it is still a testing tool—not a deceptive claim of model
+accuracy.

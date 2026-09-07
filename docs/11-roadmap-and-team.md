@@ -7,13 +7,14 @@ legal lead time. Parallelize discovery; do not skip gates.
 ## 0. Delivery snapshot — 2026-09-07
 
 The foundation slice is delivered and merged through
-[initial foundation PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
-[browser Camera Score PR #2](https://github.com/nick-kuhle/darts-180/pull/2): CI; a playable web
+[initial foundation PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
+[browser field-test PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
+[Vercel/mobile deployment PR #3](https://github.com/nick-kuhle/darts-180/pull/3): CI; a playable web
 501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
 development API; local-only Capture/Annotation Labs; a deployable browser-local fixed-camera
 field-test scorer; manifest validation; synthetic scenes; and inspectable pose/temporal baselines.
-The Vercel app-root deployment and camera-permission update is open in
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). The specific inventory and non-claims live in
+The active browser UX is Camera Play: a touch-fitted, 20-oriented guide and one-action calibration
+rather than named-point setup in normal use. The specific inventory and non-claims live in
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

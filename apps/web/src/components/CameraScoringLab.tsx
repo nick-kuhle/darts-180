@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatZone } from '@darts-180/rules';
-import type { DartZone } from '@darts-180/contracts';
 
 import {
   ANNOTATION_ANCHORS,
@@ -20,18 +19,14 @@ import {
   type GuidedCalibrationQuality,
 } from '../lib/cameraScoring';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
+import type { CameraTurnProposal } from '../lib/cameraProposal';
+
+export type { CameraTurnProposal } from '../lib/cameraProposal';
 
 const EMPTY_ANCHORS: Array<ImagePoint | null> = [null, null, null, null];
 const MAX_WORKING_EDGE = 960;
 
 type CanvasMode = 'preview' | 'calibrating' | 'manual-tip';
-
-export interface CameraTurnProposal {
-  zone: DartZone;
-  confidence: number;
-  wireMarginMm: number;
-  source: 'auto' | 'corrected' | 'manual';
-}
 
 interface CameraScoringLabProps {
   availableSlots: number;

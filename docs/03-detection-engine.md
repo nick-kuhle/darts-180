@@ -149,26 +149,32 @@ real-world auto-scoring performance.
 
 ### 4.3.1 Implemented browser field-test bridge
 
-The deployable web prototype now also has a deliberately constrained **Camera Score** workspace for
-first real-board testing. It is not the production native runtime. On a fixed mounted browser camera,
-it:
+The deployable web prototype now has a deliberately constrained, touch-first **Camera Play**
+workspace for first real-board testing. It is not the production native runtime. On a fixed mounted
+browser camera, it:
 
-1. asks the player to click D20/D6/D3/D11 double-bed centres and solves the same image→canonical
-   homography used by the annotation tool;
-2. reports transparent browser heuristics for board pixels, cardinal-anchor compression, and local
-   image detail; blocks its field-test flow below the initial 480 px / approximately 55° envelope;
-3. retains a clear-board frame only in volatile browser memory;
-4. compares a later settled frame with that reference, masks local change around the calibrated board,
-   and ranks elongated connected components as possible dart shafts;
-5. renders both line endpoints where shaft direction is not provable, maps each through canonical
-   geometry, and requires the player to select a visible tip or click one manually; and
-6. adds only a reviewable proposal to the existing DartCard flow, then updates the in-memory
-   reference to include that accepted dart before looking for the next one.
+1. lets the player fit a guide over the outer double wire: drag/tap to position, two-finger
+   pinch/twist to resize/orient, and independently pull four top/right/bottom/left edge handles;
+   the top `20` handle fixes the canonical board orientation;
+2. solves the same image→canonical homography as the annotation tool and draws its inverse as a full
+   board guide, while reporting browser heuristics for board pixels, guide proportions, and local
+   image detail below the initial 480 px / approximately 55° envelope;
+3. captures its volatile clear-board baseline and arms watching in one **Calibrate & Play** action;
+4. compares each later settled frame with the current in-memory reference, masks local change around
+   the fitted board, and ranks elongated connected components as possible dart shafts;
+5. automatically chooses one internal endpoint/candidate, preferring one-end-on-board evidence then
+   an apparent endpoint-width/flight cue, and requires it to recur in two polls before it adds a
+   reviewable ordinary score proposal; and
+6. updates its in-memory reference to include the accepted dart before looking for the next one, then
+   provides a one-tap clear-board baseline for the next turn without refitting the guide.
 
-The browser heuristic rejects large changes as camera movement/hand presence and reports no-change or
-ambiguous-change instead of fabricating a score. It is useful for workflow, calibration, and failure
-data collection; it must not become an auto-accept source or substitute for native pose, temporal,
-and trained entry-point inference. Operating instructions and failure handling are in
+Normal play does not ask a player to name calibration points, download/capture a reference image,
+press a manual-analysis button, select a physical tip, or choose steel versus soft-tip setup. Those
+are intentionally hidden behind optional advanced diagnostics/recovery. The browser heuristic rejects
+large changes as camera movement/hand presence and reports no-change or ambiguous-change instead of
+fabricating a score. It is useful for workflow, calibration, and failure-data collection; it must not
+be marketed as auto-accept, trained vision, or a substitute for native pose, temporal, and trained
+entry-point inference. Operating instructions and failure handling are in
 [`14-browser-camera-field-test.md`](14-browser-camera-field-test.md).
 
 ### 4.4 Dart entry-point model

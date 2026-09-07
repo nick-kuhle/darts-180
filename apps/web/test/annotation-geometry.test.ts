@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  invertHomography,
+  mapBoardPointToImage,
   mapImagePointToBoard,
   solveImageToBoardHomography,
   type CanonicalPoint,
@@ -31,6 +33,32 @@ test('solves four image-to-board correspondences and maps a held-out point', () 
 
   const expected = { xMm: 31.25, yMm: -72.5 };
   const actual = mapImagePointToBoard(mapBoardToImage(expected), homography);
+  assert.notEqual(actual, null);
+  assert.ok(actual !== null);
+  assert.ok(Math.abs(actual.xMm - expected.xMm) < 0.001);
+  assert.ok(Math.abs(actual.yMm - expected.yMm) < 0.001);
+});
+
+test('inverts a guide homography so canonical board rings can be drawn over camera pixels', () => {
+  const boardPoints: CanonicalPoint[] = [
+    { xMm: 0, yMm: -170 },
+    { xMm: 170, yMm: 0 },
+    { xMm: 0, yMm: 170 },
+    { xMm: -170, yMm: 0 },
+  ];
+  const imagePoints = boardPoints.map(mapBoardToImage);
+  const imageToBoard = solveImageToBoardHomography(imagePoints, boardPoints);
+  assert.notEqual(imageToBoard, null);
+  assert.ok(imageToBoard !== null);
+  const boardToImage = invertHomography(imageToBoard);
+  assert.notEqual(boardToImage, null);
+  assert.ok(boardToImage !== null);
+
+  const expected = { xMm: -73.5, yMm: 42.25 };
+  const roundTrip = mapBoardPointToImage(expected, boardToImage);
+  assert.notEqual(roundTrip, null);
+  assert.ok(roundTrip !== null);
+  const actual = mapImagePointToBoard(roundTrip, imageToBoard);
   assert.notEqual(actual, null);
   assert.ok(actual !== null);
   assert.ok(Math.abs(actual.xMm - expected.xMm) < 0.001);

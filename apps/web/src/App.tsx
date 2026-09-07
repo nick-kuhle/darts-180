@@ -13,8 +13,10 @@ import {
 import { useMemo, useState } from 'react';
 
 import { AnnotationLab } from './components/AnnotationLab';
-import { CameraScoringLab, type CameraTurnProposal } from './components/CameraScoringLab';
+import { CameraScoringLab } from './components/CameraScoringLab';
+import { SimpleCameraPlay } from './components/SimpleCameraPlay';
 import { CaptureLab } from './components/CaptureLab';
+import type { CameraTurnProposal } from './lib/cameraProposal';
 import { Dartboard, type DartboardMarker } from './components/Dartboard';
 
 type GameMode = 'x01' | 'cricket';
@@ -84,7 +86,9 @@ function newCricketGame(): CricketState {
 }
 
 export function App() {
-  const [workspace, setWorkspace] = useState<'play' | 'camera' | 'capture' | 'annotate'>('play');
+  const [workspace, setWorkspace] = useState<
+    'play' | 'camera' | 'camera-lab' | 'capture' | 'annotate'
+  >('camera');
   const [mode, setMode] = useState<GameMode>('x01');
   const [x01, setX01] = useState<X01State>(newX01Game);
   const [cricket, setCricket] = useState<CricketState>(newCricketGame);
@@ -224,7 +228,7 @@ export function App() {
     return target + 1;
   };
 
-  const confirmVisit = () => {
+  const confirmVisit = (): boolean => {
     const filled = drafts.filter((draft) => draft.filled);
     if (activePlayer === undefined || filled.length === 0 || gameComplete) {
       setNotice(
@@ -232,7 +236,7 @@ export function App() {
           ? 'This game is finished. Start a new game to continue.'
           : 'Record at least one dart before confirming.',
       );
-      return;
+      return false;
     }
 
     const zones = filled.map((draft) => draft.zone);
@@ -266,6 +270,7 @@ export function App() {
     setDrafts(blankDrafts());
     setSelectedSlot(null);
     setNotice(outcome);
+    return true;
   };
 
   const resetGame = () => {
@@ -292,8 +297,8 @@ export function App() {
             <em>Keep the player in control.</em>
           </h1>
           <p className="lede">
-            A deployable manual scorer with an experimental, local-only fixed-camera field-test
-            workflow that always keeps the player in control.
+            A touch-first browser scorer: fit a live board guide once, then review local camera
+            suggestions only when a dart needs correction.
           </p>
         </div>
         <div className="hero-side">
@@ -306,22 +311,22 @@ export function App() {
           </div>
           <div className="workspace-tabs" role="group" aria-label="Choose Darts 180 prototype">
             <button
+              className={workspace === 'camera' ? 'active' : ''}
+              onClick={() => setWorkspace('camera')}
+            >
+              CAMERA PLAY
+            </button>
+            <button
               className={workspace === 'play' ? 'active' : ''}
               onClick={() => setWorkspace('play')}
             >
               PLAY DEMO
             </button>
             <button
-              className={workspace === 'camera' ? 'active' : ''}
-              onClick={() => setWorkspace('camera')}
-            >
-              CAMERA SCORE
-            </button>
-            <button
               className={workspace === 'capture' ? 'active' : ''}
               onClick={() => setWorkspace('capture')}
             >
-              CAPTURE LAB
+              DATA LAB
             </button>
             <button
               className={workspace === 'annotate' ? 'active' : ''}
@@ -579,11 +584,29 @@ export function App() {
           </section>
         </section>
       ) : workspace === 'camera' ? (
-        <CameraScoringLab
+        <SimpleCameraPlay
+          activePlayerName={activePlayer?.playerId ?? 'Player'}
           availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
+          gameComplete={gameComplete}
           onAddProposal={addCameraProposal}
+          onConfirmVisit={confirmVisit}
+          onOpenAdvanced={() => setWorkspace('camera-lab')}
           onOpenReview={() => setWorkspace('play')}
+          turnDarts={drafts}
         />
+      ) : workspace === 'camera-lab' ? (
+        <>
+          <div className="shell advanced-camera-return">
+            <button className="text-button" onClick={() => setWorkspace('camera')}>
+              ← BACK TO CAMERA PLAY
+            </button>
+          </div>
+          <CameraScoringLab
+            availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
+            onAddProposal={addCameraProposal}
+            onOpenReview={() => setWorkspace('play')}
+          />
+        </>
       ) : workspace === 'capture' ? (
         <CaptureLab />
       ) : (
@@ -592,9 +615,9 @@ export function App() {
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> The Camera Score workspace is a local browser
-          field-test heuristic, not trained or production computer vision. The production path is
-          on-device pose + temporal + entry-point detection, with human confirmation.
+          <strong>Darts 180 prototype.</strong> Camera Play is a browser-local heuristic field test,
+          not trained or proven production auto-scoring. It proposes scores from visual change and
+          keeps ordinary score correction available for ambiguous darts.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →

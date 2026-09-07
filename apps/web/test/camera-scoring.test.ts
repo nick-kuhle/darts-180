@@ -5,9 +5,12 @@ import { makeZone } from '@darts-180/rules';
 
 import {
   analyzeDartDifference,
+  assessBoardFitCalibration,
   assessGuidedCalibration,
   candidateFromManualPoint,
+  selectAutomaticTipCandidate,
   type CameraFrame,
+  type DartTipCandidate,
 } from '../src/lib/cameraScoring.js';
 import { solveImageToBoardHomography, type ImagePoint } from '../src/lib/annotationGeometry.js';
 
@@ -103,7 +106,12 @@ test('finds reviewable endpoint candidates for a newly visible elongated change'
   assert.ok(result.shapes.length >= 1);
   assert.ok(result.candidates.length >= 1);
   assert.ok(result.candidates.every((candidate) => candidate.confidence > 0));
+  assert.ok(result.candidates.every((candidate) => candidate.tipLikelihood > 0));
   assert.ok(result.candidates.some((candidate) => candidate.zone.score >= 0));
+  const selected = selectAutomaticTipCandidate(result.candidates);
+  assert.notEqual(selected, null);
+  assert.ok(selected !== null);
+  assert.ok(result.candidates.some((candidate) => candidate.id === selected.id));
 });
 
 test('manual visible-tip selection maps through the same canonical scorer', () => {
@@ -111,7 +119,44 @@ test('manual visible-tip selection maps through the same canonical scorer', () =
   assert.notEqual(candidate, null);
   assert.ok(candidate !== null);
   assert.deepEqual(candidate.zone, makeZone('T', 20));
+  assert.equal(candidate.tipLikelihood, 1);
   assert.ok(candidate.boardPoint.yMm < -90);
+});
+
+test('automatic candidate choice prefers board-direction evidence, then endpoint shape cue', () => {
+  const base: Omit<DartTipCandidate, 'id' | 'tipLikelihood' | 'directionEvidence'> = {
+    shapeId: 'shape-1',
+    endpoint: 'A',
+    imagePoint: { x: 350, y: 220 },
+    boardPoint: { xMm: -6, yMm: -82 },
+    zone: makeZone('S', 20),
+    wireMarginMm: 3.2,
+    confidence: 0.52,
+  };
+  const ambiguousWideEnd: DartTipCandidate = {
+    ...base,
+    id: 'ambiguous-wide-end',
+    tipLikelihood: 0.91,
+    directionEvidence: 'ambiguous-endpoint',
+  };
+  const containedEnd: DartTipCandidate = {
+    ...base,
+    id: 'contained-end',
+    tipLikelihood: 0.42,
+    directionEvidence: 'only-endpoint-on-board',
+  };
+  assert.equal(selectAutomaticTipCandidate([ambiguousWideEnd, containedEnd])?.id, 'contained-end');
+
+  const lowerShapeCue: DartTipCandidate = {
+    ...base,
+    id: 'lower-shape-cue',
+    tipLikelihood: 0.36,
+    directionEvidence: 'ambiguous-endpoint',
+  };
+  assert.equal(
+    selectAutomaticTipCandidate([lowerShapeCue, ambiguousWideEnd])?.id,
+    'ambiguous-wide-end',
+  );
 });
 
 test('rejects comparisons when camera resolution changes after reference capture', () => {
@@ -137,6 +182,20 @@ test('guided quality accepts a sharp, adequately sized straight-on board', () =>
   assert.equal(quality.pass, true);
   assert.ok(quality.boardDiameterPixels >= 480);
   assert.ok(quality.sharpness >= 7);
+});
+
+test('board-fit quality accepts the outer double-wire handles used by Camera Play', () => {
+  const frame = makeFrame();
+  drawCheckerboard(frame);
+  const outerWireHandles: ImagePoint[] = [
+    { x: 360, y: 70 },
+    { x: 650, y: 360 },
+    { x: 360, y: 650 },
+    { x: 70, y: 360 },
+  ];
+  const quality = assessBoardFitCalibration(outerWireHandles, frame);
+  assert.equal(quality.pass, true);
+  assert.ok(quality.boardDiameterPixels >= 560);
 });
 
 test('guided quality blocks a board that is too small', () => {

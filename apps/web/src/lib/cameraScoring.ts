@@ -38,6 +38,8 @@ export interface DartShape {
   bounds: Readonly<{ left: number; top: number; right: number; bottom: number }>;
   center: ImagePoint;
   endpoints: readonly [ImagePoint, ImagePoint];
+  /** Apparent transverse width near endpoint A then B. A flight is often wider than an entry end. */
+  endpointWidths: readonly [number, number];
   lineLengthPixels: number;
   aspectRatio: number;
   confidence: number;
@@ -51,6 +53,8 @@ export interface DartTipCandidate {
   boardPoint: CanonicalPoint;
   zone: DartZone;
   wireMarginMm: number;
+  /** Heuristic endpoint ranking from board containment and apparent endpoint width; not a probability. */
+  tipLikelihood: number;
   /** A heuristic shape/endpoint ranking, never a calibrated score probability. */
   confidence: number;
   directionEvidence: 'only-endpoint-on-board' | 'ambiguous-endpoint';
@@ -95,6 +99,34 @@ export function assessGuidedCalibration(
   anchors: readonly ImagePoint[],
   frame: CameraFrame,
 ): GuidedCalibrationQuality {
+  return assessFourPointCalibration(anchors, frame, CARDINAL_ANCHOR_SEPARATION_MM, {
+    missingAnchorMessage: 'Place all four named double-bed anchors on a visible camera frame.',
+    crossedGuideMessage:
+      'The four anchors are too close together or crossed. Reposition each named double bed.',
+  });
+}
+
+/**
+ * Evaluates the player-facing outer-board guide. Its handles map to the outer double wire rather
+ * than named segment beds, so the same geometry works for a drag/pinch/twist board fit.
+ */
+export function assessBoardFitCalibration(
+  outerBoardHandles: readonly ImagePoint[],
+  frame: CameraFrame,
+): GuidedCalibrationQuality {
+  return assessFourPointCalibration(outerBoardHandles, frame, STANDARD_DOUBLE_DIAMETER_MM, {
+    missingAnchorMessage: 'Fit all four board-edge handles over a visible camera frame.',
+    crossedGuideMessage:
+      'The board guide is too small, crossed, or folded. Drag its four edge handles around the double wire.',
+  });
+}
+
+function assessFourPointCalibration(
+  anchors: readonly ImagePoint[],
+  frame: CameraFrame,
+  canonicalDiameterMm: number,
+  messages: Readonly<{ missingAnchorMessage: string; crossedGuideMessage: string }>,
+): GuidedCalibrationQuality {
   const blockers: string[] = [];
   const warnings: string[] = [];
   if (anchors.length !== 4 || !anchors.every(isFinitePoint) || !isFrameUsable(frame)) {
@@ -105,7 +137,7 @@ export function assessGuidedCalibration(
       sharpness: 0,
       overall: 0,
       pass: false,
-      blockers: ['Place all four named double-bed anchors on a visible camera frame.'],
+      blockers: [messages.missingAnchorMessage],
       warnings,
     };
   }
@@ -115,9 +147,9 @@ export function assessGuidedCalibration(
   const bottom = anchors[2]!;
   const left = anchors[3]!;
   const horizontalDiameter =
-    (distance(right, left) * STANDARD_DOUBLE_DIAMETER_MM) / CARDINAL_ANCHOR_SEPARATION_MM;
+    (distance(right, left) * STANDARD_DOUBLE_DIAMETER_MM) / canonicalDiameterMm;
   const verticalDiameter =
-    (distance(top, bottom) * STANDARD_DOUBLE_DIAMETER_MM) / CARDINAL_ANCHOR_SEPARATION_MM;
+    (distance(top, bottom) * STANDARD_DOUBLE_DIAMETER_MM) / canonicalDiameterMm;
   const largestDiameter = Math.max(horizontalDiameter, verticalDiameter);
   const smallestDiameter = Math.min(horizontalDiameter, verticalDiameter);
   const boardDiameterPixels = (horizontalDiameter + verticalDiameter) / 2;
@@ -128,9 +160,7 @@ export function assessGuidedCalibration(
   const quadrilateralArea = Math.abs(polygonArea([top, right, bottom, left]));
 
   if (quadrilateralArea < frame.width * frame.height * 0.01) {
-    blockers.push(
-      'The four anchors are too close together or crossed. Reposition each named double bed.',
-    );
+    blockers.push(messages.crossedGuideMessage);
   }
   if (boardDiameterPixels < 480) {
     blockers.push(
@@ -139,7 +169,7 @@ export function assessGuidedCalibration(
   }
   if (estimatedOffAxisDegrees > 55) {
     blockers.push(
-      `Anchor proportions suggest roughly ${Math.round(estimatedOffAxisDegrees)}° off-axis; move nearer the centreline.`,
+      `Guide proportions suggest roughly ${Math.round(estimatedOffAxisDegrees)}° off-axis; move nearer the centreline.`,
     );
   }
   if (sharpness < 7) {
@@ -153,9 +183,7 @@ export function assessGuidedCalibration(
     );
   }
   if (estimatedOffAxisDegrees > 35 && estimatedOffAxisDegrees <= 55) {
-    warnings.push(
-      'This is an oblique field-test view. Expect more manual visible-tip confirmations.',
-    );
+    warnings.push('This is an oblique field-test view. Expect more score corrections near wires.');
   }
   if (sharpness >= 7 && sharpness < 11) {
     warnings.push('Focus detail is modest. Avoid trusting candidates near scoring wires.');
@@ -341,6 +369,7 @@ export function candidateFromManualPoint(
     boardPoint,
     zone: decodeBoardPoint(boardPoint),
     wireMarginMm: nearestWireMarginMm(boardPoint),
+    tipLikelihood: 1,
     confidence: 1,
     directionEvidence: 'ambiguous-endpoint',
   };
@@ -591,6 +620,14 @@ function buildDartShape(
       y: center.y + maximumProjection * vector.y,
     },
   ];
+  const endpointWidths = measureEndpointWidths(
+    component.pixels,
+    width,
+    center,
+    vector,
+    minimumProjection,
+    maximumProjection,
+  );
   const endpointMaps = endpoints.map((endpoint) => mapImagePointToBoard(endpoint, homography));
   if (endpointMaps.every((point) => point === null)) return null;
   const lengthScore = clamp((lineLengthPixels / minimumLength - 1) / 2.5, 0, 1);
@@ -613,10 +650,50 @@ function buildDartShape(
     },
     center,
     endpoints,
+    endpointWidths,
     lineLengthPixels,
     aspectRatio,
     confidence,
   };
+}
+
+function measureEndpointWidths(
+  pixels: readonly number[],
+  width: number,
+  center: ImagePoint,
+  vector: ImagePoint,
+  minimumProjection: number,
+  maximumProjection: number,
+): [number, number] {
+  const span = Math.max(1, maximumProjection - minimumProjection);
+  const endpointBand = Math.max(4, span * 0.18);
+  const perpendicular = { x: -vector.y, y: vector.x };
+  const ranges: Array<{ minimum: number; maximum: number; count: number }> = [
+    { minimum: Number.POSITIVE_INFINITY, maximum: Number.NEGATIVE_INFINITY, count: 0 },
+    { minimum: Number.POSITIVE_INFINITY, maximum: Number.NEGATIVE_INFINITY, count: 0 },
+  ];
+
+  for (const pixel of pixels) {
+    const dx = (pixel % width) - center.x;
+    const dy = Math.floor(pixel / width) - center.y;
+    const projection = dx * vector.x + dy * vector.y;
+    const endpointIndex =
+      projection <= minimumProjection + endpointBand
+        ? 0
+        : projection >= maximumProjection - endpointBand
+          ? 1
+          : null;
+    if (endpointIndex === null) continue;
+    const transverse = dx * perpendicular.x + dy * perpendicular.y;
+    const range = ranges[endpointIndex]!;
+    range.minimum = Math.min(range.minimum, transverse);
+    range.maximum = Math.max(range.maximum, transverse);
+    range.count += 1;
+  }
+
+  return ranges.map((range) =>
+    range.count < 2 ? 0 : Math.max(0, range.maximum - range.minimum),
+  ) as [number, number];
 }
 
 function candidatesForShape(shape: DartShape, homography: Homography): DartTipCandidate[] {
@@ -634,8 +711,22 @@ function candidatesForShape(shape: DartShape, homography: Homography): DartTipCa
       return [];
     }
     const directionEvidence = onlyEndpointOnBoard ? 'only-endpoint-on-board' : 'ambiguous-endpoint';
+    const endpointWidth = shape.endpointWidths[index] ?? 0;
+    const oppositeEndpointWidth = shape.endpointWidths[index === 0 ? 1 : 0] ?? 0;
+    // A visible flight tends to widen one end of a changed dart-shaped region. This is only a
+    // ranking cue: flights can be hidden, occluded, or look similar under a board-side camera.
+    const widthContrast =
+      (oppositeEndpointWidth - endpointWidth) / Math.max(6, oppositeEndpointWidth + endpointWidth);
+    const tipLikelihood = clamp(
+      (directionEvidence === 'only-endpoint-on-board' ? 0.78 : 0.5) + widthContrast * 0.28,
+      0.12,
+      0.94,
+    );
     const confidence = clamp(
-      shape.confidence * (directionEvidence === 'only-endpoint-on-board' ? 0.86 : 0.5),
+      shape.confidence *
+        (directionEvidence === 'only-endpoint-on-board'
+          ? 0.72 + tipLikelihood * 0.16
+          : 0.31 + tipLikelihood * 0.34),
       0.08,
       0.78,
     );
@@ -648,11 +739,38 @@ function candidatesForShape(shape: DartShape, homography: Homography): DartTipCa
         boardPoint,
         zone: decodeBoardPoint(boardPoint),
         wireMarginMm: nearestWireMarginMm(boardPoint),
+        tipLikelihood,
         confidence,
         directionEvidence,
       },
     ];
   });
+}
+
+/**
+ * Chooses one internally ranked endpoint for the touch-first camera flow. This avoids asking a
+ * player to identify a physical steel/soft tip while preserving a normal score-correction path.
+ * It intentionally remains deterministic and conservative rather than claiming trained vision.
+ */
+export function selectAutomaticTipCandidate(
+  candidates: readonly DartTipCandidate[],
+): DartTipCandidate | null {
+  return (
+    [...candidates].sort((left, right) => {
+      const directionDifference =
+        Number(right.directionEvidence === 'only-endpoint-on-board') -
+        Number(left.directionEvidence === 'only-endpoint-on-board');
+      if (directionDifference !== 0) return directionDifference;
+      const likelihoodDifference = right.tipLikelihood - left.tipLikelihood;
+      if (Math.abs(likelihoodDifference) > 0.0001) return likelihoodDifference;
+      const confidenceDifference = right.confidence - left.confidence;
+      if (Math.abs(confidenceDifference) > 0.0001) return confidenceDifference;
+      // Prefer a point farther from a wire only as a deterministic final tie-breaker.
+      const wireDifference = right.wireMarginMm - left.wireMarginMm;
+      if (Math.abs(wireDifference) > 0.0001) return wireDifference;
+      return left.id.localeCompare(right.id);
+    })[0] ?? null
+  );
 }
 
 function deduplicateCandidates(candidates: readonly DartTipCandidate[]): DartTipCandidate[] {

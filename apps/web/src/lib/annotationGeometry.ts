@@ -103,12 +103,52 @@ export function mapImagePointToBoard(
   imagePoint: ImagePoint,
   homography: Homography,
 ): CanonicalPoint | null {
+  const point = mapProjectivePoint(imagePoint.x, imagePoint.y, homography);
+  return point === null ? null : { xMm: point.x, yMm: point.y };
+}
+
+/**
+ * Inverts a projective transform so a canonical board guide can be drawn over camera pixels.
+ * `null` means the manual shape is degenerate and should be reset rather than guessed through.
+ */
+export function invertHomography(homography: Homography): Homography | null {
+  const [a, b, c, d, e, f, g, h, i] = homography;
+  const determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) return null;
+  const inverse: Homography = [
+    (e * i - f * h) / determinant,
+    (c * h - b * i) / determinant,
+    (b * f - c * e) / determinant,
+    (f * g - d * i) / determinant,
+    (a * i - c * g) / determinant,
+    (c * d - a * f) / determinant,
+    (d * h - e * g) / determinant,
+    (b * g - a * h) / determinant,
+    (a * e - b * d) / determinant,
+  ];
+  return inverse.every(Number.isFinite) ? inverse : null;
+}
+
+/** Maps canonical millimetres back to camera pixels using an inverted image→board transform. */
+export function mapBoardPointToImage(
+  boardPoint: CanonicalPoint,
+  boardToImageHomography: Homography,
+): ImagePoint | null {
+  const point = mapProjectivePoint(boardPoint.xMm, boardPoint.yMm, boardToImageHomography);
+  return point === null ? null : { x: point.x, y: point.y };
+}
+
+function mapProjectivePoint(
+  x: number,
+  y: number,
+  homography: Homography,
+): Readonly<{ x: number; y: number }> | null {
   const [h11, h12, h13, h21, h22, h23, h31, h32, h33] = homography;
-  const denominator = h31 * imagePoint.x + h32 * imagePoint.y + h33;
+  const denominator = h31 * x + h32 * y + h33;
   if (!Number.isFinite(denominator) || Math.abs(denominator) < 1e-9) return null;
-  const xMm = (h11 * imagePoint.x + h12 * imagePoint.y + h13) / denominator;
-  const yMm = (h21 * imagePoint.x + h22 * imagePoint.y + h23) / denominator;
-  return Number.isFinite(xMm) && Number.isFinite(yMm) ? { xMm, yMm } : null;
+  const mappedX = (h11 * x + h12 * y + h13) / denominator;
+  const mappedY = (h21 * x + h22 * y + h23) / denominator;
+  return Number.isFinite(mappedX) && Number.isFinite(mappedY) ? { x: mappedX, y: mappedY } : null;
 }
 
 function solveLinearSystem(coefficients: number[][], values: number[]): number[] | null {

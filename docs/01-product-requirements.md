@@ -20,13 +20,16 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 
 1. Player chooses **Local 501**, player names, starting score, and in/out rules.
 2. App offers **Camera setup** or **Manual mode**. It never blocks the game because a camera is unavailable.
-3. Camera setup shows a live guide, detects the board, estimates pose/quality, and tells the player exactly how to improve it.
+3. Camera setup shows a live, 20-oriented board guide. A player can drag/tap it into place, pinch to
+   resize, twist to orient, pull individual edge handles for skew, then use one **Calibrate & Play**
+   action to validate the fit, retain an empty-board baseline locally, and arm play.
 4. Once a dart impacts, the vision runtime waits for wobble to settle; it does not score on the impact frame.
-5. For each recognized dart, the UI receives ranked candidates and shows a DartCard:
-   - high confidence + safe wire margin → green `LOCKED` card, still editable;
-   - uncertain / near wire → amber `CHECK` card with top alternatives and optional replay;
-   - insufficient evidence / occlusion → `MANUAL` card, not an invented guess.
-6. Player may tap a card, select/correct a zone, undo a dart, or enter manually.
+5. For each recognized dart, the UI makes its best internal candidate estimate and shows a DartCard:
+   - safe-looking proposal → editable camera suggestion;
+   - uncertain / near wire → `CHECK` with clear correction access;
+   - insufficient evidence / occlusion → no invented score and a manual-correction continuation.
+     Normal camera play does not ask the player to identify or click a physical dart tip.
+6. Player may tap a score card to select/correct a zone, undo a dart, or enter manually.
 7. Player confirms 1–3 darts. The app appends immutable dart events and a turn-confirmed event, updates the deterministic rules projection, and advances the turn.
 8. App waits for board clear before looking for the next visit. If someone removes a dart early, it freezes auto-scoring and asks for manual review.
 
@@ -44,8 +47,9 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 ### P0: Camera setup and review UX
 
 - [ ] Request camera permission in plain language; manual mode works after denial.
-- [ ] Show board framing guide and live quality dimensions: framing, focus, lighting/glare, obliqueness, obstruction.
-- [ ] Support a selected board profile and “standard steel-tip” default.
+- [ ] Show a board framing guide with a comprehensible top-20 orientation and live quality dimensions: framing, focus, lighting/glare, obliqueness, obstruction.
+- [ ] Let a player drag/tap, pinch, twist, and independently pull board-edge handles, then use one calibration/play action instead of named point picking or separate reference capture.
+- [ ] Support a selected board profile and standard-board default without a player-facing steel-tip/soft-tip setup branch.
 - [ ] Explain why a view is rejected and offer three actions: reposition, use manual entry, add a second camera later.
 - [ ] Present three independently editable DartCards, each with score, notation, confidence state, and source.
 - [ ] Never silently commit a raw model result to an official game state.
@@ -93,6 +97,9 @@ This contract is deliberately tighter than a marketing phrase. It is a transpare
 ### Camera setup acceptance
 
 - On a supported setup, board detection/quality state appears in ≤3 seconds at p95.
+- A normal player can fit a visible guide using touch gestures and the `20` marker, then start local
+  calibration/play with one action—without named board-point selection, image download/upload,
+  separate reference capture, or visible-tip clicking.
 - Feedback names a controllable cause, not “try again”: e.g., “move 20 cm closer,” “reduce glare,” “board is only 300 px wide.”
 - Any hard quality failure has a manual-scoring continuation path.
 

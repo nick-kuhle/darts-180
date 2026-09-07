@@ -4,7 +4,7 @@
 > research retained in this repository concerns the former BullzEye working name and does not assess
 > Darts 180. See [`LICENSE-NOTICE.md`](LICENSE-NOTICE.md) before public launch or an app-store listing.
 
-Darts 180 is a cross-platform mobile darts app that watches a steel-tip board, proposes each dart's
+Darts 180 is a cross-platform mobile darts app that watches a dartboard, proposes each dart's
 score, and makes the player the final authority. Its product promise is not “AI never misses”; it
 is **fast, explainable, confirmable scoring with a graceful manual fallback**.
 
@@ -38,9 +38,10 @@ low-cost phone-first setup. Full design: [`docs/03-detection-engine.md`](docs/03
 - A polished, deployable **web prototype** with interactive manual board input, 501 and Cricket,
   event-style history, local-only Capture and Annotation Labs, and Vercel static hosting/security
   configuration.
-- An experimental browser-local **Camera Score** field-test workflow: fixed-camera preview, manual
-  four-double-bed calibration, transparent setup quality gates, clear-board reference, temporal
-  dart-shape/endpoint proposals, visible-tip fallback, deterministic scoring, and DartCard review.
+- An experimental browser-local **Camera Play** field-test workflow: a touch-fitted, 20-oriented
+  board guide with drag/tap, pinch, twist, and independent edge handles; one-tap local baseline
+  capture via **Calibrate & Play**; automatic temporal dart-shape score proposals; and DartCard
+  correction when needed.
 - Deterministic TypeScript rules for standard board geometry, X01 (straight/double/master in/out),
   Cricket (including correct bull marks), checkout routes, and correction-aware event projection,
   with executable tests.
@@ -58,9 +59,10 @@ For an exact done/next/non-claim snapshot, read
 ### What is deliberately **not** claimed yet
 
 There is no trained detection model, no production authentication, no durable database adapter,
-no DartCounter integration, and no guarantee of score accuracy. The web Camera Score workspace is a
-transparent browser-local frame-difference field-test heuristic—not a production auto-scoring claim;
-the native score stream remains a transparent simulation until the native CV milestone lands. See
+no DartCounter integration, and no guarantee of score accuracy. The web Camera Play workspace is a
+transparent browser-local frame-difference field-test heuristic—not a trained or proven production
+auto-scoring claim; the native score stream remains a transparent simulation until the native CV
+milestone lands. See
 [`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) for its required
 mount, calibration, review, privacy, and failure boundaries.
 
@@ -119,11 +121,10 @@ docker compose -f infra/docker-compose.dev.yml up -d
 
 ## Private GitHub delivery
 
-The private repository at `https://github.com/nick-kuhle/darts-180.git` has its initial foundation
-and browser Camera Score field-test workflow merged into `main` through
-[PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
-[PR #2](https://github.com/nick-kuhle/darts-180/pull/2). The Vercel app-root deployment and
-camera-permission guidance update is open for review in
+The private repository at `https://github.com/nick-kuhle/darts-180.git` has its initial foundation,
+browser field test, and Vercel app-root/mobile-camera deployment preparation merged into `main`
+through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
+[PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
 [PR #3](https://github.com/nick-kuhle/darts-180/pull/3).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
