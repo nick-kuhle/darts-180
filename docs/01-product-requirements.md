@@ -20,9 +20,10 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 
 1. Player chooses **Local 501**, player names, starting score, and in/out rules.
 2. App offers **Camera setup** or **Manual mode**. It never blocks the game because a camera is unavailable.
-3. Camera setup shows a live, 20-oriented board guide. A player can drag/tap it into place, pinch to
-   resize, twist to orient, pull individual edge handles for skew, then use one **Calibrate & Play**
-   action to validate the fit, retain an empty-board baseline locally, and arm play.
+3. Camera setup automatically finds the conventional red/green board pattern and displays a visible
+   20-up guide. With an empty board, a player uses one **Start Play** action to retain a local
+   baseline and arm play—without named-point selection or guide fitting. Gesture fitting remains an
+   optional recovery path for unusual boards or failed automatic detection.
 4. Once a dart impacts, the vision runtime waits for wobble to settle; it does not score on the impact frame.
 5. For each recognized dart, the UI makes its best internal candidate estimate and shows a DartCard:
    - safe-looking proposal → editable camera suggestion;
@@ -47,8 +48,8 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 ### P0: Camera setup and review UX
 
 - [ ] Request camera permission in plain language; manual mode works after denial.
-- [ ] Show a board framing guide with a comprehensible top-20 orientation and live quality dimensions: framing, focus, lighting/glare, obliqueness, obstruction.
-- [ ] Let a player drag/tap, pinch, twist, and independently pull board-edge handles, then use one calibration/play action instead of named point picking or separate reference capture.
+- [ ] Automatically find a conventional red/green board and show a framing guide with a comprehensible top-20 orientation and live quality dimensions: framing, focus, lighting/glare, obliqueness, obstruction.
+- [ ] Let a player begin play with one local-baseline action instead of named point picking, guide fitting, or separate reference capture. Keep drag/tap, pinch, twist, and edge handles as optional recovery only.
 - [ ] Support a selected board profile and standard-board default without a player-facing steel-tip/soft-tip setup branch.
 - [ ] Explain why a view is rejected and offer three actions: reposition, use manual entry, add a second camera later.
 - [ ] Present three independently editable DartCards, each with score, notation, confidence state, and source.
@@ -56,7 +57,7 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 
 ### P1: Vision session behavior
 
-- [ ] Calibrate on setup and monitor calibration drift; re-calibrate only when necessary.
+- [ ] Infer the board mapping automatically on setup and monitor mapping drift; repeat automatic board finding only when necessary.
 - [ ] Detect board-empty → dart-arrives → settle → candidate → review → confirmed → board-cleared state transitions.
 - [ ] Hold at most three active dart tracks per standard visit; handle early checkout and bounce-out explicitly.
 - [ ] Capture a short local ring buffer only under the privacy rules; no hidden full-session recording.
@@ -74,14 +75,14 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 
 “Any angle” is a product aspiration; the operating contract is measurable.
 
-| Property            | Preferred                       | Minimum initial support target    | Action outside gate                             |
-| ------------------- | ------------------------------- | --------------------------------- | ----------------------------------------------- |
-| Board size in frame | 700–1,200 px diameter           | ≥480 px diameter                  | Prompt to move closer / use a mount             |
-| Distance            | 0.7–1.2 m                       | 0.5–2.0 m with adequate pixels    | Manual fallback or second device                |
-| Off-axis pose       | 0–30°                           | ≤55° after pose confidence passes | Prompt to move toward centerline                |
-| Board visibility    | Entire face + numbers           | Entire double ring visible        | Reframe; do not infer cropped rings             |
-| Light               | Even, diffuse                   | No severe glare / motion blur     | Lighting coaching                               |
-| Mount               | Centerline, slightly above bull | Stable fixed phone/tablet         | Warn if handheld/motion invalidates calibration |
+| Property            | Preferred                       | Minimum initial support target    | Action outside gate                               |
+| ------------------- | ------------------------------- | --------------------------------- | ------------------------------------------------- |
+| Board size in frame | 700–1,200 px diameter           | ≥480 px diameter                  | Prompt to move closer / use a mount               |
+| Distance            | 0.7–1.2 m                       | 0.5–2.0 m with adequate pixels    | Manual fallback or second device                  |
+| Off-axis pose       | 0–30°                           | ≤55° after pose confidence passes | Prompt to move toward centerline                  |
+| Board visibility    | Entire face + numbers           | Entire double ring visible        | Reframe; do not infer cropped rings               |
+| Light               | Even, diffuse                   | No severe glare / motion blur     | Lighting coaching                                 |
+| Mount               | Centerline, slightly above bull | Stable fixed phone/tablet         | Warn if handheld/motion invalidates board mapping |
 
 This contract is deliberately tighter than a marketing phrase. It is a transparent starting envelope to expand only when slice metrics show that it is safe.
 
@@ -97,9 +98,11 @@ This contract is deliberately tighter than a marketing phrase. It is a transpare
 ### Camera setup acceptance
 
 - On a supported setup, board detection/quality state appears in ≤3 seconds at p95.
-- A normal player can fit a visible guide using touch gestures and the `20` marker, then start local
-  calibration/play with one action—without named board-point selection, image download/upload,
-  separate reference capture, or visible-tip clicking.
+- A normal player can reach Board Found from a visible conventional red/green board, verify the `20`
+  orientation marker, and start local play with one action—without calibration, named board-point
+  selection, guide fitting, image download/upload, separate reference capture, or visible-tip clicking.
+- A failed automatic fit gives an actionable cause and makes visual guide gestures available only as
+  optional recovery.
 - Feedback names a controllable cause, not “try again”: e.g., “move 20 cm closer,” “reduce glare,” “board is only 300 px wide.”
 - Any hard quality failure has a manual-scoring continuation path.
 

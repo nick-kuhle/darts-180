@@ -13,9 +13,10 @@ The foundation slice is delivered and merged through
 501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
 development API; local-only Capture/Annotation Labs; a deployable browser-local fixed-camera
 field-test scorer; manifest validation; synthetic scenes; and inspectable pose/temporal baselines.
-The active browser UX is Camera Play: a touch-fitted, 20-oriented guide and one-action calibration
-rather than named-point setup in normal use. The specific inventory and non-claims live in
-[the current implementation status](13-current-implementation-status.md).
+The active browser UX is Camera Play: automatic red/green board finding and one-action Start Play,
+with visual-guide gestures reserved for recovery rather than normal setup. The active delivery is
+[PR #4](https://github.com/nick-kuhle/darts-180/pull/4). The specific inventory and non-claims live
+in [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,
 real-board pose/quality measurements, a safe capture rig, current-name legal review, and physical
@@ -138,16 +139,16 @@ cross-functional go/no-go review.
 
 ## 5. Top risks and planned controls
 
-| Risk                         | Leading indicator                 | Control                                                        |
-| ---------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| Single-phone accuracy stalls | boundary/oblique slice weak       | stable mount first, confidence review, second-phone escalation |
-| Setup friction kills use     | low calibration completion        | smarter coach, mount design, manual game remains valuable      |
-| Competitors move faster      | feature comparison changes        | price/privacy/open/community wedge; fast controlled testing    |
-| DartCounter never opens API  | no partner response               | build own ecosystem/open protocol; only sanctioned partnership |
-| Name conflict                | search/app-store objection        | legal clearance before launch spend                            |
-| Privacy backlash             | low consent/trust/support concern | on-device default, granular consent, no dark patterns          |
-| Model overconfidence         | corrected auto-accepted darts     | hard precision gate, kill switch, replay/diagnostics           |
-| Scope explosion              | features without metrics          | milestone exits and P0/P1 ownership                            |
+| Risk                         | Leading indicator                   | Control                                                        |
+| ---------------------------- | ----------------------------------- | -------------------------------------------------------------- |
+| Single-phone accuracy stalls | boundary/oblique slice weak         | stable mount first, confidence review, second-phone escalation |
+| Setup friction kills use     | low automatic board-find completion | smarter coach, mount design, manual game remains valuable      |
+| Competitors move faster      | feature comparison changes          | price/privacy/open/community wedge; fast controlled testing    |
+| DartCounter never opens API  | no partner response                 | build own ecosystem/open protocol; only sanctioned partnership |
+| Name conflict                | search/app-store objection          | legal clearance before launch spend                            |
+| Privacy backlash             | low consent/trust/support concern   | on-device default, granular consent, no dark patterns          |
+| Model overconfidence         | corrected auto-accepted darts       | hard precision gate, kill switch, replay/diagnostics           |
+| Scope explosion              | features without metrics            | milestone exits and P0/P1 ownership                            |
 
 ## 6. Success scorecard
 

@@ -12,10 +12,10 @@ an unfinished camera API or claiming live AI scoring.
 - editable three-dart review cards;
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
-- an experimental browser-local **Camera Play** field-test flow: touch-fitted outer-board guide with
-  a clear 20 orientation marker; drag/tap, pinch, twist, and individual edge-handle adjustment;
-  one-tap baseline capture via **Calibrate & Play**; automatic temporal dart-shape proposals; and
-  ordinary DartCard correction when needed;
+- an experimental browser-local **Camera Play** field-test flow: automatic conventional red/green
+  board-color finding with a visible 20-up guide; one-tap baseline capture via **Start Play**;
+  automatic temporal dart-shape proposals; ordinary DartCard correction when needed; and optional
+  gesture-based visual-guide recovery for auto-find failures;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
   without uploading it anywhere;
@@ -24,9 +24,11 @@ an unfinished camera API or claiming live AI scoring.
 
 It has **no account, database, raw camera upload, or trained CV model**. Camera Play uses an
 inspectable fixed-camera frame-difference heuristic for controlled field testing, but it is not a
-trained entry-point model or a proven auto-scoring claim. The normal flow makes an internal,
-deterministic best endpoint/candidate estimate rather than asking a player to identify a steel or
-soft dart tip; correction remains available for every score. Capture and Annotation Labs keep their
+trained entry-point model or a proven auto-scoring claim. The normal flow automatically estimates a
+standard board from its red/green scoring colors, then makes an internal deterministic
+endpoint/candidate estimate rather than asking a player to identify a steel or soft dart tip. It
+assumes a level, 20-up board because color alone cannot identify every number-ring rotation;
+correction remains available for every score. Capture and Annotation Labs keep their
 media/labels browser-local until their user explicitly downloads them. Camera access is requested
 only after a click. That is intentional: it is safe to share as a product/UX prototype and deploy as
 a static site.
@@ -36,9 +38,10 @@ a static site.
 The initial foundation, browser field test, and Vercel/mobile camera deployment preparation are
 merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). Review each diff and its GitHub Actions
-result before using a build for external testing. No delivery credential is stored in source, Git
-configuration, or the remote URL; revoke any short-lived delivery token once the delivery is
+[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). The no-calibration automatic board-find
+update is [PR #4](https://github.com/nick-kuhle/darts-180/pull/4). Review each diff and its GitHub
+Actions result before using a build for external testing. No delivery credential is stored in source,
+Git configuration, or the remote URL; revoke any short-lived delivery token once the delivery is
 confirmed.
 
 ### 1. Import the repository into Vercel
@@ -72,11 +75,12 @@ Deployment for the current Camera Play pull request. Use the Vercel deployment�
 > in-app browsers—cannot show a normal camera permission prompt. Open the resulting
 > `https://…vercel.app` URL directly in Safari or Chrome on the mounted phone/tablet.
 
-Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, fit the
-20-oriented guide around the outer double wire, then use **CALIBRATE & PLAY** with an empty board. If
-a direct HTTPS tab does not prompt, use that browser’s lock/camera controls to set Camera to
-**Allow**, reload the page, and try again. On iOS, check Safari’s website camera setting; on Android
-Chrome, check the site settings behind the lock icon.
+Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, keep a
+conventional red/green board fully visible with its physical 20 at the top of the camera image; wait
+for **BOARD FOUND**, then tap **START PLAY** with an empty board. If a direct HTTPS tab does not
+prompt, use that browser’s lock/camera controls to set Camera to **Allow**, reload the page, and try
+again. On iOS, check Safari’s website camera setting; on Android Chrome, check the site settings
+behind the lock icon.
 
 For the full mounted-device workflow, follow the
 [Browser camera field-test guide](14-browser-camera-field-test.md). The feature runs locally in the

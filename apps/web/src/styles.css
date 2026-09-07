@@ -2847,3 +2847,44 @@ h3 {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.camera-play-frame-buffer {
+  display: none;
+}
+
+.camera-play-gesture-chip.auto {
+  color: #072016;
+  border-color: rgba(224, 255, 241, 0.75);
+  background: #8fdcc1;
+}
+
+.camera-play-auto-state {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 11px 12px;
+  color: #a8bfb4;
+  border: 1px solid #395247;
+  border-radius: 10px;
+  background: #11211a;
+  font-size: 0.67rem;
+  line-height: 1.42;
+}
+
+.camera-play-auto-state strong {
+  color: #8fdcc1;
+  font-size: 0.55rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.camera-play-auto-state span {
+  color: #c5ded2;
+}
+
+.camera-play-auto-state.too-small,
+.camera-play-auto-state.not-found {
+  color: #ffcf80;
+  border-color: #745a2e;
+  background: #292113;
+}

@@ -615,9 +615,9 @@ export function App() {
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> Camera Play is a browser-local heuristic field test,
-          not trained or proven production auto-scoring. It proposes scores from visual change and
-          keeps ordinary score correction available for ambiguous darts.
+          <strong>Darts 180 prototype.</strong> Camera Play is a browser-local red/green color-fit
+          and visual-change field test, not trained or proven production auto-scoring. It keeps
+          ordinary score correction available for ambiguous darts.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →
