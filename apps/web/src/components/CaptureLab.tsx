@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
+
 type CaptureMode = 'empty-board' | 'static-dart' | 'failure-case';
 type LightingBand = 'low' | 'normal' | 'bright' | 'mixed' | 'glare';
 
@@ -43,15 +45,21 @@ export function CaptureLab() {
   }, []);
 
   const startCamera = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    const preflight = getCameraAccessPreflightMessage();
+    if (preflight !== null) {
+      setCameraError(preflight);
+      return;
+    }
+    const mediaDevices = navigator.mediaDevices;
+    if (mediaDevices?.getUserMedia === undefined) {
       setCameraError(
-        'This browser does not provide camera capture. Try current Safari, Chrome, or Edge over HTTPS.',
+        'This browser did not expose a usable camera API. Open the direct Vercel HTTPS URL in Safari or Chrome.',
       );
       return;
     }
     try {
       stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
@@ -67,8 +75,7 @@ export function CaptureLab() {
       setCameraError(null);
       setCameraActive(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Camera permission was not granted.';
-      setCameraError(`Could not start camera: ${message}`);
+      setCameraError(describeCameraAccessError(error));
       setCameraActive(false);
     }
   };

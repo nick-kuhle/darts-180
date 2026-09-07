@@ -19,6 +19,7 @@ import {
   type DifferenceAnalysis,
   type GuidedCalibrationQuality,
 } from '../lib/cameraScoring';
+import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 
 const EMPTY_ANCHORS: Array<ImagePoint | null> = [null, null, null, null];
 const MAX_WORKING_EDGE = 960;
@@ -129,15 +130,21 @@ export function CameraScoringLab({
   }, [workingDimensions]);
 
   const startCamera = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    const preflight = getCameraAccessPreflightMessage();
+    if (preflight !== null) {
+      setCameraError(preflight);
+      return;
+    }
+    const mediaDevices = navigator.mediaDevices;
+    if (mediaDevices?.getUserMedia === undefined) {
       setCameraError(
-        'This browser does not provide camera access. Use a current Safari, Chrome, or Edge browser over HTTPS.',
+        'This browser did not expose a usable camera API. Open the direct Vercel HTTPS URL in Safari or Chrome.',
       );
       return;
     }
     try {
       stopCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
@@ -156,8 +163,7 @@ export function CameraScoringLab({
         'Camera is local to this browser. Frame the full board, let focus settle, then start calibration.',
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Camera permission was not granted.';
-      setCameraError(`Could not start the camera: ${message}`);
+      setCameraError(describeCameraAccessError(error));
       setCameraActive(false);
     }
   };
@@ -557,7 +563,10 @@ export function CameraScoringLab({
               <div className="camera-score-empty">
                 <span>⌁</span>
                 <strong>Camera stays in this browser.</strong>
-                <p>Start only when the device is mounted outside the throw path.</p>
+                <p>
+                  Open a top-level HTTPS Vercel URL on the mounted device; embedded previews cannot
+                  prompt for camera access.
+                </p>
               </div>
             )}
             {cameraActive && canvasMode === 'preview' && reference === null && (
