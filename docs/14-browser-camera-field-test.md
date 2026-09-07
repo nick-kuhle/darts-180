@@ -49,14 +49,20 @@ measurement envelope. Do not force the setup gate merely to get a score.
 
 ## Deploy for a device test
 
-1. Review/merge [Camera Score PR #2](https://github.com/nick-kuhle/darts-180/pull/2) and ensure
-   GitHub Actions is green.
-2. Import the private repository into Vercel as described in
-   [the Vercel guide](12-web-demo-and-vercel.md). The static web app needs no environment variables.
-3. Open the **HTTPS** Vercel deployment on the mounted device. Browser camera access will normally be
-   unavailable on plain HTTP.
-4. Grant **camera only** permission. The app requests no audio and sends no camera media to a server.
-5. Select **CAMERA SCORE** in the upper workspace navigation.
+1. The browser Camera Score workflow is merged in
+   [PR #2](https://github.com/nick-kuhle/darts-180/pull/2). Review/merge the Vercel/mobile update in
+   [PR #3](https://github.com/nick-kuhle/darts-180/pull/3) and ensure its GitHub Actions result is
+   green. For a preview test before merging, use that branch’s Vercel preview instead.
+2. Import the private repository into Vercel and choose **`apps/web`**—not `services` or `ml`—as the
+   Root Directory. Turn on **Include files outside the Root Directory**. The static web app needs no
+   environment variables; see [the click-by-click Vercel guide](12-web-demo-and-vercel.md).
+3. Open the resulting **HTTPS** Vercel deployment directly in Safari or Chrome on the mounted device.
+   Browser camera access will normally be unavailable on plain HTTP, inside the Arena preview iframe,
+   or in an in-app browser/WebView.
+4. Select **CAMERA SCORE**, then tap **Start device camera** to request **camera only** permission.
+   The app requests no audio and sends no camera media to a server. If no prompt appears, use the
+   browser lock/camera controls to set Camera to **Allow**, reload, and retry.
+5. Continue with the calibration flow below.
 
 Use a Vercel preview deployment for initial work. Do not make a public claim, invite broad testers,
 or enable raw-media collection based only on this heuristic field test.
@@ -132,16 +138,18 @@ data program.
 
 ## Expected failure behavior and recovery
 
-| In-app state                   | Meaning                                            | Safe response                                                                            |
-| ------------------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Setup blocks board size        | Board is too small in the working frame            | Move closer / use more optical resolution, then recalibrate                              |
-| Setup blocks perspective       | Cardinal anchors are overly compressed             | Move nearer centreline and keep full board visible                                       |
-| Setup blocks focus             | Edge-detail heuristic is low                       | Let autofocus settle, improve diffuse lighting, clean lens, or move closer               |
-| `no change`                    | No stable visual difference exceeded the threshold | Wait for settling; check that a dart is in view; use Manual tip if it is clearly visible |
-| `camera moved or hand present` | Too much of the calibrated region changed          | Keep mount fixed, leave frame, wait, and analyze again                                   |
-| `ambiguous change`             | Change did not resemble a safe isolated shaft      | Pick the visible tip manually; flag stacked/bounced darts as ambiguous                   |
-| Candidate near a wire          | Geometry maps close to a scoring boundary          | Visually verify and correct via DartCard if needed                                       |
-| Resolution changed             | Browser camera renegotiated dimensions             | Capture a new clear-board reference; recalibrate if framing changed                      |
+| In-app state                    | Meaning                                                 | Safe response                                                                                  |
+| ------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Embedded-preview camera message | The page is in an iframe that cannot request user media | Open the direct `https://…vercel.app` URL in Safari/Chrome, not an Arena or in-app preview     |
+| Camera permission blocked       | The browser/device denied or remembered a denial        | In the direct HTTPS tab, set Camera to Allow from lock/camera site controls, reload, and retry |
+| Setup blocks board size         | Board is too small in the working frame                 | Move closer / use more optical resolution, then recalibrate                                    |
+| Setup blocks perspective        | Cardinal anchors are overly compressed                  | Move nearer centreline and keep full board visible                                             |
+| Setup blocks focus              | Edge-detail heuristic is low                            | Let autofocus settle, improve diffuse lighting, clean lens, or move closer                     |
+| `no change`                     | No stable visual difference exceeded the threshold      | Wait for settling; check that a dart is in view; use Manual tip if it is clearly visible       |
+| `camera moved or hand present`  | Too much of the calibrated region changed               | Keep mount fixed, leave frame, wait, and analyze again                                         |
+| `ambiguous change`              | Change did not resemble a safe isolated shaft           | Pick the visible tip manually; flag stacked/bounced darts as ambiguous                         |
+| Candidate near a wire           | Geometry maps close to a scoring boundary               | Visually verify and correct via DartCard if needed                                             |
+| Resolution changed              | Browser camera renegotiated dimensions                  | Capture a new clear-board reference; recalibrate if framing changed                            |
 
 A bounce-out, robin hood, hidden tip, or severe shaft/flight occlusion is not a situation to force
 through the browser detector. Score it manually and preserve the failure category in test notes.
