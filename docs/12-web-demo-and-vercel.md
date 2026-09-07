@@ -42,17 +42,22 @@ the PR is confirmed.
 1. Sign in to Vercel.
 2. Click **Add New → Project**.
 3. Import `nick-kuhle/darts-180`.
-4. Keep **Root Directory** as the repository root.
-5. Vercel will read root `vercel.json`, which runs:
-   - install: `npm ci`
-   - build: `npm run build --workspace=@darts-180/web`
-   - output: `apps/web/dist`
-6. Click **Deploy**.
+4. When Vercel shows several deployable folders, click **`apps/web`**. This is the website.
+   Do **not** choose `services` or `ml`.
+5. Check that **Root Directory** says `apps/web`. If it does not, click **Edit** beside Root
+   Directory and choose `apps/web`.
+6. Turn on **Include files outside the Root Directory**. The website needs the shared game-rule
+   packages and base TypeScript configuration from the repository.
+7. If Vercel asks for a framework, choose **Vite**. It reads `apps/web/vercel.json`, which runs:
+   - install: `cd ../.. && npm ci`
+   - build: `cd ../.. && npm run build --workspace=@darts-180/web`
+   - output: `dist`
+8. Leave Environment Variables empty and click **Deploy**.
 
-No environment variables are required for the static demo. `vercel.json` also sets static privacy
-headers: camera access is same-origin only, microphone/geolocation are disabled, and the CSP permits
-only app-owned assets plus the local `data:`/`blob:`/`mediastream:` media used by browser-local
-capture. Do not deploy `services/api` as a Vercel function in its current development/in-memory form.
+The app-level `apps/web/vercel.json` sets static privacy headers: camera access is same-origin only,
+microphone/geolocation are disabled, and the CSP permits only app-owned assets plus the local
+`data:`/`blob:`/`mediastream:` media used by browser-local capture. Do not deploy `services/api` as a
+Vercel function in its current development/in-memory form.
 
 ### 2. Create the HTTPS field-test preview
 

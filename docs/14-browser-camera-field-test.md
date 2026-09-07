@@ -50,9 +50,10 @@ measurement envelope. Do not force the setup gate merely to get a score.
 ## Deploy for a device test
 
 1. Review/merge [Camera Score PR #2](https://github.com/nick-kuhle/darts-180/pull/2) and ensure
-   GitHub Actions is green.
-2. Import the private repository into Vercel as described in
-   [the Vercel guide](12-web-demo-and-vercel.md). The static web app needs no environment variables.
+   GitHub Actions is green. For a preview test before merging, use that PR’s Vercel preview instead.
+2. Import the private repository into Vercel and choose **`apps/web`**—not `services` or `ml`—as the
+   Root Directory. Turn on **Include files outside the Root Directory**. The static web app needs no
+   environment variables; see [the click-by-click Vercel guide](12-web-demo-and-vercel.md).
 3. Open the resulting **HTTPS** Vercel deployment directly in Safari or Chrome on the mounted device.
    Browser camera access will normally be unavailable on plain HTTP, inside the Arena preview iframe,
    or in an in-app browser/WebView.
