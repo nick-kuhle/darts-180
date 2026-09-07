@@ -45,6 +45,30 @@ function drawSyntheticAccentBoard(
   }
 }
 
+function drawRedSurround(
+  frame: CameraFrame,
+  centerX: number,
+  centerY: number,
+  innerHorizontalRadius: number,
+  innerVerticalRadius: number,
+  outerHorizontalRadius: number,
+  outerVerticalRadius: number,
+) {
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      const outerRadius = Math.hypot(
+        (x - centerX) / outerHorizontalRadius,
+        (y - centerY) / outerVerticalRadius,
+      );
+      const innerRadius = Math.hypot(
+        (x - centerX) / innerHorizontalRadius,
+        (y - centerY) / innerVerticalRadius,
+      );
+      if (outerRadius <= 1 && innerRadius >= 1) setPixel(frame, x, y, [214, 70, 61]);
+    }
+  }
+}
+
 function drawTwoColorOval(
   frame: CameraFrame,
   centerX: number,
@@ -94,6 +118,20 @@ test('finds a standard red/green board and returns outer-double guide handles', 
   assert.equal(assessAutomaticBoardFitQuality(result.fit, frame).pass, true);
 });
 
+test('finds scoring bands inside a large red surround instead of fitting the surround', () => {
+  const frame = makeFrame(960, 960);
+  drawRedSurround(frame, 480, 480, 330, 310, 450, 430);
+  drawSyntheticAccentBoard(frame, 480, 480, 300, 280);
+
+  const result = detectBoardFitFromColors(frame);
+  assert.equal(result.status, 'found');
+  assert.ok(result.fit !== null);
+  assert.ok(Math.abs((result.center?.x ?? 0) - 480) < 8);
+  assert.ok(Math.abs((result.center?.y ?? 0) - 480) < 8);
+  assert.ok(result.estimatedBoardDiameterPixels >= 520);
+  assert.ok(result.estimatedBoardDiameterPixels <= 620);
+});
+
 test('rejects frames without a sufficient red/green board pattern', () => {
   const result = detectBoardFitFromColors(makeFrame());
   assert.equal(result.status, 'not-found');
@@ -108,7 +146,7 @@ test('rejects a red-and-green filled oval without distinct scoring-band gaps', (
   const result = detectBoardFitFromColors(frame);
   assert.equal(result.status, 'not-found');
   assert.equal(result.fit, null);
-  assert.match(result.message, /double and treble-band pattern/i);
+  assert.match(result.message, /double-and-treble scoring-band pattern/i);
 });
 
 test('requires two comparable color fits before treating a board as stable', () => {
@@ -124,4 +162,7 @@ test('requires two comparable color fits before treating a board as stable', () 
   const shifted = detectBoardFitFromColors(shiftedFrame);
   assert.ok(shifted.fit !== null);
   assert.equal(boardFitsAreSimilar(first.fit, shifted.fit), false);
+
+  const rotatedHandleOrder = [first.fit[1], first.fit[2], first.fit[3], first.fit[0]] as const;
+  assert.equal(boardFitsAreSimilar(first.fit, rotatedHandleOrder), false);
 });

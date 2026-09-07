@@ -2683,6 +2683,16 @@ h3 {
   margin: 0;
 }
 
+.camera-play-engine-state span {
+  color: #c1d2ca;
+}
+
+.camera-play-engine-state small {
+  color: #7f9b8f;
+  font-size: 0.58rem;
+  letter-spacing: 0.035em;
+}
+
 .camera-play-quality.pass {
   border-color: #436d5a;
 }

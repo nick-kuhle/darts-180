@@ -59,6 +59,28 @@ function drawDarkLine(frame: CameraFrame, x: number, startY: number, endY: numbe
   }
 }
 
+function drawCompactFlight(
+  frame: CameraFrame,
+  centerX: number,
+  centerY: number,
+  radius = 9,
+  value = 166,
+) {
+  for (let y = centerY - radius; y <= centerY + radius; y += 1) {
+    for (let x = centerX - radius; x <= centerX + radius; x += 1) {
+      if (Math.hypot(x - centerX, y - centerY) <= radius) setPixel(frame, x, y, value);
+    }
+  }
+}
+
+function adjustExposure(frame: CameraFrame, gain: number, offset: number) {
+  for (let index = 0; index < frame.rgba.length; index += 4) {
+    frame.rgba[index] = Math.round(Math.min(255, frame.rgba[index]! * gain + offset));
+    frame.rgba[index + 1] = Math.round(Math.min(255, frame.rgba[index + 1]! * gain + offset));
+    frame.rgba[index + 2] = Math.round(Math.min(255, frame.rgba[index + 2]! * gain + offset));
+  }
+}
+
 function drawCheckerboard(frame: CameraFrame) {
   for (let y = 80; y < 640; y += 1) {
     for (let x = 80; x < 640; x += 1) {
@@ -112,6 +134,39 @@ test('finds reviewable endpoint candidates for a newly visible elongated change'
   assert.notEqual(selected, null);
   assert.ok(selected !== null);
   assert.ok(result.candidates.some((candidate) => candidate.id === selected.id));
+});
+
+test('finds a subtle compact flight change for a near-centreline camera view', () => {
+  const reference = makeFrame(720, 720, 110);
+  const current = makeFrame(720, 720, 110);
+  // Deliberately below the old 22-level floor: a front-on flight/occlusion need not look like a
+  // high-contrast elongated shaft to be a useful correctable candidate.
+  drawCompactFlight(current, 360, 190, 9, 92);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+  assert.equal(result.status, 'dart-candidate');
+  const selected = selectAutomaticTipCandidate(result.candidates);
+  assert.ok(selected !== null);
+  assert.equal(selected?.endpoint, 'center');
+  assert.equal(selected?.directionEvidence, 'compact-local-change');
+  assert.ok((selected?.confidence ?? 1) < 0.7);
+});
+
+test('keeps a compact dart proposal through modest global exposure drift', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawCheckerboard(reference);
+  drawCheckerboard(current);
+  adjustExposure(current, 1.08, 4);
+  drawCompactFlight(current, 360, 190, 9, 60);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+  assert.equal(result.status, 'dart-candidate');
+  assert.ok(result.changedFraction < 0.02);
 });
 
 test('manual visible-tip selection maps through the same canonical scorer', () => {

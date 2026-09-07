@@ -125,8 +125,11 @@ The private repository at `https://github.com/nick-kuhle/darts-180.git` has its 
 browser field test, and Vercel app-root/mobile-camera deployment preparation merged into `main`
 through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). The automatic, no-calibration Camera Play
-update is open in [PR #4](https://github.com/nick-kuhle/darts-180/pull/4).
+[PR #3](https://github.com/nick-kuhle/darts-180/pull/3), the initial Camera Play simplification in
+[PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and automatic board finding in
+[PR #5](https://github.com/nick-kuhle/darts-180/pull/5). The browser-camera reliability remediation
+is in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6) and awaits direct field validation;
+synthetic tests alone do not make it merge-ready.
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
 is stored in this repository; revoke any short-lived delivery token after confirming a delivery.
