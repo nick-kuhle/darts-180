@@ -111,16 +111,15 @@ Start the Phase-2 local dependencies only when the durable adapter is being impl
 docker compose -f infra/docker-compose.dev.yml up -d
 ```
 
-## Push the existing private GitHub repository
+## Private GitHub delivery
 
-The local repository already has committed history and targets the private repository
-`https://github.com/nick-kuhle/darts-180.git`. Authenticate from your own terminal—do not paste a
-personal access token into source, an issue, or chat—then push the current branch:
+The private repository at `https://github.com/nick-kuhle/darts-180.git` has a minimal protected-base
+bootstrap on `main`. The complete initial implementation is in
+[PR #1 — establish Darts 180 scoring and capture foundation](https://github.com/nick-kuhle/darts-180/pull/1).
 
-```bash
-cd /path/to/darts-180
-git push -u origin main
-```
+Review the pull request, verify its GitHub Actions checks, and merge it into `main`. The working
+checkout tracks `initial-foundation` while that review is open. No credential is stored in this
+repository; revoke any short-lived delivery token after confirming the PR is available.
 
 Before public launch, choose a licence/contributor policy, replace placeholder mobile package IDs
 (`com.yourcompany.darts180`), replace the temporary individual `CODEOWNERS` mapping with organization

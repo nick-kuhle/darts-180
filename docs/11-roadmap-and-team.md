@@ -6,8 +6,9 @@ legal lead time. Parallelize discovery; do not skip gates.
 
 ## 0. Delivery snapshot — 2026-09-07
 
-The foundation slice is delivered: local Git history; a private GitHub destination; CI; a playable
-web 501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
+The foundation slice is delivered: a private GitHub `main` bootstrap and
+[initial foundation PR #1](https://github.com/nick-kuhle/darts-180/pull/1); CI; a playable web
+501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
 development API; local-only Capture/Annotation Labs; manifest validation; synthetic scenes; and
 inspectable pose/temporal baselines. The specific inventory and non-claims live in
 [the current implementation status](13-current-implementation-status.md).
@@ -103,18 +104,18 @@ not compromise player privacy or product independence.
 
 ## 3. First 10 working days
 
-| Day | Concrete deliverable                                                               | Current status                                                                                           |
-| --: | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-|   1 | Push `main` to private GitHub, assign name/legal owner, and enable CI              | In progress: remote exists; local Git history/CI are ready; current-name legal owner remains needed.     |
-|   2 | Rules team reviews X01/Cricket spec and starts fixture corpus                      | Ready: rules/tests exist; expand toward the conformance corpus.                                          |
-|   3 | Mobile team installs demo on iOS/Android devices and tests DartCard edits          | Ready for physical-device execution.                                                                     |
-|   4 | Vision team freezes landmark/label format and builds safe capture test jig         | Partial: manifest, local Capture/Annotation Labs, synthetic data, and baselines exist; real rig remains. |
-|   5 | Privacy team approves capture consent/retention/face-exclusion workflow            | Not started: browser-local safeguards do not replace legal/privacy approval.                             |
-|   6 | Capture first 200 controlled board/dart examples across several poses              | Blocked on Day 5 approval and safe intake.                                                               |
-|   7 | Native team spikes CameraX/AVFoundation frames + timing trace in dev build         | Not started: interface is seeded; real frame runtime remains.                                            |
-|   8 | ML team establishes trained pose/entrypoint experiment and sacred eval split       | Partial: synthetic/heuristic pipeline baseline exists; consented data/model work remains.                |
-|   9 | Backend team replaces in-memory-store plan with tested Postgres event-store design | Not started: contract/projection/catch-up baseline exists.                                               |
-|  10 | Joint review: show quality dashboard, not just a successful video                  | Pending measured real-capture results.                                                                   |
+| Day | Concrete deliverable                                                               | Current status                                                                                                                    |
+| --: | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | Review/merge initial PR, assign name/legal owner, and enable CI policy             | In progress: [PR #1](https://github.com/nick-kuhle/darts-180/pull/1) is open; legal owner and review/branch policy remain needed. |
+|   2 | Rules team reviews X01/Cricket spec and starts fixture corpus                      | Ready: rules/tests exist; expand toward the conformance corpus.                                                                   |
+|   3 | Mobile team installs demo on iOS/Android devices and tests DartCard edits          | Ready for physical-device execution.                                                                                              |
+|   4 | Vision team freezes landmark/label format and builds safe capture test jig         | Partial: manifest, local Capture/Annotation Labs, synthetic data, and baselines exist; real rig remains.                          |
+|   5 | Privacy team approves capture consent/retention/face-exclusion workflow            | Not started: browser-local safeguards do not replace legal/privacy approval.                                                      |
+|   6 | Capture first 200 controlled board/dart examples across several poses              | Blocked on Day 5 approval and safe intake.                                                                                        |
+|   7 | Native team spikes CameraX/AVFoundation frames + timing trace in dev build         | Not started: interface is seeded; real frame runtime remains.                                                                     |
+|   8 | ML team establishes trained pose/entrypoint experiment and sacred eval split       | Partial: synthetic/heuristic pipeline baseline exists; consented data/model work remains.                                         |
+|   9 | Backend team replaces in-memory-store plan with tested Postgres event-store design | Not started: contract/projection/catch-up baseline exists.                                                                        |
+|  10 | Joint review: show quality dashboard, not just a successful video                  | Pending measured real-capture results.                                                                                            |
 
 ## 4. Staffing sequence
 

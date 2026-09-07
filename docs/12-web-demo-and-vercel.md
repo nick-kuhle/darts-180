@@ -25,17 +25,11 @@ product/UX prototype and deploy as a static site.
 
 ## Fastest Vercel path — founder steps
 
-Do not share passwords, API keys, or personal access tokens with the agent. The private GitHub
-repository already exists at `nick-kuhle/darts-180`; authenticate in your own terminal and push the
-committed local branch:
-
-```bash
-cd /path/to/darts-180
-git push -u origin main
-```
-
-If the GitHub repository was initialized with a README, licence, or `.gitignore`, reconcile that
-history intentionally before pushing; do not force-push merely to make the first upload succeed.
+The private repository is now bootstrapped and the complete implementation is available for review in
+[PR #1](https://github.com/nick-kuhle/darts-180/pull/1). Review its diff and GitHub Actions result,
+then merge it into `main` before creating the production deployment. No delivery credential is stored
+in source, Git configuration, or the remote URL; revoke any short-lived delivery token once the PR is
+confirmed.
 
 ### 1. Import the repository into Vercel
 
