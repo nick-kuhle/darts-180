@@ -120,9 +120,10 @@ docker compose -f infra/docker-compose.dev.yml up -d
 ## Private GitHub delivery
 
 The private repository at `https://github.com/nick-kuhle/darts-180.git` has its initial foundation
-merged into `main` through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1). The browser
-Camera Score field-test extension is open for review as
-[PR #2](https://github.com/nick-kuhle/darts-180/pull/2).
+and browser Camera Score field-test workflow merged into `main` through
+[PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
+[PR #2](https://github.com/nick-kuhle/darts-180/pull/2). The Vercel app-root deployment and
+camera-permission guidance update is prepared on `vercel-camera-deployment` for its own review.
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
 is stored in this repository; revoke any short-lived delivery token after confirming a delivery.

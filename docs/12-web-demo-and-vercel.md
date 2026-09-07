@@ -30,12 +30,13 @@ a static site.
 
 ## Fastest Vercel path — founder steps
 
-The initial foundation is merged in
-[PR #1](https://github.com/nick-kuhle/darts-180/pull/1). The browser Camera Score field-test update
-is open in [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) for review before a production
-deployment. Review each diff and its GitHub Actions result before merging. No delivery credential is
-stored in source, Git configuration, or the remote URL; revoke any short-lived delivery token once
-the PR is confirmed.
+The initial foundation and browser Camera Score workflow are merged in
+[PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
+[PR #2](https://github.com/nick-kuhle/darts-180/pull/2). The app-root Vercel deployment and
+camera-permission guidance update is prepared on `vercel-camera-deployment` for separate review.
+Review each diff and its GitHub Actions result before merging. No delivery credential is stored in
+source, Git configuration, or the remote URL; revoke any short-lived delivery token once the PR is
+confirmed.
 
 ### 1. Import the repository into Vercel
 
@@ -61,9 +62,9 @@ Vercel function in its current development/in-memory form.
 
 ### 2. Create the HTTPS field-test preview
 
-After Vercel is connected to GitHub, it should create a Preview Deployment for
-[PR #2](https://github.com/nick-kuhle/darts-180/pull/2). Open the Vercel check’s **Visit** link on
-that pull request, or select the `camera-field-test` deployment in the Vercel **Deployments** tab.
+After Vercel is connected to GitHub, it should create a Preview Deployment for the current
+`vercel-camera-deployment` review branch. Open the Vercel check’s **Visit** link on that pull request,
+or select that branch’s deployment in the Vercel **Deployments** tab.
 
 > **Do not use an embedded development preview for this test.** Arena’s preview iframe—and many
 > in-app browsers—cannot show a normal camera permission prompt. Open the resulting

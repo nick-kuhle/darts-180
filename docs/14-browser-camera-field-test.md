@@ -49,8 +49,10 @@ measurement envelope. Do not force the setup gate merely to get a score.
 
 ## Deploy for a device test
 
-1. Review/merge [Camera Score PR #2](https://github.com/nick-kuhle/darts-180/pull/2) and ensure
-   GitHub Actions is green. For a preview test before merging, use that PR’s Vercel preview instead.
+1. The browser Camera Score workflow is merged in
+   [PR #2](https://github.com/nick-kuhle/darts-180/pull/2). Review/merge the current
+   `vercel-camera-deployment` update and ensure its GitHub Actions result is green. For a preview
+   test before merging, use that branch’s Vercel preview instead.
 2. Import the private repository into Vercel and choose **`apps/web`**—not `services` or `ml`—as the
    Root Directory. Turn on **Include files outside the Root Directory**. The static web app needs no
    environment variables; see [the click-by-click Vercel guide](12-web-demo-and-vercel.md).
