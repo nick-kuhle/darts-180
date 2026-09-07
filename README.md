@@ -121,8 +121,8 @@ docker compose -f infra/docker-compose.dev.yml up -d
 
 The private repository at `https://github.com/nick-kuhle/darts-180.git` has its initial foundation
 merged into `main` through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1). The browser
-Camera Score field-test extension is prepared on `camera-field-test` for its own review before a
-production deployment.
+Camera Score field-test extension is open for review as
+[PR #2](https://github.com/nick-kuhle/darts-180/pull/2).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
 is stored in this repository; revoke any short-lived delivery token after confirming a delivery.

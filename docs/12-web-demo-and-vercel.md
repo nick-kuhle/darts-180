@@ -32,9 +32,10 @@ a static site.
 
 The initial foundation is merged in
 [PR #1](https://github.com/nick-kuhle/darts-180/pull/1). The browser Camera Score field-test update
-is prepared on `camera-field-test` for a separate review before a production deployment. Review each
-diff and its GitHub Actions result before merging. No delivery credential is stored in source, Git
-configuration, or the remote URL; revoke any short-lived delivery token once the PR is confirmed.
+is open in [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) for review before a production
+deployment. Review each diff and its GitHub Actions result before merging. No delivery credential is
+stored in source, Git configuration, or the remote URL; revoke any short-lived delivery token once
+the PR is confirmed.
 
 ### 1. Import the repository into Vercel
 

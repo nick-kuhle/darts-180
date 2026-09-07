@@ -49,7 +49,8 @@ measurement envelope. Do not force the setup gate merely to get a score.
 
 ## Deploy for a device test
 
-1. Review/merge the current implementation pull request and ensure GitHub Actions is green.
+1. Review/merge [Camera Score PR #2](https://github.com/nick-kuhle/darts-180/pull/2) and ensure
+   GitHub Actions is green.
 2. Import the private repository into Vercel as described in
    [the Vercel guide](12-web-demo-and-vercel.md). The static web app needs no environment variables.
 3. Open the **HTTPS** Vercel deployment on the mounted device. Browser camera access will normally be
