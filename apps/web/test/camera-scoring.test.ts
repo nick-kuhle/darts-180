@@ -198,6 +198,21 @@ test('board-fit quality accepts the outer double-wire handles used by Camera Pla
   assert.ok(quality.boardDiameterPixels >= 560);
 });
 
+test('board-fit quality uses the compressed axis as its resolution floor', () => {
+  const frame = makeFrame();
+  drawCheckerboard(frame);
+  const obliqueHandles: ImagePoint[] = [
+    { x: 360, y: 160 },
+    { x: 690, y: 360 },
+    { x: 360, y: 560 },
+    { x: 30, y: 360 },
+  ];
+  const quality = assessBoardFitCalibration(obliqueHandles, frame);
+  assert.equal(quality.pass, false);
+  assert.equal(Math.round(quality.boardDiameterPixels), 400);
+  assert.ok(quality.blockers.some((blocker) => blocker.includes('at least 480 px')));
+});
+
 test('guided quality blocks a board that is too small', () => {
   const smallAnchors: ImagePoint[] = [
     { x: 100, y: 80 },
