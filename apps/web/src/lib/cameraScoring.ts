@@ -121,11 +121,32 @@ export function assessBoardFitCalibration(
   });
 }
 
+/**
+ * Evaluates a fit inferred from visible red/green scoring bands. Color segmentation itself requires
+ * contrast, so soft focus is a player-visible warning rather than a setup dead end; live scoring
+ * still holds ambiguous changes instead of claiming a score.
+ */
+export function assessAutomaticBoardFitQuality(
+  outerBoardHandles: readonly ImagePoint[],
+  frame: CameraFrame,
+): GuidedCalibrationQuality {
+  return assessFourPointCalibration(outerBoardHandles, frame, STANDARD_DOUBLE_DIAMETER_MM, {
+    missingAnchorMessage: 'Find a complete colored board in a visible camera frame.',
+    crossedGuideMessage:
+      'The automatically found board shape is too small, crossed, or folded. Reframe the full double wire.',
+    focusIsBlocker: false,
+  });
+}
+
 function assessFourPointCalibration(
   anchors: readonly ImagePoint[],
   frame: CameraFrame,
   canonicalDiameterMm: number,
-  messages: Readonly<{ missingAnchorMessage: string; crossedGuideMessage: string }>,
+  messages: Readonly<{
+    missingAnchorMessage: string;
+    crossedGuideMessage: string;
+    focusIsBlocker?: boolean;
+  }>,
 ): GuidedCalibrationQuality {
   const blockers: string[] = [];
   const warnings: string[] = [];
@@ -152,7 +173,9 @@ function assessFourPointCalibration(
     (distance(top, bottom) * STANDARD_DOUBLE_DIAMETER_MM) / canonicalDiameterMm;
   const largestDiameter = Math.max(horizontalDiameter, verticalDiameter);
   const smallestDiameter = Math.min(horizontalDiameter, verticalDiameter);
-  const boardDiameterPixels = (horizontalDiameter + verticalDiameter) / 2;
+  // The compressed axis is the resolution bottleneck for an oblique board. Do not let a long axis
+  // disguise a short axis that cannot resolve narrow scoring bands safely.
+  const boardDiameterPixels = smallestDiameter;
   const boardCoverage = boardDiameterPixels / Math.min(frame.width, frame.height);
   const axisRatio = largestDiameter === 0 ? 0 : clamp(smallestDiameter / largestDiameter, 0, 1);
   const estimatedOffAxisDegrees = (Math.acos(axisRatio) * 180) / Math.PI;
@@ -173,9 +196,10 @@ function assessFourPointCalibration(
     );
   }
   if (sharpness < 7) {
-    blockers.push(
-      'The board looks soft at this frame size. Let the camera focus, add diffuse light, or move closer.',
-    );
+    const message =
+      'The board looks soft at this frame size. Let the camera focus, add diffuse light, or move closer.';
+    if (messages.focusIsBlocker === false) warnings.push(message);
+    else blockers.push(message);
   }
   if (boardCoverage > 0.9) {
     warnings.push(

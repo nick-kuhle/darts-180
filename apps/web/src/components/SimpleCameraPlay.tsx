@@ -10,7 +10,13 @@ import {
   type ImagePoint,
 } from '../lib/annotationGeometry';
 import {
+  boardFitsAreSimilar,
+  detectBoardFitFromColors,
+  type AutoBoardFitResult,
+} from '../lib/autoBoardFit';
+import {
   analyzeDartDifference,
+  assessAutomaticBoardFitQuality,
   assessBoardFitCalibration,
   frameFromImageData,
   selectAutomaticTipCandidate,
@@ -35,7 +41,8 @@ import {
 const MAX_WORKING_EDGE = 960;
 const MIN_HANDLE_HIT_RADIUS = 24;
 
-type CameraPhase = 'setup' | 'watching' | 'turn-ready' | 'awaiting-clear';
+type CameraPhase =
+  'finding-board' | 'manual-fit' | 'ready-to-play' | 'watching' | 'turn-ready' | 'awaiting-clear';
 
 type GestureState =
   | {
@@ -76,9 +83,10 @@ interface SimpleCameraPlayProps {
 }
 
 /**
- * The normal player path: visually fit a persistent board guide once, then let browser-local
- * temporal change detection propose the next score. It deliberately hides physical-tip picking;
- * ordinary score correction remains available if the heuristic is unsure.
+ * The normal player path: infer an upright standard board from its red/green scoring colors, then
+ * let browser-local temporal change detection propose the next score. It deliberately hides
+ * physical-tip picking; an optional visual guide is recovery-only and ordinary score correction
+ * remains available if the heuristic is unsure.
  */
 export function SimpleCameraPlay({
   activePlayerName,
@@ -99,6 +107,7 @@ export function SimpleCameraPlay({
   const activePointersRef = useRef(new Map<number, ImagePoint>());
   const gestureRef = useRef<GestureState | null>(null);
   const stabilityRef = useRef<{ key: string; count: number } | null>(null);
+  const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
   const recordingRef = useRef(false);
 
   const [cameraActive, setCameraActive] = useState(false);
@@ -106,8 +115,9 @@ export function SimpleCameraPlay({
   const [fit, setFit] = useState<BoardFitPoints | null>(null);
   const [homography, setHomography] = useState<Homography | null>(null);
   const [quality, setQuality] = useState<GuidedCalibrationQuality | null>(null);
+  const [automaticFit, setAutomaticFit] = useState<AutoBoardFitResult | null>(null);
   const [reference, setReference] = useState<CameraFrame | null>(null);
-  const [phase, setPhase] = useState<CameraPhase>('setup');
+  const [phase, setPhase] = useState<CameraPhase>('finding-board');
   const [analysis, setAnalysis] = useState<DifferenceAnalysis | null>(null);
   const [lastRecorded, setLastRecorded] = useState<Readonly<{
     slot: number;
@@ -115,7 +125,7 @@ export function SimpleCameraPlay({
     imagePoint: ImagePoint;
   }> | null>(null);
   const [liveMessage, setLiveMessage] = useState(
-    'Start the rear camera, then fit the amber 20-oriented board guide over the double wire.',
+    'Start the rear camera. Darts 180 will look for the board’s red and green scoring colors automatically.',
   );
 
   useEffect(() => {
@@ -123,7 +133,7 @@ export function SimpleCameraPlay({
   }, [fit]);
 
   useEffect(() => {
-    if (gameComplete && phase !== 'setup') {
+    if (gameComplete && phase !== 'finding-board') {
       setLiveMessage(
         'The game is complete. Open Play demo to review the final result or start another game.',
       );
@@ -134,8 +144,13 @@ export function SimpleCameraPlay({
   const turnTotal = turnDarts
     .filter((dart) => dart.filled)
     .reduce((total, dart) => total + dart.zone.score, 0);
-  const guideLocked = phase !== 'setup' || homography !== null;
-  const canCalibrate = cameraActive && fit !== null && !gameComplete;
+  const guideLocked = phase !== 'manual-fit';
+  const canStartPlay =
+    cameraActive &&
+    homography !== null &&
+    quality?.pass === true &&
+    phase === 'ready-to-play' &&
+    !gameComplete;
   const isWatching = phase === 'watching';
 
   const stopCamera = useCallback(() => {
@@ -149,11 +164,15 @@ export function SimpleCameraPlay({
     activePointersRef.current.clear();
     gestureRef.current = null;
     stabilityRef.current = null;
+    autoFitStabilityRef.current = null;
     recordingRef.current = false;
     setCameraActive(false);
+    setFit(null);
     setReference(null);
     setHomography(null);
-    setPhase('setup');
+    setQuality(null);
+    setAutomaticFit(null);
+    setPhase('finding-board');
   }, []);
 
   useEffect(() => stopCamera, [stopCamera]);
@@ -227,14 +246,19 @@ export function SimpleCameraPlay({
       const dimensions = workingDimensions(video);
       if (dimensions === null)
         throw new Error('Camera dimensions were not available yet. Try starting it again.');
-      setFit(createInitialBoardFit(dimensions.width, dimensions.height));
+      // A valid frame buffer is now mounted below before this runs. Do not create a default manual
+      // guide: the normal path begins by looking for red/green scoring bands automatically.
+      setFit(null);
       setCameraActive(true);
       setCameraError(null);
       setQuality(null);
+      setAutomaticFit(null);
       setAnalysis(null);
       setLastRecorded(null);
+      setPhase('finding-board');
+      autoFitStabilityRef.current = null;
       setLiveMessage(
-        'Fit the guide over the board. Keep the real board empty before Calibrate & Play.',
+        'Looking for the board’s red and green scoring colors. Keep the whole board visible and the physical 20 at the top of the camera image.',
       );
     } catch (error) {
       for (const track of streamRef.current?.getTracks() ?? []) track.stop();
@@ -281,28 +305,122 @@ export function SimpleCameraPlay({
     };
   }, [cameraActive, guideLocked, lastRecorded?.imagePoint, lastRecorded?.zone, workingDimensions]);
 
-  const resetGuide = () => {
-    const frame = captureFrame();
-    if (frame !== null) setFit(createInitialBoardFit(frame.width, frame.height));
+  const restartAutomaticBoardFind = () => {
+    if (!cameraActive) {
+      setLiveMessage(
+        'Start the rear camera first, then Darts 180 can look for the board automatically.',
+      );
+      return;
+    }
+    setFit(null);
     setHomography(null);
     setReference(null);
     setQuality(null);
+    setAutomaticFit(null);
     setAnalysis(null);
     setLastRecorded(null);
-    setPhase('setup');
+    setPhase('finding-board');
     stabilityRef.current = null;
-    setLiveMessage('Guide reset. Fit it over the board with the 20 marker at the real 20.');
+    autoFitStabilityRef.current = null;
+    setLiveMessage(
+      'Looking for the board’s red and green scoring colors. Keep the full board in view and the physical 20 at the top of the camera image.',
+    );
   };
 
-  const calibrateAndPlay = () => {
+  useEffect(() => {
+    if (!cameraActive || phase !== 'finding-board' || gameComplete) return;
+    let cancelled = false;
+
+    const findBoard = () => {
+      const frame = captureFrame();
+      if (frame === null) {
+        setLiveMessage('Waiting for a complete camera frame before looking for the board.');
+        return;
+      }
+      const result = detectBoardFitFromColors(frame);
+      if (cancelled) return;
+      setAutomaticFit(result);
+      if (result.fit === null) {
+        autoFitStabilityRef.current = null;
+        setFit(null);
+        setHomography(null);
+        setQuality(null);
+        setLiveMessage(result.message);
+        return;
+      }
+
+      const previous = autoFitStabilityRef.current;
+      const count =
+        previous !== null && boardFitsAreSimilar(previous.fit, result.fit) ? previous.count + 1 : 1;
+      autoFitStabilityRef.current = { fit: result.fit, count };
+      setFit(result.fit);
+      if (count < 2) {
+        setLiveMessage('Board colors found. Checking that the automatic guide is steady…');
+        return;
+      }
+
+      const nextHomography = solveImageToBoardHomography(result.fit, BOARD_FIT_CANONICAL_ANCHORS);
+      const nextQuality = assessAutomaticBoardFitQuality(result.fit, frame);
+      setQuality(nextQuality);
+      if (nextHomography === null) {
+        setHomography(null);
+        setLiveMessage(
+          'The automatically found board shape was not usable. Reframe the board, then try again.',
+        );
+        return;
+      }
+      if (!nextQuality.pass) {
+        setHomography(null);
+        setLiveMessage(nextQuality.blockers[0] ?? 'The automatic board fit needs a clearer view.');
+        return;
+      }
+
+      setHomography(nextHomography);
+      setPhase('ready-to-play');
+      setLiveMessage(
+        'Board found automatically. With the board clear, tap Start Play — no calibration points or guide fitting needed.',
+      );
+    };
+
+    findBoard();
+    const interval = window.setInterval(findBoard, 550);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [cameraActive, captureFrame, gameComplete, phase]);
+
+  const startOptionalManualGuide = () => {
+    const frame = captureFrame();
+    if (frame === null) {
+      setLiveMessage(
+        'The camera is still starting. Wait for the live image, then open optional guide recovery.',
+      );
+      return;
+    }
+    setFit(createInitialBoardFit(frame.width, frame.height));
+    setHomography(null);
+    setReference(null);
+    setQuality(null);
+    setAutomaticFit(null);
+    setAnalysis(null);
+    setLastRecorded(null);
+    setPhase('manual-fit');
+    autoFitStabilityRef.current = null;
+    setLiveMessage(
+      'Optional recovery only: place the 20 handle on the real 20, adjust the guide, then continue to Start Play.',
+    );
+  };
+
+  const useOptionalManualGuide = () => {
     if (fit === null) {
-      setLiveMessage('Start the camera and wait for a board guide before calibrating.');
+      setLiveMessage('Wait for the optional guide before continuing.');
       return;
     }
     const frame = captureFrame();
     if (frame === null) {
       setLiveMessage(
-        'The camera has not supplied a complete frame yet. Let it settle, then try again.',
+        'The camera has not supplied a complete frame yet. Wait for the live image, then try again.',
       );
       return;
     }
@@ -311,22 +429,38 @@ export function SimpleCameraPlay({
     const nextHomography = solveImageToBoardHomography(fit, BOARD_FIT_CANONICAL_ANCHORS);
     if (nextHomography === null) {
       setLiveMessage(
-        'That guide shape cannot be mapped. Reset it, then pull the four handles around the board edge.',
+        'That optional guide shape cannot be mapped. Reset it or return to automatic board finding.',
       );
       return;
     }
     if (!nextQuality.pass) {
-      setLiveMessage(nextQuality.blockers[0] ?? 'Improve the board fit before calibration.');
+      setLiveMessage(nextQuality.blockers[0] ?? 'Improve the optional guide before continuing.');
       return;
     }
     setHomography(nextHomography);
+    setPhase('ready-to-play');
+    setLiveMessage('Optional guide recovery is ready. With the board clear, tap Start Play.');
+  };
+
+  const startPlay = () => {
+    if (homography === null || quality?.pass !== true) {
+      setLiveMessage(
+        'I am still finding a usable board. Keep the board visible, or use optional recovery only if auto-find cannot recover.',
+      );
+      return;
+    }
+    const frame = captureFrame();
+    if (frame === null) {
+      setLiveMessage('Waiting for a complete live camera frame before starting play.');
+      return;
+    }
     setReference(frame);
     setAnalysis(null);
     setLastRecorded(null);
     stabilityRef.current = null;
     setPhase('watching');
     setLiveMessage(
-      'Calibrated locally. Throw one dart, step clear, and the score will appear after it settles.',
+      'Playing locally. Throw one dart, step clear, and the score will appear after it settles.',
     );
   };
 
@@ -372,7 +506,7 @@ export function SimpleCameraPlay({
       if (nextAnalysis.status === 'incompatible-frame') {
         stabilityRef.current = null;
         setLiveMessage(
-          'Camera framing or resolution changed. Tap Adjust setup, refit the guide, then Calibrate & Play again.',
+          'Camera framing or resolution changed. Tap Find Board Again, wait for Board Found, then Start Play with an empty board.',
         );
         return;
       }
@@ -449,7 +583,7 @@ export function SimpleCameraPlay({
 
   const beginNextTurn = () => {
     if (homography === null) {
-      resetGuide();
+      restartAutomaticBoardFind();
       return;
     }
     const frame = captureFrame();
@@ -519,9 +653,10 @@ export function SimpleCameraPlay({
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (guideLocked || fitRef.current === null) {
-      if (cameraActive && guideLocked)
-        setLiveMessage('The guide is locked while playing. Reset setup to adjust it.');
+    if (phase !== 'manual-fit' || fitRef.current === null) {
+      if (cameraActive && phase === 'ready-to-play') {
+        setLiveMessage('The board was found automatically. With an empty board, tap Start Play.');
+      }
       return;
     }
     const point = pointForEvent(event);
@@ -624,7 +759,7 @@ export function SimpleCameraPlay({
 
   const visibleQuality = useMemo(() => {
     if (quality === null) return null;
-    return `${Math.round(quality.boardDiameterPixels)} px board · ${Math.round(quality.estimatedOffAxisDegrees)}° guide skew · ${Math.round(quality.sharpness)} focus`;
+    return `${Math.round(quality.boardDiameterPixels)} px board · ${Math.round(quality.estimatedOffAxisDegrees)}° board skew · ${Math.round(quality.sharpness)} focus`;
   }, [quality]);
 
   return (
@@ -633,39 +768,51 @@ export function SimpleCameraPlay({
         <div>
           <p className="eyebrow">CAMERA PLAY · LOCAL BROWSER FIELD TEST</p>
           <h1>
-            Fit once.
+            Point it.
             <br />
-            <em>Throw naturally.</em>
+            <em>Play.</em>
           </h1>
           <p>
-            Mount the phone near the board centreline, fit the on-screen guide, then let Darts 180
-            make a local score suggestion for each settled dart. No photos leave this browser.
+            Mount the phone near the board centreline. Darts 180 finds the red and green scoring
+            bands, maps the board locally, then suggests a score for each settled dart. No photos
+            leave this browser.
           </p>
         </div>
         <aside className="camera-play-privacy-card">
           <span>YOUR CAMERA</span>
           <strong>Browser-local only</strong>
-          <p>No image upload, account, named-point clicks, or dart-tip clicking in normal play.</p>
+          <p>
+            No image upload, account, calibration-point clicks, guide fitting, or dart-tip clicking
+            in normal play.
+          </p>
         </aside>
       </header>
 
       <div className="camera-play-grid">
-        <section className="camera-play-stage" aria-label="Live camera board fit">
+        <section className="camera-play-stage" aria-label="Live camera board">
           <div className="camera-play-stage-head">
             <div>
               <p className="eyebrow">
-                {cameraActive
-                  ? guideLocked
-                    ? 'GUIDE LOCKED'
-                    : 'FIT THE BOARD'
-                  : 'STEP 1 · START CAMERA'}
+                {!cameraActive
+                  ? 'STEP 1 · START CAMERA'
+                  : phase === 'finding-board'
+                    ? 'AUTO-FINDING BOARD'
+                    : phase === 'manual-fit'
+                      ? 'OPTIONAL GUIDE RECOVERY'
+                      : phase === 'ready-to-play'
+                        ? 'BOARD FOUND'
+                        : 'PLAYING LOCALLY'}
               </p>
               <h2>
-                {cameraActive
-                  ? guideLocked
-                    ? 'Playing from your fitted board.'
-                    : 'Match the outer double wire.'
-                  : 'Point the rear camera at the board.'}
+                {!cameraActive
+                  ? 'Point the rear camera at the board.'
+                  : phase === 'finding-board'
+                    ? 'Looking for red and green scoring bands.'
+                    : phase === 'manual-fit'
+                      ? 'Only use this guide if auto-find cannot recover.'
+                      : phase === 'ready-to-play'
+                        ? 'Board found. Clear it, then start play.'
+                        : 'Watching for a settled dart.'}
               </h2>
             </div>
             <span className={`camera-state ${cameraActive ? 'on' : ''}`}>
@@ -675,11 +822,14 @@ export function SimpleCameraPlay({
 
           <div className={`camera-play-surface ${guideLocked ? 'is-locked' : ''}`}>
             <video className="camera-play-source" autoPlay muted playsInline ref={videoRef} />
+            <canvas aria-hidden="true" className="camera-play-frame-buffer" ref={frameCanvasRef} />
             <canvas
               aria-label={
-                guideLocked
-                  ? 'Live camera board guide locked for scoring.'
-                  : 'Live camera board guide. Drag to move, use two fingers to pinch or twist, and pull each edge handle to fit the board.'
+                phase === 'manual-fit'
+                  ? 'Optional manual board guide. Drag to move, use two fingers to pinch or twist, and pull each edge handle to fit the board.'
+                  : phase === 'finding-board'
+                    ? 'Live camera. Darts 180 is automatically looking for the board colors.'
+                    : 'Live camera with an automatically found board guide.'
               }
               className="camera-play-canvas"
               onPointerCancel={endPointer}
@@ -695,16 +845,25 @@ export function SimpleCameraPlay({
                 <p>Open this direct HTTPS page in Safari or Chrome on the mounted phone.</p>
               </div>
             )}
-            {cameraActive && !guideLocked && (
+            {cameraActive && phase === 'finding-board' && (
+              <div className="camera-play-gesture-chip auto">
+                LOOKING FOR RED + GREEN BOARD COLORS
+              </div>
+            )}
+            {cameraActive && phase === 'manual-fit' && (
               <div className="camera-play-gesture-chip">
-                20 ↑ · DRAG · PINCH · TWIST · PULL HANDLES
+                OPTIONAL ONLY · 20 ↑ · DRAG · PINCH · TWIST
               </div>
             )}
-            {cameraActive && guideLocked && (
-              <div className="camera-play-gesture-chip locked">
-                20 ↑ FIT LOCKED · WATCHING LOCALLY
-              </div>
+            {cameraActive && phase === 'ready-to-play' && (
+              <div className="camera-play-gesture-chip locked">BOARD FOUND · 20 ↑ UPRIGHT</div>
             )}
+            {cameraActive &&
+              (phase === 'watching' || phase === 'turn-ready' || phase === 'awaiting-clear') && (
+                <div className="camera-play-gesture-chip locked">
+                  BOARD FOUND · WATCHING LOCALLY
+                </div>
+              )}
           </div>
 
           <div className="camera-play-stage-actions">
@@ -712,23 +871,37 @@ export function SimpleCameraPlay({
               <button className="button primary" onClick={startCamera}>
                 START REAR CAMERA
               </button>
-            ) : !guideLocked ? (
+            ) : phase === 'finding-board' ? (
               <>
-                <button
-                  className="button primary"
-                  disabled={!canCalibrate}
-                  onClick={calibrateAndPlay}
-                >
-                  CALIBRATE &amp; PLAY
+                <button className="button ghost compact" onClick={restartAutomaticBoardFind}>
+                  FIND BOARD AGAIN
                 </button>
-                <button className="text-button" onClick={resetGuide}>
-                  RESET GUIDE
+                <button className="text-button" onClick={stopCamera}>
+                  STOP CAMERA
+                </button>
+              </>
+            ) : phase === 'manual-fit' ? (
+              <>
+                <button className="button primary" onClick={useOptionalManualGuide}>
+                  USE OPTIONAL GUIDE
+                </button>
+                <button className="text-button" onClick={restartAutomaticBoardFind}>
+                  USE AUTO BOARD FIND
+                </button>
+              </>
+            ) : phase === 'ready-to-play' ? (
+              <>
+                <button className="button primary" disabled={!canStartPlay} onClick={startPlay}>
+                  START PLAY
+                </button>
+                <button className="text-button" onClick={restartAutomaticBoardFind}>
+                  FIND AGAIN
                 </button>
               </>
             ) : (
               <>
-                <button className="button ghost compact" onClick={resetGuide}>
-                  ADJUST SETUP
+                <button className="button ghost compact" onClick={restartAutomaticBoardFind}>
+                  FIND BOARD AGAIN
                 </button>
                 <button className="text-button" onClick={stopCamera}>
                   STOP CAMERA
@@ -817,9 +990,23 @@ export function SimpleCameraPlay({
             REVIEW OR CORRECT SCORES
           </button>
 
+          {automaticFit !== null && (phase === 'finding-board' || phase === 'ready-to-play') && (
+            <p className={`camera-play-auto-state ${automaticFit.status}`}>
+              <strong>AUTO BOARD FIND</strong>
+              {automaticFit.message}
+              {automaticFit.fit !== null && (
+                <span>
+                  {Math.round(automaticFit.estimatedBoardDiameterPixels)} px board ·{' '}
+                  {automaticFit.outerAngularCoverage}/20 outer-band sectors ·{' '}
+                  {Math.round(automaticFit.confidence * 100)}% color-pattern cue
+                </span>
+              )}
+            </p>
+          )}
+
           {visibleQuality !== null && (
             <p className={`camera-play-quality ${quality?.pass ? 'pass' : 'warn'}`}>
-              <strong>{quality?.pass ? 'FIT CHECKED' : 'FIT NEEDS WORK'}</strong>
+              <strong>{quality?.pass ? 'BOARD CHECKED' : 'BOARD NEEDS WORK'}</strong>
               {visibleQuality}
               {quality?.blockers[0] !== undefined && <span>{quality.blockers[0]}</span>}
               {quality?.warnings[0] !== undefined && <span>{quality.warnings[0]}</span>}
@@ -841,36 +1028,43 @@ export function SimpleCameraPlay({
 
       <section className="camera-play-how">
         <div>
-          <p className="eyebrow">ONE-TIME BOARD FIT</p>
-          <h2>Touch the guide, not a list of calibration points.</h2>
+          <p className="eyebrow">NO-CALIBRATION PLAYER FLOW</p>
+          <h2>Point the phone. Let the board find itself.</h2>
         </div>
         <ol>
           <li>
-            <b>Place 20</b>
-            Put the <strong>20 ↑</strong> handle at the outer double wire beside the real 20.
+            <b>Show the board</b>
+            Keep the whole double ring visible, with the physical 20 upright in the camera image.
           </li>
           <li>
-            <b>Fit the shape</b>
-            Drag or tap to center; pinch and twist; pull any of the other three edge handles for
-            skew.
+            <b>Wait for Board Found</b>
+            The browser looks for the standard board’s red/green scoring pattern and shows its
+            guide.
           </li>
           <li>
-            <b>Calibrate &amp; Play</b>
-            With an empty board, one tap stores a local baseline and arms live scoring.
+            <b>Start Play</b>
+            With an empty board, one tap stores a local baseline and starts live scoring.
           </li>
           <li>
             <b>Correct only when needed</b>
-            Scores are proposals from a heuristic field test, not proven production auto-scoring.
+            Scores are heuristic proposals from new dart-shaped changes, not proven auto-scoring.
           </li>
         </ol>
       </section>
 
       <details className="camera-play-disclosure">
-        <summary>Advanced diagnostics &amp; manual recovery</summary>
+        <summary>Board not found? Optional recovery &amp; advanced diagnostics</summary>
         <p>
-          Use only if the simple flow cannot recover. The advanced field-test view exposes named
-          anchors, frame analysis, and endpoint inspection for engineering diagnosis; it is not the
-          normal player setup.
+          Normal play has no calibration. If board-color detection cannot recover because of an
+          unusual board, glare, or extreme perspective, use the optional visual guide. It supports
+          drag/tap, pinch, twist, and edge handles, but is never required for the normal path.
+        </p>
+        <button className="text-button" onClick={startOptionalManualGuide}>
+          USE OPTIONAL VISUAL GUIDE →
+        </button>
+        <p>
+          The advanced field-test view exposes named anchors, explicit frame analysis, and endpoint
+          inspection for engineering diagnosis only.
         </p>
         <button className="text-button" onClick={onOpenAdvanced}>
           OPEN ADVANCED FIELD TEST →
