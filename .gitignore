@@ -1,0 +1,52 @@
+# JavaScript / Expo
+node_modules/
+.npm/
+.expo/
+.expo-shared/
+web-build/
+apps/web/dist/
+*.tsbuildinfo
+
+# Native build products
+apps/mobile/android/
+apps/mobile/ios/
+*.xcworkspace
+*.xcuserstate
+*.keystore
+*.jks
+
+# Python / ML
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+ml/data/raw/*
+!ml/data/raw/.gitkeep
+ml/data/curated/*
+!ml/data/curated/.gitkeep
+ml/data/eval/*
+!ml/data/eval/.gitkeep
+ml/runs/
+ml/artifacts/
+*.onnx
+*.tflite
+*.mlmodel
+*.mlpackage
+*.pt
+*.pth
+
+# Local infrastructure / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+postgres-data/
+minio-data/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

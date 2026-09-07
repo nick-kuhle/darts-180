@@ -1,0 +1,47 @@
+# Baseline contract, not a claim that a model is trained yet.
+experiment_name: entrypoint-v0
+seed: 20260906
+
+input:
+  canonical_board_size_px: 1024
+  source_min_board_diameter_px: 480
+  frame_rate_hz: 30
+
+models:
+  board_pose:
+    task: board landmarks + ellipse + board orientation
+    output: image_to_board_homography, pose_quality
+    cadence_hz: 1
+  dart_entrypoint:
+    task: changed-region dart tip / entry-point heatmap + uncertainty
+    output: board_point_mm_distribution, ranked_zones
+    cadence: event-triggered
+
+labels:
+  required:
+    - board_center_px
+    - canonical_homography
+    - dart_tip_px
+    - dart_entrypoint_board_mm
+    - zone
+    - visibility
+    - wire_margin_mm
+  optional:
+    - shaft_occlusion
+    - bounce_out
+    - robin_hood
+    - board_model
+    - device_model
+    - light_band
+
+evaluation:
+  auto_accept_probability: 0.97
+  min_auto_accept_wire_margin_mm: 1.5
+  required_slices:
+    - device
+    - board_model
+    - light_band
+    - off_axis_band
+    - distance_band
+    - ring
+    - wire_margin_band

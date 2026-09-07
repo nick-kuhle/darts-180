@@ -1,0 +1,299 @@
+openapi: 3.1.0
+info:
+  title: Darts 180 Game API
+  version: 0.1.0
+  description: |
+    Development contract for Darts 180's append-only game event API. The implemented service is an
+    in-memory scaffold with no production authentication. Do not expose it publicly as-is.
+servers:
+  - url: http://localhost:8787
+    description: Local development
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service, version]
+                properties:
+                  ok: { type: boolean, const: true }
+                  service: { type: string, example: darts-180-api }
+                  version: { type: string, example: 0.1.0 }
+  /v1/games:
+    post:
+      summary: Create a game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGameRequest'
+      responses:
+        '201':
+          description: Game created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GameSnapshot' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+  /v1/games/{gameId}:
+    parameters:
+      - $ref: '#/components/parameters/GameId'
+    get:
+      summary: Get the latest projection snapshot
+      responses:
+        '200':
+          description: Snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GameSnapshot' }
+        '404': { $ref: '#/components/responses/GameNotFound' }
+  /v1/games/{gameId}/events:
+    parameters:
+      - $ref: '#/components/parameters/GameId'
+    get:
+      summary: Catch up ordered events after a known server sequence
+      parameters:
+        - name: after
+          in: query
+          required: false
+          description: Exclusive per-game server sequence; defaults to 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Ordered envelopes after the requested sequence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gameId, after, events]
+                properties:
+                  gameId: { type: string, format: uuid }
+                  after: { type: integer, minimum: 0 }
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/EventEnvelope' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '404': { $ref: '#/components/responses/GameNotFound' }
+    post:
+      summary: Append one idempotent confirmed game event
+      description: |
+        Clients write local events before calling this endpoint. Reusing an idempotency key for the
+        same game returns the original event envelope without allocating a new sequence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppendEventRequest' }
+      responses:
+        '201':
+          description: Event accepted (or existing idempotent envelope returned in scaffold)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventEnvelope' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '404': { $ref: '#/components/responses/GameNotFound' }
+        '409':
+          description: Game ID mismatch or future expected-sequence conflict
+  /v1/games/{gameId}/live:
+    parameters:
+      - $ref: '#/components/parameters/GameId'
+    get:
+      summary: WebSocket game stream
+      description: |
+        Upgrade to WebSocket. Server first emits `game.snapshot`, then `game.event` envelopes.
+        REST catch-up remains required after reconnect. Scaffold is broadcast-only and unauthenticated.
+      responses:
+        '101':
+          description: Switching Protocols
+        '404': { $ref: '#/components/responses/GameNotFound' }
+components:
+  parameters:
+    GameId:
+      name: gameId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    InvalidRequest:
+      description: Payload failed schema or score-zone validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    GameNotFound:
+      description: No game exists for this ID
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    GameKind:
+      type: string
+      enum: [x01, cricket, count-up, around-the-clock]
+    Ring:
+      type: string
+      enum: [S, D, T, IB, OB, MISS]
+    DartZone:
+      type: object
+      additionalProperties: false
+      required: [ring, segment, score]
+      properties:
+        ring: { $ref: '#/components/schemas/Ring' }
+        segment:
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 20
+            - type: 'null'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 60
+      description: Ring, segment, and score must be mathematically coherent.
+    RankedZoneCandidate:
+      type: object
+      additionalProperties: false
+      required: [zone, probability, wireMarginMm]
+      properties:
+        zone: { $ref: '#/components/schemas/DartZone' }
+        probability: { type: number, minimum: 0, maximum: 1 }
+        wireMarginMm: { type: number, minimum: 0 }
+    VisionEvidence:
+      type: object
+      additionalProperties: false
+      required: [modelVersion, calibrationId, confidence, candidates, frameTimestampMs]
+      properties:
+        modelVersion: { type: string }
+        calibrationId: { type: string }
+        boardPointMm:
+          type: object
+          additionalProperties: false
+          required: [xMm, yMm]
+          properties:
+            xMm: { type: number }
+            yMm: { type: number }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        candidates:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: '#/components/schemas/RankedZoneCandidate' }
+        frameTimestampMs: { type: integer, minimum: 0 }
+        clipRef: { type: string, description: Opaque consent/policy-controlled reference only }
+    DartRecordedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          type,
+          schemaVersion,
+          eventId,
+          gameId,
+          visitId,
+          playerId,
+          dartIndex,
+          zone,
+          source,
+          occurredAt,
+          recordedAt,
+        ]
+      properties:
+        type: { const: dart.recorded }
+        schemaVersion: { const: 1 }
+        eventId: { type: string, format: uuid }
+        gameId: { type: string, format: uuid }
+        visitId: { type: string, format: uuid }
+        playerId: { type: string }
+        dartIndex: { type: integer, enum: [1, 2, 3] }
+        zone: { $ref: '#/components/schemas/DartZone' }
+        source: { type: string, enum: [auto, corrected, manual, imported] }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+        vision: { $ref: '#/components/schemas/VisionEvidence' }
+    TurnConfirmedEvent:
+      type: object
+      additionalProperties: false
+      required: [type, schemaVersion, eventId, gameId, visitId, playerId, dartCount, occurredAt]
+      properties:
+        type: { const: turn.confirmed }
+        schemaVersion: { const: 1 }
+        eventId: { type: string, format: uuid }
+        gameId: { type: string, format: uuid }
+        visitId: { type: string, format: uuid }
+        playerId: { type: string }
+        dartCount: { type: integer, enum: [1, 2, 3] }
+        occurredAt: { type: string, format: date-time }
+    DartCorrectedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        [type, schemaVersion, eventId, gameId, replacesEventId, correctedZone, reason, occurredAt]
+      properties:
+        type: { const: dart.corrected }
+        schemaVersion: { const: 1 }
+        eventId: { type: string, format: uuid }
+        gameId: { type: string, format: uuid }
+        replacesEventId: { type: string, format: uuid }
+        correctedZone: { $ref: '#/components/schemas/DartZone' }
+        reason: { type: string, enum: [player-correction, referee-correction, sync-resolution] }
+        occurredAt: { type: string, format: date-time }
+    GameEvent:
+      oneOf:
+        - $ref: '#/components/schemas/DartRecordedEvent'
+        - $ref: '#/components/schemas/TurnConfirmedEvent'
+        - $ref: '#/components/schemas/DartCorrectedEvent'
+      discriminator:
+        propertyName: type
+    CreateGameRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, playerIds, settings]
+      properties:
+        kind: { $ref: '#/components/schemas/GameKind' }
+        playerIds:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 128 }
+        settings: { type: object, additionalProperties: true }
+    AppendEventRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey, event]
+      properties:
+        idempotencyKey: { type: string, format: uuid }
+        event: { $ref: '#/components/schemas/GameEvent' }
+    EventEnvelope:
+      type: object
+      required: [gameId, sequence, idempotencyKey, event, acceptedAt]
+      properties:
+        gameId: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 1 }
+        idempotencyKey: { type: string, format: uuid }
+        event: { $ref: '#/components/schemas/GameEvent' }
+        acceptedAt: { type: string, format: date-time }
+    GameSnapshot:
+      type: object
+      required: [gameId, kind, sequence, state, updatedAt]
+      properties:
+        gameId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/GameKind' }
+        sequence: { type: integer, minimum: 0 }
+        state: { type: object, additionalProperties: true }
+        updatedAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              message: { type: string }

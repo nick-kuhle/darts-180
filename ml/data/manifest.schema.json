@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Darts 180 capture manifest record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "captureId",
+    "consentVersion",
+    "boardModel",
+    "deviceModel",
+    "captureMode",
+    "offAxisDegrees",
+    "distanceMm",
+    "lightingBand",
+    "containsFaces",
+    "createdAt"
+  ],
+  "properties": {
+    "captureId": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,128}$" },
+    "consentVersion": { "type": "string", "minLength": 1 },
+    "boardModel": { "type": "string", "minLength": 1 },
+    "deviceModel": { "type": "string", "minLength": 1 },
+    "captureMode": { "enum": ["still", "arrival-clip", "failure-clip", "synthetic"] },
+    "captureIntent": { "enum": ["empty-board", "static-dart", "failure-case"] },
+    "imageFile": { "type": "string", "pattern": "^[a-zA-Z0-9_.-]+\\.(jpg|jpeg)$" },
+    "imageMime": { "const": "image/jpeg" },
+    "offAxisDegrees": { "type": "number", "minimum": 0, "maximum": 90 },
+    "distanceMm": { "type": "number", "minimum": 200, "maximum": 5000 },
+    "lightingBand": { "enum": ["low", "normal", "bright", "mixed", "glare"] },
+    "containsFaces": { "const": false },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "labelsVersion": { "type": "string" },
+    "split": { "enum": ["unassigned", "train", "validation", "eval"] }
+  }
+}

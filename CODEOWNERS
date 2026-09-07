@@ -1,0 +1,11 @@
+# Temporary ownership for the private nick-kuhle/darts-180 repository.
+# Replace this with organization teams before enabling required-review rules.
+* @nick-kuhle
+/apps/mobile/ @nick-kuhle
+/packages/rules/ @nick-kuhle
+/packages/vision-session/ @nick-kuhle
+/native/vision-core/ @nick-kuhle
+/ml/ @nick-kuhle
+/services/api/ @nick-kuhle
+/infra/ @nick-kuhle
+/docs/ @nick-kuhle

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  types-and-tests:
+    name: Typecheck and deterministic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install lightweight vision-test dependencies
+        run: python -m pip install -e 'ml[vision]'
+      - name: Run Python geometry and pose-baseline tests
+        run: PYTHONPATH=ml/src python -m unittest discover -s ml/tests -v
+
+  native-geometry:
+    name: Rust geometry parity seed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path native/vision-core/Cargo.toml
+
+  security-baseline:
+    name: Dependency and secret baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Fail on high/critical production dependency findings
+        run: npm audit --omit=dev --audit-level=high
+      - name: Guard against accidentally committed environment files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '^\.env\.example$'; then
+            echo 'A real .env file is tracked.' >&2
+            exit 1
+          fi
