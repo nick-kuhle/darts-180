@@ -12,8 +12,8 @@ The foundation slice is delivered and merged through
 501/Cricket prototype; an Expo 501 review demo; deterministic rules and event projections; a
 development API; local-only Capture/Annotation Labs; a deployable browser-local fixed-camera
 field-test scorer; manifest validation; synthetic scenes; and inspectable pose/temporal baselines.
-The Vercel app-root deployment and camera-permission update is prepared for separate review. The
-specific inventory and non-claims live in
+The Vercel app-root deployment and camera-permission update is open in
+[PR #3](https://github.com/nick-kuhle/darts-180/pull/3). The specific inventory and non-claims live in
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,
@@ -107,18 +107,18 @@ not compromise player privacy or product independence.
 
 ## 3. First 10 working days
 
-| Day | Concrete deliverable                                                               | Current status                                                                                                                                                                                   |
-| --: | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-|   1 | Review Vercel/mobile deployment PR, assign name/legal owner, and enable CI policy  | [PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) are merged; deployment review, legal owner, and branch policy remain needed. |
-|   2 | Rules team reviews X01/Cricket spec and starts fixture corpus                      | Ready: rules/tests exist; expand toward the conformance corpus.                                                                                                                                  |
-|   3 | Mobile team installs demo on iOS/Android devices and tests DartCard edits          | Ready for physical-device execution.                                                                                                                                                             |
-|   4 | Vision team freezes landmark/label format and builds safe capture test jig         | Partial: manifest, local Capture/Annotation Labs, synthetic data, and baselines exist; real rig remains.                                                                                         |
-|   5 | Privacy team approves capture consent/retention/face-exclusion workflow            | Not started: browser-local safeguards do not replace legal/privacy approval.                                                                                                                     |
-|   6 | Capture first 200 controlled board/dart examples across several poses              | Blocked on Day 5 approval and safe intake.                                                                                                                                                       |
-|   7 | Native team spikes CameraX/AVFoundation frames + timing trace in dev build         | Not started: interface is seeded; real frame runtime remains.                                                                                                                                    |
-|   8 | ML team establishes trained pose/entrypoint experiment and sacred eval split       | Partial: synthetic/heuristic pipeline baseline exists; consented data/model work remains.                                                                                                        |
-|   9 | Backend team replaces in-memory-store plan with tested Postgres event-store design | Not started: contract/projection/catch-up baseline exists.                                                                                                                                       |
-|  10 | Joint review: show quality dashboard, not just a successful video                  | Pending measured real-capture results.                                                                                                                                                           |
+| Day | Concrete deliverable                                                               | Current status                                                                                                                                                                                                                         |
+| --: | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | Review Vercel/mobile deployment PR, assign name/legal owner, and enable CI policy  | [PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) are merged; [PR #3](https://github.com/nick-kuhle/darts-180/pull/3), legal owner, and branch policy remain needed. |
+|   2 | Rules team reviews X01/Cricket spec and starts fixture corpus                      | Ready: rules/tests exist; expand toward the conformance corpus.                                                                                                                                                                        |
+|   3 | Mobile team installs demo on iOS/Android devices and tests DartCard edits          | Ready for physical-device execution.                                                                                                                                                                                                   |
+|   4 | Vision team freezes landmark/label format and builds safe capture test jig         | Partial: manifest, local Capture/Annotation Labs, synthetic data, and baselines exist; real rig remains.                                                                                                                               |
+|   5 | Privacy team approves capture consent/retention/face-exclusion workflow            | Not started: browser-local safeguards do not replace legal/privacy approval.                                                                                                                                                           |
+|   6 | Capture first 200 controlled board/dart examples across several poses              | Blocked on Day 5 approval and safe intake.                                                                                                                                                                                             |
+|   7 | Native team spikes CameraX/AVFoundation frames + timing trace in dev build         | Not started: interface is seeded; real frame runtime remains.                                                                                                                                                                          |
+|   8 | ML team establishes trained pose/entrypoint experiment and sacred eval split       | Partial: synthetic/heuristic pipeline baseline exists; consented data/model work remains.                                                                                                                                              |
+|   9 | Backend team replaces in-memory-store plan with tested Postgres event-store design | Not started: contract/projection/catch-up baseline exists.                                                                                                                                                                             |
+|  10 | Joint review: show quality dashboard, not just a successful video                  | Pending measured real-capture results.                                                                                                                                                                                                 |
 
 ## 4. Staffing sequence
 

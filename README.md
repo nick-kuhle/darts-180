@@ -123,7 +123,8 @@ The private repository at `https://github.com/nick-kuhle/darts-180.git` has its 
 and browser Camera Score field-test workflow merged into `main` through
 [PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and
 [PR #2](https://github.com/nick-kuhle/darts-180/pull/2). The Vercel app-root deployment and
-camera-permission guidance update is prepared on `vercel-camera-deployment` for its own review.
+camera-permission guidance update is open for review in
+[PR #3](https://github.com/nick-kuhle/darts-180/pull/3).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
 is stored in this repository; revoke any short-lived delivery token after confirming a delivery.
