@@ -60,7 +60,8 @@ cd ml && PYTHONPATH=src python -m darts180_vision.synthetic --output /tmp/darts-
    [Vercel/mobile deployment PR #3](https://github.com/nick-kuhle/darts-180/pull/3), the first
    Camera Play simplification in [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and
    automatic board finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) are merged.
-   Review the follow-up real-board reliability remediation, verify its GitHub Actions result, and
+   Review the follow-up real-board reliability remediation in
+   [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), verify its GitHub Actions result, and
    obtain direct-device evidence before describing it as merge-ready; then enable branch protection
    and required-review policy. `CODEOWNERS` temporarily points at `@nick-kuhle` until an
    organization/team structure exists.
