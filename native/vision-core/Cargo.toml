@@ -1,0 +1,14 @@
+[package]
+name = "darts-180-vision-core"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+description = "Deterministic geometry and policy primitives for Darts 180 mobile vision adapters"
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

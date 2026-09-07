@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a player problem and a testable outcome—not only a competitor feature.
+title: 'feat: '
+labels: [feature, discovery]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Player problem
+      description: Who has the problem and when does it occur?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome / success metric
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround / alternatives
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact review
+      options:
+        - label: I considered rules correctness, camera/privacy implications, and manual fallback.
+          required: true

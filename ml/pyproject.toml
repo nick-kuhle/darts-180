@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "darts-180-vision"
+version = "0.1.0"
+description = "Training, evaluation, and export tooling for Darts 180 darts vision"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+vision = [
+  "numpy>=2.0",
+  "opencv-python-headless>=4.10"
+]
+train = [
+  "albumentations>=2.0",
+  "numpy>=2.0",
+  "opencv-python-headless>=4.10",
+  "pillow>=11.0",
+  "torch>=2.6",
+  "ultralytics>=8.3"
+]
+export = ["onnx>=1.17", "onnxruntime>=1.20"]
+quality = ["ruff>=0.9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/darts180_vision"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

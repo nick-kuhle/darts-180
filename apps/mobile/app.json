@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Darts 180",
+    "slug": "darts-180",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "darts180",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.darts180",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Darts 180 uses your camera to see the dartboard and suggest each dart score."
+      }
+    },
+    "android": {
+      "package": "com.yourcompany.darts180",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Darts 180 to use the camera to score darts.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-dev-client"
+    ]
+  }
+}
