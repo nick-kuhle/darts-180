@@ -12,16 +12,21 @@ an unfinished camera API or claiming live AI scoring.
 - editable three-dart review cards;
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
+- an experimental browser-local **Camera Score** field-test flow: fixed-camera preview, manual
+  four-double-bed calibration, transparent setup gate, in-memory clear-board reference, temporal
+  dart-shape proposals, visible-tip fallback, and DartCard review;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
   without uploading it anywhere;
 - a browser **Annotation Lab** that pairs that local JPEG/manifest, solves a manually clicked
   four-anchor homography, and downloads a local deterministic-label sidecar.
 
-It has **no account, database, raw camera upload, or actual CV model**. The Capture and Annotation
-Labs keep their media/labels browser-local until their user explicitly downloads them. Capture Lab
-only requests the browser camera after a click. That is intentional: it is safe to share as a
-product/UX prototype and deploy as a static site.
+It has **no account, database, raw camera upload, or trained CV model**. Camera Score includes an
+inspectable fixed-camera frame-difference heuristic for controlled field testing, but it is not a
+trained entry-point model or an auto-scoring claim. The Capture and Annotation Labs keep their
+media/labels browser-local until their user explicitly downloads them. Camera access is requested
+only after a click. That is intentional: it is safe to share as a product/UX prototype and deploy as
+a static site.
 
 ## Fastest Vercel path — founder steps
 
@@ -47,6 +52,10 @@ No environment variables are required for the static demo. `vercel.json` also se
 headers: camera access is same-origin only, microphone/geolocation are disabled, and the CSP permits
 only app-owned assets plus the local `data:`/`blob:` media used for the still preview. Do not deploy
 `services/api` as a Vercel function in its current development/in-memory form.
+
+For a mounted-device test, use the deployed HTTPS URL and follow the
+[Browser camera field-test guide](14-browser-camera-field-test.md). The feature runs locally in the
+browser and must stay in its stated fixed-mount, review-required envelope.
 
 ### 2. Share the preview URL
 

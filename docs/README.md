@@ -21,6 +21,7 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 |  11 | [Roadmap/team](11-roadmap-and-team.md)                               | Parallel workstreams, milestones, staffing, risk controls            |
 |  12 | [Web demo / Vercel](12-web-demo-and-vercel.md)                       | What can be shared today and how to deploy it safely                 |
 |  13 | [Current implementation status](13-current-implementation-status.md) | What is complete, validated, deferred, and next                      |
+|  14 | [Browser camera field test](14-browser-camera-field-test.md)         | How to conduct the local, fixed-camera real-board test safely        |
 
 ## Decision records
 

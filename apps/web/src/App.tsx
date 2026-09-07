@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from 'react';
 
 import { AnnotationLab } from './components/AnnotationLab';
+import { CameraScoringLab, type CameraTurnProposal } from './components/CameraScoringLab';
 import { CaptureLab } from './components/CaptureLab';
 import { Dartboard, type DartboardMarker } from './components/Dartboard';
 
@@ -83,7 +84,7 @@ function newCricketGame(): CricketState {
 }
 
 export function App() {
-  const [workspace, setWorkspace] = useState<'play' | 'capture' | 'annotate'>('play');
+  const [workspace, setWorkspace] = useState<'play' | 'camera' | 'capture' | 'annotate'>('play');
   const [mode, setMode] = useState<GameMode>('x01');
   const [x01, setX01] = useState<X01State>(newX01Game);
   const [cricket, setCricket] = useState<CricketState>(newCricketGame);
@@ -190,6 +191,39 @@ export function App() {
     );
   };
 
+  const addCameraProposal = (proposal: CameraTurnProposal): number | null => {
+    if (gameComplete) {
+      setNotice('This game is finished. Start a new game before recording another dart.');
+      return null;
+    }
+    const target = drafts.findIndex((draft) => !draft.filled);
+    if (target < 0) {
+      setNotice(
+        'All three darts are already filled. Open the review panel to confirm or correct them.',
+      );
+      return null;
+    }
+    setDrafts((current) =>
+      current.map((draft, index) =>
+        index === target
+          ? {
+              ...draft,
+              zone: proposal.zone,
+              source: proposal.source,
+              confidence: proposal.confidence,
+              wireMarginMm: proposal.wireMarginMm,
+              filled: true,
+            }
+          : draft,
+      ),
+    );
+    setSelectedSlot(null);
+    setNotice(
+      `Dart ${target + 1} proposed as ${formatZone(proposal.zone)} from the local camera field test. Review or correct it before confirming the visit.`,
+    );
+    return target + 1;
+  };
+
   const confirmVisit = () => {
     const filled = drafts.filter((draft) => draft.filled);
     if (activePlayer === undefined || filled.length === 0 || gameComplete) {
@@ -258,8 +292,8 @@ export function App() {
             <em>Keep the player in control.</em>
           </h1>
           <p className="lede">
-            A live, deployable prototype of Darts 180’s manual + confirmable camera scoring
-            experience.
+            A deployable manual scorer with an experimental, local-only fixed-camera field-test
+            workflow that always keeps the player in control.
           </p>
         </div>
         <div className="hero-side">
@@ -276,6 +310,12 @@ export function App() {
               onClick={() => setWorkspace('play')}
             >
               PLAY DEMO
+            </button>
+            <button
+              className={workspace === 'camera' ? 'active' : ''}
+              onClick={() => setWorkspace('camera')}
+            >
+              CAMERA SCORE
             </button>
             <button
               className={workspace === 'capture' ? 'active' : ''}
@@ -434,7 +474,7 @@ export function App() {
 
                 <div className="camera-lab">
                   <div>
-                    <p className="eyebrow">CAMERA LAB</p>
+                    <p className="eyebrow">SIMULATED REVIEW STATES</p>
                     <h3>Test the confidence flow.</h3>
                   </div>
                   <div
@@ -538,6 +578,12 @@ export function App() {
             )}
           </section>
         </section>
+      ) : workspace === 'camera' ? (
+        <CameraScoringLab
+          availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
+          onAddProposal={addCameraProposal}
+          onOpenReview={() => setWorkspace('play')}
+        />
       ) : workspace === 'capture' ? (
         <CaptureLab />
       ) : (
@@ -546,9 +592,9 @@ export function App() {
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> This web demo does not claim live computer-vision
-          scoring. The production path is on-device pose + temporal + entry-point detection, with
-          human confirmation.
+          <strong>Darts 180 prototype.</strong> The Camera Score workspace is a local browser
+          field-test heuristic, not trained or production computer vision. The production path is
+          on-device pose + temporal + entry-point detection, with human confirmation.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →
