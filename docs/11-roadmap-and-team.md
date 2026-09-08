@@ -24,9 +24,9 @@ The post-field-report browser remediation in [PR #8](https://github.com/nick-kuh
 its recovery update in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and bounded
 local-reference handoff in [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged.
 PR #10's direct iPhone retest proved startup reaches watching, but intermittent board acquisition and
-live dart detection still recorded none of the shown throws. The next remediation retains the
-handoff and targets color-fit dropout, warm natural board surfaces, and board-local foreground
-handling; it requires another direct-device retest. The evidence taxonomy, retest procedure, and
+live dart detection still recorded none of the shown throws. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) retains the handoff and
+targets color-fit dropout, warm natural board surfaces, and board-local foreground handling; it
+requires another direct-device retest. The evidence taxonomy, retest procedure, and
 non-claims live in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
 [the current implementation status](13-current-implementation-status.md).
 

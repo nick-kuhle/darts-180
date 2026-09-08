@@ -207,8 +207,8 @@ advanced diagnostics remain recovery-only.
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
 [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
 physically proved the bounded reference handoff reaches watching, but did **not** record a shown dart.
-The post-PR #10 remediation described above is regression-tested, not a claimed device fix, until it
-is retested on direct top-level HTTPS iPhone and Android deployments. See
+The post-PR #10 remediation is proposed in [PR #11](https://github.com/nick-kuhle/darts-180/pull/11). It is regression-tested, not a claimed device fix,
+until it is retested on direct top-level HTTPS iPhone and Android deployments. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ### 4.4 Dart entry-point model

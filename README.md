@@ -138,10 +138,10 @@ post-field-report remediation in [PR #8](https://github.com/nick-kuhle/darts-180
 baseline-recovery follow-up in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and the
 bounded Start Play handoff in [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged.
 PR #10's direct iPhone retest successfully reached **Watching Locally**, but intermittent acquisition
-and live temporal detection recorded none of the shown darts. The next remediation retains the
-handoff while addressing warm-board color separation, transient-fit stability, and board-local
-foreground handling; it requires another physical-device retest. Synthetic tests alone do not
-establish field improvement. See
+and live temporal detection recorded none of the shown darts. [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) is open from merged `main`; it
+retains the handoff while addressing warm-board color separation, transient-fit stability, and
+board-local foreground handling. It requires another physical-device retest. Synthetic tests alone
+do not establish field improvement. See
 [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential

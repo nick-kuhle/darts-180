@@ -1,14 +1,14 @@
 # Darts 180 — current implementation status
 
-**Snapshot date:** 2026-09-07 (America/Los_Angeles)<br />
+**Snapshot date:** 2026-09-08 (America/Los_Angeles)<br />
 **Product name:** Darts 180 — working name; legal clearance is still required<br />
 **Repository target:** `https://github.com/nick-kuhle/darts-180.git` (private)<br />
 **Status:** foundation, playable scoring prototype, local data tooling, and an experimental
 browser-camera field-test workflow exist. [PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
 [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
-proved the bounded startup transition but did not record a dart; a new field-remediation branch
-awaits delivery and another direct retest. There is no production auto-scoring claim.
+proved the bounded startup transition but did not record a dart; open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) awaits review/merge,
+deployment evidence, and another direct retest. There is no production auto-scoring claim.
 
 This is the operational source of truth for what exists versus what is intentionally deferred. It
 separates synthetic/build evidence from a physical-device result.
@@ -24,7 +24,7 @@ separates synthetic/build evidence from a physical-device result.
 | Development API      | Fastify game creation/snapshot endpoints, idempotent event append, correction-aware X01/Cricket projection, event catch-up, WebSocket fan-out, and OpenAPI contract.                                                                                                                                                                                                                                     | In-memory, unauthenticated, and not production infrastructure.                                                                                                                                                                                                                                                                 |
 | ML / native seeds    | Python geometry / data-contract / synthetic / pose-quality / temporal baselines; Expo product shell and camera preview; Rust geometry seed; Postgres/Docker starting infrastructure.                                                                                                                                                                                                                     | No trained production model, native high-rate frame processor, durable event store, authentication, or model artifact.                                                                                                                                                                                                         |
 
-## Current follow-up — post-PR #10 field failure, not yet physical-device proven
+## Current follow-up — open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11), not yet physical-device proven
 
 The post-PR #10 direct iPhone retest produced an important split result on the reported
 near-centreline view:
@@ -36,8 +36,8 @@ near-centreline view:
   broad movement, a one-frame dart/flight hold, and competing/unmappable changes. Two later visible
   darts did not fill any DartCard.
 
-The next remediation preserves PR #10's bounded handoff and changes the browser heuristic without
-relaxing its score-safety gate:
+Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) preserves PR #10's bounded handoff and changes the browser heuristic without relaxing
+its score-safety gate:
 
 - separates a red scoring bed from a warm orange cork/sisal single bed by requiring red-channel
   dominance, then holds a matching automatic fit through at most two isolated color dropouts while
@@ -51,9 +51,9 @@ relaxing its score-safety gate:
 - retains no automatic `MISS`, no arbitrary compact/equal-endpoint/near-wire/competing score, normal
   correction, and optional manual/advanced recovery without returning calibration to normal flow.
 
-Focused synthetic regression coverage exists for each policy change, but the follow-up must be
-reviewed, delivered from actual merged `main`, and retested on a direct iPhone before it can be
-described as a device fix. See
+Focused synthetic regression coverage exists for each policy change, but open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) must be reviewed
+and merged, its deployment checked independently, and then retested on a direct iPhone before it
+can be described as a device fix. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ## Validation baseline
@@ -65,9 +65,8 @@ npm run verify
 cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-**Current remediation-branch result:** on 2026-09-07, `npm run verify` passed (including 43 web
-tests), and the Python suite passed 12 tests. These are build/synthetic results, not physical-device
-evidence.
+**Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) result:** on 2026-09-08, `npm run verify` passed (including 43 web tests), and the
+Python suite passed 12 tests. These are build/synthetic results, not physical-device evidence.
 
 `npm run verify` checks formatting, documentation links, workspace TypeScript typechecks, web/rules/
 session/API tests, and the production web build. The web suite covers embedded-preview/HTTPS
@@ -100,11 +99,10 @@ cd ml && PYTHONPATH=src python -m darts180_vision.synthetic --output /tmp/darts-
 
 ### P0 — delivery, legal, and safe field readiness
 
-1. Obtain a fresh short-lived delivery credential only when needed, fetch actual merged `main`, then
-   rebase/recreate the current remediation branch from it. Run the complete validation baseline,
-   review the diff, push it, and open a new PR. Confirm Actions/Vercel separately where access
-   permits.
-2. Retest that PR's top-level HTTPS deployment directly on the reported iPhone setup before saying
+1. Review and merge open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11), which was recreated from fetched merged `main`; confirm GitHub
+   Actions and Vercel independently where access permits. A successful push/PR operation is not
+   deployment evidence.
+2. Retest [PR #11](https://github.com/nick-kuhle/darts-180/pull/11)'s top-level HTTPS deployment directly on the reported iPhone setup before saying
    live detection works. Expected sequence: **Board Found** → one **Start Play** tap → **Starting
    Live Play** → **Watching Locally**, followed by a DartCard or explicitly held suggestion for one
    isolated settled dart before a second is thrown. Follow
@@ -153,10 +151,11 @@ cd ml && PYTHONPATH=src python -m darts180_vision.synthetic --output /tmp/darts-
 
 ## Change log
 
-| Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-07 | [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) merged. Its direct iPhone retest physically confirmed **Start Play → Watching Locally**, but board acquisition remained intermittent and live analysis recorded none of the shown darts. The next remediation retains the handoff, separates warm cork from red beds, latches brief comparable-fit dropouts, tightens near-centreline flight support, distinguishes stable-core motion from rim foreground, caps implausibly long shapes, shortens polling, and requires another direct-device retest. |
-| 2026-09-07 | PR #9 merged. A subsequent direct iPhone report showed strong automatic board finding but a normal Start Play loop driven by detector-based clear-board setup. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaced it with a fixed 650 ms fresh-reference handoff, preserved live scoring safety gates, removed normal-mode calibration-looking overlays/telemetry, and added focused reference-policy tests.                                                                                                                                     |
-| 2026-09-07 | PR #8 addressed post-PR #7 dart-resolution failures with stronger board-color fitting, board-face-only temporal support, bounded similarity alignment, direct-entry-only automatic scoring, and compact/ambiguous/exterior-`MISS` abstention.                                                                                                                                                                                                                                                                                                                    |
-| 2026-09-07 | Camera Play introduced normal no-calibration automatic color-board finding, optional visual-guide/advanced recovery, browser-local privacy behavior, and in-camera correction/turn flow.                                                                                                                                                                                                                                                                                                                                                                         |
-| 2026-09-07 | Foundation work added deterministic X01/Cricket rules, Expo/web prototypes, capture/annotation contracts, development API, synthetic tools, deployment configuration, and private repository delivery.                                                                                                                                                                                                                                                                                                                                                           |
+| Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-08 | Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) was recreated from fetched merged `main`, pushed, and verified locally: `npm run verify` passed (including 43 web tests) and the Python suite passed 12 tests. It retains PR #10's handoff, separates warm cork from red beds, latches brief comparable-fit dropouts, tightens near-centreline flight support, distinguishes stable-core motion from rim foreground, caps implausibly long shapes, shortens polling, and still requires a direct-device retest. No Actions/Vercel or live-dart success is claimed. |
+| 2026-09-07 | [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) merged. Its direct iPhone retest physically confirmed **Start Play → Watching Locally**, but board acquisition remained intermittent and live analysis recorded none of the shown darts. The field remediation now proposed in [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) retains the handoff and requires another direct-device retest.                                                                                                                                                                 |
+| 2026-09-07 | PR #9 merged. A subsequent direct iPhone report showed strong automatic board finding but a normal Start Play loop driven by detector-based clear-board setup. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaced it with a fixed 650 ms fresh-reference handoff, preserved live scoring safety gates, removed normal-mode calibration-looking overlays/telemetry, and added focused reference-policy tests.                                                                                                                                                      |
+| 2026-09-07 | PR #8 addressed post-PR #7 dart-resolution failures with stronger board-color fitting, board-face-only temporal support, bounded similarity alignment, direct-entry-only automatic scoring, and compact/ambiguous/exterior-`MISS` abstention.                                                                                                                                                                                                                                                                                                                                     |
+| 2026-09-07 | Camera Play introduced normal no-calibration automatic color-board finding, optional visual-guide/advanced recovery, browser-local privacy behavior, and in-camera correction/turn flow.                                                                                                                                                                                                                                                                                                                                                                                          |
+| 2026-09-07 | Foundation work added deterministic X01/Cricket rules, Expo/web prototypes, capture/annotation contracts, development API, synthetic tools, deployment configuration, and private repository delivery.                                                                                                                                                                                                                                                                                                                                                                            |

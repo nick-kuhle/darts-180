@@ -2,9 +2,9 @@
 
 **Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
-[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. This document records the
-post-PR #10 direct-iPhone result and the next browser field-remediation branch. It still requires a
-fresh direct-device retest. **Date:** 2026-09-07 (America/Los_Angeles).
+[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) contains the
+post-PR #10 browser field remediation. It still requires a fresh direct-device retest. **Date:**
+2026-09-08 (America/Los_Angeles).
 
 Camera Play remains an experimental, browser-local fixed-mount heuristic. It is not a trained
 entry-point model, and this work makes no production accuracy claim.
@@ -26,7 +26,7 @@ abstain rather than a reason to choose one arbitrarily.
 The private screens were used only for diagnostic inspection and were deleted from the workspace.
 They are not source assets, test fixtures, raw camera frames, or committed material.
 
-## What the next remediation changes
+## What open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) changes
 
 ### 1. Preserve the bounded Start Play handoff
 

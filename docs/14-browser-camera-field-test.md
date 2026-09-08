@@ -1,9 +1,8 @@
 # Browser Camera Play — automatic board-find field-test guide
 
 **Status:** browser-local experimental player flow. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10)
-is merged. Its direct iPhone retest proved the bounded startup transition, but live dart detection
-recorded none of the shown throws; the next remediation still requires a direct-device retest.
-**Date:** September 2026.
+is merged. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) preserves that bounded startup transition, but live dart detection has not
+been field-proven and still requires a direct-device retest. **Date:** September 2026.
 
 **Purpose:** test the simplest viable mounted-phone experience while native runtime and trained
 vision models are still being built. A player starts a camera, lets the browser find the board’s
@@ -107,8 +106,8 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
 
 The browser field test and reliability work through [PR #10](https://github.com/nick-kuhle/darts-180/pull/10)
 are merged. PR #10's direct iPhone run verified startup handoff but did not record the thrown darts.
-Test the next remediation branch's top-level HTTPS preview/deployment before treating any live-dart
-behavior as field-proven.
+Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11)'s top-level HTTPS preview/deployment must be tested before treating any live-dart behavior
+as field-proven.
 
 1. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable **Include
    files outside the Root Directory**. `apps/web/vercel.json` runs the monorepo-root install and web

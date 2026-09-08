@@ -53,9 +53,8 @@ report found better board finding but failed dart resolution; the dedicated reme
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and the bounded-reference handoff in
 [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
 successfully reached **Watching Locally**, but intermittent acquisition/live detector behavior
-recorded none of the shown darts. The next remediation improves warm-board color separation,
-transient-fit stability, and board-local foreground handling; it still needs a fresh physical-device
-test.
+recorded none of the shown darts. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) improves warm-board color separation, transient-fit
+stability, and board-local foreground handling; it still needs a fresh physical-device test.
 Review each diff and its GitHub Actions result before using a build for external testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
