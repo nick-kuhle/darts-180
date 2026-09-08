@@ -55,37 +55,42 @@ The TS, Rust, and Python references must remain differential-test-equivalent. Se
 | Preferred mount         | Cheap phone/tablet arm near centerline, 0.7–1.2 m from board, 10–25° above | Highest single-camera accuracy; default beta contract                                |
 | Front-side              | Phone offset left/right/up to about 55° pose if board fills frame          | Homography + angle-trained entrypoint model                                          |
 | Room-side               | Further phone/tripod view                                                  | Supported only when board resolution and quality pass; may need high-resolution crop |
-| Handheld setup          | User aligns then locks device/mount                                        | Guide/calibrate; do not score while pose is moving                                   |
+| Handheld setup          | User stabilizes then locks device/mount                                    | Automatically assess pose; do not score while pose is moving                         |
 | Second phone / multicam | Difficult lighting/occlusion, premium reliability                          | Fuse independent canonical point distributions                                       |
 
-The visible product phrase is “works from the angle your room allows.” The engineering contract is
-`boardDiameterPixels ≥ 480`, `quality ≥ 0.70`, `offAxis ≤ 55°` for the first support envelope. The
-thresholds are versioned remote configuration and can only relax after held-out data says so.
+The visible product phrase is “works from the angle your room allows.” The initial engineering envelope is
+`boardDiameterPixels ≥ 480`, `quality ≥ 0.70`, `offAxis ≤ 55°`; final values are model-specific. Thresholds
+travel in a versioned, integrity-checked same-origin model manifest and can only relax after locked held-out
+data says so.
 
 ## 4. End-to-end pipeline
 
 ```text
-Camera frames (native, 30–60 fps)
-  └─> lens/orientation normalization + exposure/focus checks
-       └─> board pose model (low cadence) ──> homography + calibration quality
-            └─> temporal occupancy/change tracker
-                 └─> impact / new-dart trigger
-                      └─> settle window (typically 200–400 ms)
-                           └─> changed-region crop and entry-point model
-                                └─> distribution in canonical board mm
-                                     └─> deterministic polar decoder
-                                          └─> confidence + top-k candidates
-                                               └─> DartCard review policy
-                                                    └─> confirmed immutable game event
+High-quality browser camera frames (getUserMedia)
+  └─> lens/orientation normalization + exposure/focus checks in a Web Worker
+       └─> learned complete-board pose/orientation + quality model (low cadence)
+            └─> temporal occupancy/change monitor (event association only)
+                 └─> post-impact high-resolution frame burst + settle selection
+                      └─> learned dart-entry-point/occlusion model
+                           └─> image-to-canonical-board transform + point distribution in mm
+                                └─> deterministic polar decoder
+                                     └─> calibrated auto-score / review / abstain policy
+                                          └─> DartCard review and confirmed immutable game event
+
+The web runtime is the first delivery target. iOS/Android adapters later use the identical model-artifact,
+pose/tip, geometry, score-proposal, and decision contracts; they are not a prerequisite for browser scoring.
 ```
 
 ### 4.1 Frame capture and pre-processing
 
-- Capture is native (`AVFoundation` on iOS; `CameraX` on Android), never a JavaScript frame loop.
-- Maintain a small in-memory ring buffer of downscaled luma/chroma frames and high-resolution key
-  frames where device thermals allow it.
-- Separate preview resolution from inference crop. It is often efficient to track at 720p and
-  query a native full-resolution crop only after a trigger.
+- Capture starts with `getUserMedia` in the HTTPS browser, requesting the best available rear-camera
+  resolution; it never uploads normal-play frames.
+- A module Web Worker owns preprocessing and ONNX/WASM or WebGPU inference so React rendering does not
+  become the frame processor. Keep a small in-memory ring buffer of downscaled luma/chroma event cues and
+  high-resolution post-impact frames.
+- Separate preview resolution from inference crop. Track quality at low cadence and send a high-resolution
+  post-impact burst to the learned model only after an event cue. Native AVFoundation/CameraX adapters will
+  implement the same capture contract after the browser scorer has passed its evidence gates.
 - Correct orientation, lens distortion, rolling-shutter artifacts where device calibration allows,
   auto-exposure swings, and temporal noise before model inference.
 - Measure frame timestamps, dropped frames, focus/sharpness, exposure/glare, motion, board pixel
@@ -129,9 +134,9 @@ BOARD_CLEAR → WATCHING → IMPACT_CANDIDATE → SETTLING → DART_N_PROPOSED
 DART_1/2/3_PROPOSED → TURN_REVIEW → TURN_CONFIRMED → AWAIT_BOARD_CLEAR → BOARD_CLEAR
 ```
 
-- Detect change against a stable background/occupancy map, then associate a dart track across
-  frames.
-- Wait until the shaft/tip likelihood and board pose are stable for the settle window. Never score
+- Use a low-resolution temporal cue only to associate likely impact timing, then associate learned
+  canonical dart-tip observations against semantic occupancy tracks across high-resolution frames.
+- Wait until learned tip observations and board pose are stable for the settle window. Never score
   the first sharp-looking impact frame.
 - Do not infer a missing dart after a bounce-out. Surface “possible bounce-out / manual” instead.
 - If an accepted dart track vanishes before confirmation, stop auto mode; a player likely removed
@@ -139,94 +144,75 @@ DART_1/2/3_PROPOSED → TURN_REVIEW → TURN_CONFIRMED → AWAIT_BOARD_CLEAR →
 - A robin hood / stacked tip must default to an ambiguous review card. A single camera cannot
   reliably see all entry points in every stack.
 
-The shared policy skeleton lives in `packages/vision-session`; the native runtime supplies track
-IDs and candidates.
+The shared policy skeleton lives in `packages/vision-session`; the web Worker supplies track IDs and
+candidates first, and later native runtimes must conform to the same boundary.
 
 Current development tooling includes inspectable OpenCV pose/quality and fixed-camera
 before/after-frame baselines under `ml/src/darts180_vision`. They use known/synthetic conditions to
 exercise contracts and failure capture; they are neither a learned runtime nor evidence of
 real-world auto-scoring performance.
 
-### 4.3.1 Implemented browser field-test bridge
+### 4.3.1 Implemented web-first learned runtime boundary
 
-The deployable web prototype has a deliberately constrained, no-calibration **Camera Play**
-workspace for first real-board testing. It is not the production native runtime. On a fixed mounted
-browser camera, it:
+The active web branch ships a new **Learned Camera Play** route instead of the former browser heuristic.
+It starts a rear camera only after a player action, sends transferable high-resolution `ImageBitmap` frames
+to a same-origin module Worker, and never exposes calibration or tip-picking controls in normal play.
 
-1. samples conventional red/green accents and searches for a repeated, color-balanced,
-   alternating-color double-and-treble scoring-band pair rather than trusting the outermost colored
-   pixel. Its red cue also requires red-channel dominance, so a warmly lit orange cork/sisal single
-   bed does not erase the uncoloured ring gap; this resists a red surround, printed branding, one
-   coloured object, and a warm natural board surface;
-2. uses the compact two-color bull as a local centre cross-check, then estimates the band-pair ellipse,
-   requires two comparable automatic fits, and creates an internal outer-double homography. A matching
-   fit may survive two isolated autofocus/auto-exposure color dropouts but is forgotten after a longer
-   loss; it checks board pixels, band evidence, proportions, and local image detail against the
-   initial 480 px / approximately 55° envelope;
-3. asks the player only to keep the physical 20 upright in the image and tap **Start Play** with an
-   empty board. After the accepted automatic fit, Start Play waits a fixed 650 ms and saves one fresh
-   volatile local reference. If no drawable browser frame exists it retries at 250 ms up to four
-   additional attempts, then returns control; a dart-like or broad-motion detector label is never
-   permitted to return normal setup to board finding or block it indefinitely;
-4. compares each later settled frame with the current in-memory reference after board-face-only
-   exposure/white-balance/noise estimation and bounded board-relative similarity alignment for
-   impact/mount/phone-optical-stabilization jitter (small shift, scale, and rotation). Its permitted
-   outside-double shape area is 24 mm for a near-centreline fit, 42 mm for moderate skew, and 70 mm
-   only for an oblique fit. A broad-motion stop must reach the stable central board core (or be very
-   large); a high-change rim/surround disturbance is instead review-only. After an accepted aligned
-   dart, it carries that correction into the in-memory mapping and next reference;
-5. ranks elongated side-view shafts and compact near-centreline flight/occlusion changes, but rejects
-   a board-length component that cannot be a physically plausible projected dart. It only auto-scores
-   a non-`MISS`, adequately separated endpoint when direction is direct: exactly one endpoint is on a
-   scoring bed or a clearly wider flight establishes the opposite narrow entry end. Compact centroids,
-   equal-width endpoint pairs, near-wire cues, rim-disturbed frames, and ambiguous directions are held
-   for ordinary correction instead of being converted into an arbitrary score. One isolated held shape
-   can be surfaced as an explicit camera suggestion, but cannot fill a DartCard without a player
-   action; competing shapes surface no suggestion. A protruding flight endpoint outside the double
-   wire is never an automatic `MISS`; and
-6. requires a nearby same-zone automatic-eligible candidate across two frames (with one-frame grace)
-   before adding it, then updates the in-memory reference to include that accepted dart before looking
-   for the next one. Browser Camera Play samples at a 500 ms cadence so the second settled observation
-   is sought before a player would normally throw a second dart. A next turn takes the same bounded
-   one-tap reference handoff without asking the player to find the board again.
+The Worker:
 
-Normal play does not ask a player to name calibration points, fit a guide, download/capture a
-reference image, press a manual-analysis button, select a physical tip, or choose steel versus
-soft-tip setup. In automatic normal mode, the preview contains only a subtle non-interactive board
-indication and status; detailed rings, spokes, handles, and the `20` marker live only in optional
-manual recovery. Raw fit/detector metrics are under an explicit diagnostics disclosure.
+1. loads a versioned same-origin manifest and refuses an unavailable, malformed, unproven, or
+   integrity-mismatched artifact;
+2. verifies exact ONNX bytes with SHA-256 before creating an ONNX Runtime Web session;
+3. attempts WebGPU first and falls back to single-threaded WASM without requiring cross-origin isolation;
+4. owns RGB zero-to-one letterbox preprocessing and strict `darts180-board-tip-v1` semantic tensor
+   decoding; and
+5. returns only named landmarks, learned tip positions/uncertainty/occlusion, learned quality values,
+   timing, and backend identity—not a model-produced dart score.
 
-The player-facing board rendering follows the conventional dark-S20/red-accent and light-S1/S5/green-
-accent pattern, but the browser fitter does **not** mistake black/white singles for number recognition.
-Colors cannot uniquely read a board’s number-ring rotation because red/green bands repeat, so this
-browser field test deliberately assumes a level, 20-up board; a trained board/number-orientation model
-is still required for general automatic orientation. Optional visual-guide gestures plus named-anchor
-advanced diagnostics remain recovery-only.
+`d20-double`, `d6-double`, `d3-double`, and `d11-double` establish orientation; bull plus the four
+outer-double cardinal points independently validate that learned pose. Repeated red/green board colors are not
+used as an orientation authority. The main-thread engine maps each learned tip to canonical millimetres,
+associates stable tips over a post-impact burst, and delegates zone selection to the shared deterministic rules
+package. A low-resolution luma frame may request a burst or flag material scene motion, but it has no board
+coordinate, endpoint, zone, or score eligibility role.
 
-[PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
-[PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
-[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
-physically proved the bounded reference handoff reaches watching, but did **not** record a shown dart.
-The post-PR #10 remediation is proposed in [PR #11](https://github.com/nick-kuhle/darts-180/pull/11). It is regression-tested, not a claimed device fix,
-until it is retested on direct top-level HTTPS iPhone and Android deployments. See
-[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
+The current checked-in manifest is deliberately `unavailable`. This means the complete browser architecture,
+UI, Worker, integrity/CSP configuration, and safety tests are implemented, while Camera Play correctly refuses
+to score until a lawful trained artifact and held-out evaluation release exist. The former red/green/
+frame-difference React components are removed from the shipped route; their historical failure baseline is
+recorded in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
+
+The fixed browser output contract is:
+
+```text
+input:  float32 [1, 3, H, W], RGB, zero-to-one, letterboxed
+landmarks: exactly 9 × [normalized x, normalized y, confidence]
+tips:       N × [normalized x, normalized y, confidence, sigma-x, sigma-y, occlusion risk]
+quality:    [overall, board coverage, sharpness, glare risk, off-axis fraction, occlusion risk]
+```
+
+The exported model owns learned NMS and semantic interpretation. The runtime rejects incompatible tensor
+shapes rather than silently applying a second detector. A model manifest locks its output names, dimensions,
+release stage, evaluation/provenance identifiers, calibration policy, and artifact checksum together.
 
 ### 4.4 Dart entry-point model
 
 **Do not train only an image → 0..60 score classifier.** It cannot generalize cleanly across board
 rotations, profiles, angles, or games, and it provides poor correction explanations.
 
-The production model input is the calibrated board crop plus temporal change evidence:
+The initial browser output contract takes one high-resolution, orientation-normalized RGB camera frame.
+A future version may explicitly accept a learned temporal stack or prior-frame feature tensor only after its
+manifest/contract and evaluation are updated. It must not use a hand-crafted RGB difference mask or endpoint
+width rule as the score localizer. Relevant model inputs/heads can include:
 
-- pre-impact frame / stable background;
-- post-settle key frame(s);
-- change mask or optical/feature difference;
-- pose/scale metadata; optionally shaft-direction cue;
-- existing-dart occupancy map.
+- the post-settle key frame (and, only in a versioned later contract, learned temporal context);
+- full-board pose/scale and image-quality evidence;
+- learned visible-dart/flight context and existing-dart occupancy; and
+- tip visibility, stacking, bounce-out, and uncertainty evidence.
 
-Output is a heatmap or probabilistic distribution over canonical `(x,y)` plus visibility/occlusion
-and uncertainty heads. Project samples/peaks through the deterministic decoder to create a top-k
-zone distribution. Train separate heads or models when ablations prove value:
+Output is a semantic distribution over source-frame tip position plus visibility/occlusion and uncertainty
+heads; the Worker projects it through the automatically solved board pose and deterministic decoder to create a
+top-k zone distribution. Train separate heads or models when ablations prove value:
 
 1. `board-pose` — landmarks/ellipse/orientation/quality; low cadence.
 2. `dart-arrival` — temporal event / track association; continuous, lightweight.

@@ -144,3 +144,5 @@ export interface GameSnapshot {
   state: Record<string, unknown>;
   updatedAt: string;
 }
+
+export * from './vision.js';

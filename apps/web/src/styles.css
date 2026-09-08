@@ -2964,3 +2964,491 @@ h3 {
   border-color: #745a2e;
   background: #292113;
 }
+/* Browser-local learned Camera Play. The old color/difference lab remains diagnostics-only. */
+.learned-camera-play {
+  margin-bottom: 54px;
+}
+
+.learned-camera-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.36fr) minmax(310px, 0.64fr);
+  overflow: hidden;
+  border: 1px solid #2e453d;
+  border-radius: 22px;
+  background: #101c18;
+  box-shadow: 0 25px 100px rgba(0, 0, 0, 0.2);
+}
+
+.learned-camera-stage,
+.learned-camera-panel {
+  padding: 28px;
+}
+
+.learned-camera-stage {
+  border-right: 1px solid #2e453d;
+}
+
+.learned-camera-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  background: #0e1714;
+}
+
+.learned-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 0 9px;
+  color: #90dabe;
+  border: 1px solid #386954;
+  border-radius: 999px;
+  background: #10291e;
+  font-size: 0.56rem;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+
+.learned-status-pill.phase-model-unavailable,
+.learned-status-pill.phase-error,
+.learned-status-pill.phase-camera-disturbed {
+  color: #ffd48d;
+  border-color: #a66e26;
+  background: #32220d;
+}
+
+.learned-status-pill.phase-watching {
+  color: #0b2419;
+  border-color: #b5ffe0;
+  background: #8fdcc1;
+}
+
+.learned-camera-surface {
+  position: relative;
+  display: grid;
+  min-height: 390px;
+  margin: 17px 0 12px;
+  overflow: hidden;
+  border: 1px solid #526f62;
+  border-radius: 18px;
+  background:
+    linear-gradient(45deg, rgba(35, 62, 52, 0.13) 25%, transparent 25%) 0 0 / 28px 28px,
+    linear-gradient(-45deg, rgba(35, 62, 52, 0.13) 25%, transparent 25%) 0 0 / 28px 28px,
+    #080d0b;
+  place-items: center;
+}
+
+.learned-camera-surface.is-pose-ready {
+  border-color: #69be98;
+  box-shadow: inset 0 0 0 1px rgba(115, 220, 174, 0.25);
+}
+
+.learned-camera-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 660px;
+  object-fit: contain;
+}
+
+.learned-luma-canvas {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0.001;
+  pointer-events: none;
+}
+
+.learned-camera-chip,
+.learned-camera-notice {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 10px 12px;
+  border: 1px solid rgba(115, 220, 174, 0.55);
+  border-radius: 9px;
+  background: rgba(8, 22, 16, 0.9);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+  color: #cde3d8;
+  font-size: 0.67rem;
+  font-weight: 750;
+  line-height: 1.38;
+}
+
+.learned-camera-notice {
+  display: grid;
+  gap: 4px;
+  border-color: #a36b20;
+  color: #f3d69d;
+  background: rgba(43, 28, 9, 0.93);
+}
+
+.learned-camera-notice.error {
+  border-color: #ba6457;
+  color: #ffd1c9;
+  background: rgba(58, 22, 19, 0.94);
+}
+
+.learned-camera-notice strong,
+.learned-camera-notice p {
+  margin: 0;
+}
+
+.learned-camera-notice strong {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+}
+
+.learned-camera-notice p {
+  font-size: 0.7rem;
+  line-height: 1.42;
+}
+
+.learned-camera-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.learned-camera-actions .button {
+  width: auto;
+  min-width: 166px;
+  margin: 0;
+  padding: 0 15px;
+}
+
+.learned-camera-actions .text-button {
+  margin-left: auto;
+}
+
+.learned-camera-footnote {
+  margin: 13px 0 0;
+  color: #829d91;
+  font-size: 0.65rem;
+  line-height: 1.47;
+}
+
+.learned-model-state,
+.learned-quality-state,
+.learned-proposal-summary {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #334b41;
+  border-radius: 12px;
+  background: #11201b;
+}
+
+.learned-model-state small,
+.learned-quality-state small,
+.learned-proposal-summary small {
+  color: #83ab9a;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.115em;
+}
+
+.learned-model-state strong,
+.learned-quality-state strong,
+.learned-proposal-summary strong {
+  color: #edf9f1;
+  font-size: 0.77rem;
+  letter-spacing: 0.035em;
+}
+
+.learned-model-state span,
+.learned-quality-state p,
+.learned-proposal-summary p {
+  margin: 0;
+  color: #9ab4a8;
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.learned-model-state.is-unavailable {
+  border-color: #80551e;
+  background: #21190d;
+}
+
+.learned-model-state.is-unavailable strong {
+  color: #ffd797;
+}
+
+.learned-model-state.is-unavailable span {
+  color: #c9ad7d;
+}
+
+.learned-model-state.is-runnable {
+  border-color: #3d735d;
+}
+
+.learned-quality-state {
+  gap: 9px;
+}
+
+.learned-quality-state.is-ready {
+  border-color: #448567;
+  background: #11251c;
+}
+
+.learned-quality-state > div {
+  display: grid;
+  gap: 4px;
+}
+
+.learned-quality-state dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin: 0;
+}
+
+.learned-quality-state dl div {
+  padding: 7px;
+  border: 1px solid #2f463d;
+  border-radius: 7px;
+  background: rgba(6, 15, 11, 0.31);
+}
+
+.learned-quality-state dt,
+.learned-quality-state dd {
+  margin: 0;
+}
+
+.learned-quality-state dt {
+  color: #7f9e90;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.learned-quality-state dd {
+  margin-top: 3px;
+  color: #def1e7;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.learned-dart-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.learned-dart-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 102px;
+  padding: 11px;
+  border: 1px solid #436c58;
+  border-radius: 10px;
+  background: #153025;
+}
+
+.learned-dart-card.is-empty {
+  border-color: #334940;
+  background: #111d18;
+}
+
+.learned-dart-card.needs-review {
+  border-color: #b17a2c;
+  background: #302313;
+}
+
+.learned-dart-card > span {
+  color: #a5c9b7;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.learned-dart-card strong {
+  color: #f2fcf6;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.learned-dart-card b {
+  color: #8fe2bd;
+  font-size: 0.52rem;
+  letter-spacing: 0.07em;
+}
+
+.learned-dart-card.is-empty b {
+  color: #8fa89d;
+}
+
+.learned-dart-card.needs-review b {
+  color: #ffd28b;
+}
+
+.learned-dart-card small {
+  color: #b9cbbe;
+  font-size: 0.52rem;
+  line-height: 1.34;
+}
+
+.learned-proposal-summary {
+  min-height: 88px;
+}
+
+.learned-proposal-summary strong {
+  color: #f4d18d;
+  font-size: 0.67rem;
+}
+
+.learned-visit-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.learned-visit-actions .button {
+  margin: 0;
+}
+
+@media (max-width: 840px) {
+  .learned-camera-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .learned-camera-stage {
+    border-right: 0;
+    border-bottom: 1px solid #2e453d;
+  }
+}
+
+@media (max-width: 600px) {
+  .learned-camera-grid {
+    border-radius: 16px;
+  }
+
+  .learned-camera-stage,
+  .learned-camera-panel {
+    padding: 22px 16px;
+  }
+
+  .learned-camera-surface {
+    min-height: 265px;
+  }
+
+  .learned-camera-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .learned-camera-actions .button {
+    width: 100%;
+  }
+
+  .learned-camera-actions .text-button {
+    align-self: flex-start;
+    margin-left: 0;
+  }
+}
+/* Inspectable learned-vision program status; deliberately no legacy scorer controls. */
+.vision-diagnostics {
+  margin-bottom: 54px;
+}
+
+.vision-diagnostics-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin: 8px 0 24px;
+}
+
+.vision-diagnostics-head h1 {
+  font-size: clamp(2.1rem, 4.5vw, 4rem);
+}
+
+.vision-diagnostics-head p:last-child {
+  max-width: 46rem;
+  margin: 12px 0 0;
+  color: #b3c7bd;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.vision-diagnostics-head .button {
+  width: auto;
+  min-width: 220px;
+  margin: 0;
+  padding: 0 16px;
+}
+
+.vision-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.vision-diagnostics-grid article {
+  display: grid;
+  gap: 7px;
+  min-height: 148px;
+  padding: 20px;
+  border: 1px solid #344b41;
+  border-radius: 15px;
+  background: #111e19;
+}
+
+.vision-diagnostics-grid article.is-pass {
+  border-color: #487e65;
+  background: #11261c;
+}
+
+.vision-diagnostics-grid article.is-hold {
+  border-color: #76521f;
+  background: #21190d;
+}
+
+.vision-diagnostics-grid article.is-info {
+  border-color: #355849;
+  background: #101d18;
+}
+
+.vision-diagnostics-grid small {
+  color: #8bb6a4;
+  font-size: 0.57rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.vision-diagnostics-grid strong {
+  color: #edf8f1;
+  font-size: 0.87rem;
+  line-height: 1.25;
+}
+
+.vision-diagnostics-grid .is-hold strong {
+  color: #ffdb9c;
+}
+
+.vision-diagnostics-grid p {
+  margin: 0;
+  color: #aabfb5;
+  font-size: 0.7rem;
+  line-height: 1.48;
+}
+
+@media (max-width: 720px) {
+  .vision-diagnostics-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .vision-diagnostics-head .button {
+    width: 100%;
+  }
+
+  .vision-diagnostics-grid {
+    grid-template-columns: 1fr;
+  }
+}

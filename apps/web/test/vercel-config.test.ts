@@ -29,7 +29,10 @@ test('apps/web has a self-contained Vercel app-root configuration', () => {
   assert.equal(config.outputDirectory, 'dist');
   const headers = headersFor(config);
   assert.equal(headers['Permissions-Policy'], 'camera=(self), microphone=(), geolocation=()');
-  assert.match(headers['Content-Security-Policy'] ?? '', /mediastream:/);
+  const csp = headers['Content-Security-Policy'] ?? '';
+  assert.match(csp, /mediastream:/);
+  assert.match(csp, /worker-src 'self' blob:/);
+  assert.match(csp, /script-src 'self' 'wasm-unsafe-eval'/);
 });
 
 test('repository-root fallback has the same browser camera policy', () => {
@@ -37,5 +40,8 @@ test('repository-root fallback has the same browser camera policy', () => {
   const headers = headersFor(config);
 
   assert.equal(headers['Permissions-Policy'], 'camera=(self), microphone=(), geolocation=()');
-  assert.match(headers['Content-Security-Policy'] ?? '', /mediastream:/);
+  const csp = headers['Content-Security-Policy'] ?? '';
+  assert.match(csp, /mediastream:/);
+  assert.match(csp, /worker-src 'self' blob:/);
+  assert.match(csp, /script-src 'self' 'wasm-unsafe-eval'/);
 });

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "modelId": "darts180-board-tip",
+  "modelVersion": "unavailable",
+  "releaseStage": "unavailable",
+  "assetPath": "",
+  "sha256": "",
+  "runtime": "onnxruntime-web",
+  "input": {
+    "width": 1024,
+    "height": 1024,
+    "colorOrder": "rgb",
+    "normalization": "zero-to-one"
+  },
+  "outputContract": "darts180-board-tip-v1",
+  "outputs": {
+    "landmarks": "board_landmarks",
+    "dartTips": "dart_tips",
+    "quality": "quality"
+  },
+  "decisionPolicy": {
+    "autoRecordEnabled": false,
+    "minAutoScoreProbability": 1,
+    "minAutoScoreWireMarginMm": 99,
+    "minReviewProbability": 1,
+    "maxQualityOffAxisDegrees": 0,
+    "minBoardDiameterPixels": 9007199254740991,
+    "minOverallQuality": 1,
+    "maxOcclusionRisk": 0,
+    "confidenceTemperature": 1,
+    "confidenceBias": 0,
+    "heldOutEvaluationId": null
+  },
+  "provenance": {
+    "trainingDataId": null,
+    "licenseReviewId": null,
+    "evaluatedAt": null
+  }
+}

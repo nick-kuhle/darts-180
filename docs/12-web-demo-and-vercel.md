@@ -1,147 +1,126 @@
-# Web demo and Vercel deployment
+# Web app and Vercel deployment
 
-**Purpose:** put a polished, honest Darts 180 prototype in front of testers today without exposing
-an unfinished camera API or claiming live AI scoring.
+**Purpose:** deploy the web-first Darts 180 application through the existing Vercel project and URL,
+without overstating the status of its camera scorer.
 
-## What deploys now
+**Snapshot:** 2026-09-08 (America/Los_Angeles). The user reports PR #11 merged; authenticated Git fetch
+verified `origin/main` at `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6`.
+[Draft PR #12](https://github.com/nick-kuhle/darts-180/pull/12) contains the learned-runtime follow-up and
+is not deployed. GitHub Actions/checks and Vercel deployment status remain unverified from this environment.
 
-`apps/web/` is a static React/Vite web demo that includes:
+## What this web branch delivers
 
-- interactive accurate standard dartboard manual input;
-- 501 and Cricket game flows using the shared deterministic rules package;
-- editable three-dart review cards;
-- simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
-- quality-gate examples for a good view, a board that is too far away, and a view too oblique;
-- an experimental browser-local **Camera Play** field-test flow: automatic conventional red/green
-  board-color finding that separates warm cork/sisal single beds and briefly latches a matching fit
-  through autofocus/exposure dropouts; a one-tap bounded fresh-reference handoff via **Start Play**;
-  skew-aware board-local temporal analysis with bounded alignment and rim-foreground review holds;
-  direct-entry-only automatic scoring with explicit compact/ambiguous abstention; ordinary DartCard
-  entry/correction when needed; and optional gesture-based visual-guide recovery for auto-find
-  failures;
-- event-style visit history;
-- a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
-  without uploading it anywhere;
-- a browser **Annotation Lab** that pairs that local JPEG/manifest, solves a manually clicked
-  four-anchor homography, and downloads a local deterministic-label sidecar.
+`apps/web/` remains a static React/Vite application with:
 
-It has **no account, database, raw camera upload, or trained CV model**. Camera Play uses an
-inspectable fixed-camera frame-difference heuristic for controlled field testing, but it is not a
-trained entry-point model or a proven auto-scoring claim. The normal flow automatically estimates a
-standard board from its red/green scoring colors, then auto-scores only an internal candidate with
-direct entry-direction evidence rather than asking a player to identify a steel or soft dart tip.
-One isolated compact/ambiguous visual clue can be displayed as a held suggestion that requires an
-explicit player use; competing/unsafe clues stay unscored until ordinary correction/entry. It assumes
-a level, 20-up board because color alone cannot identify every number-ring rotation; correction
-remains available for every score. Capture and Annotation Labs keep their
-media/labels browser-local until their user explicitly downloads them. Camera access is requested
-only after a click. That is intentional: it is safe to share as a product/UX prototype and deploy as
-a static site.
+- interactive standard-board manual input, 501, Cricket, correction-aware DartCards, checkout hints, and
+  visit history;
+- **Camera Play**, the only normal camera route, built around a browser-local learned-vision pipeline:
+  `getUserMedia` → timing-only low-resolution cue → high-resolution transferable frame → Worker-owned
+  ONNX Runtime → learned landmarks/tip/quality → canonical board geometry → deterministic rules →
+  auto-score / review / abstain proposal;
+- a live, non-interactive geometry overlay after a complete board pose is found automatically—no guide
+  handles, named-point selection, clear-frame capture, image download/upload, or visible-tip click in
+  normal play;
+- full same-origin model-manifest parsing, static model-byte SHA-256 verification, WebGPU-first session
+  creation with single-threaded WASM fallback, serialized Worker requests, and resource cleanup;
+- an inspectable **Learned Vision Diagnostics** page, which reports runtime/model gates but is not an
+  alternate score engine; and
+- local Capture and Annotation Labs for separately consented future research workflows.
 
-## Fastest Vercel path — founder steps
+The retired red/green color-fit and frame-difference Camera Play components and scoring modules are no
+longer reachable or bundled by the product route. Their historical failure record is retained in
+[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md); it must not be used to
+restore live scoring behavior.
 
-The initial foundation, browser field test, and Vercel/mobile camera deployment preparation are
-merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
-[PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
-[PR #3](https://github.com/nick-kuhle/darts-180/pull/3),
-[PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and
-[PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
-remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
-follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
-report found better board finding but failed dart resolution; the dedicated remediation in
-[PR #8](https://github.com/nick-kuhle/darts-180/pull/8), recovery update in
-[PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and the bounded-reference handoff in
-[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
-successfully reached **Watching Locally**, but intermittent acquisition/live detector behavior
-recorded none of the shown darts. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) improves warm-board color separation, transient-fit
-stability, and board-local foreground handling; it still needs a fresh physical-device test.
-Review each diff and its GitHub Actions result before using a build for external testing. See
-[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
-No delivery
-credential is stored in source, Git configuration, or the remote URL; revoke any short-lived
-delivery token once the delivery is confirmed.
+## Critical release boundary: the checked-in model is deliberately unavailable
 
-### 1. Import the repository into Vercel
+`public/models/darts180-board-tip-v1.json` is an explicit unavailable placeholder. It names no ONNX
+artifact, no checksum, and no auto-record policy. Camera Play can still request a direct browser camera
+preview, but it displays **Verified model package required** and records no score. This is intentional.
 
-1. Sign in to Vercel.
-2. Click **Add New → Project**.
-3. Import `nick-kuhle/darts-180`.
-4. When Vercel shows several deployable folders, click **`apps/web`**. This is the website.
-   Do **not** choose `services` or `ml`.
-5. Check that **Root Directory** says `apps/web`. If it does not, click **Edit** beside Root
-   Directory and choose `apps/web`.
-6. Turn on **Include files outside the Root Directory**. The website needs the shared game-rule
-   packages and base TypeScript configuration from the repository.
-7. If Vercel asks for a framework, choose **Vite**. It reads `apps/web/vercel.json`, which runs:
-   - install: `cd ../.. && npm ci`
-   - build: `cd ../.. && npm run build --workspace=@darts-180/web`
-   - output: `dist`
-8. Leave Environment Variables empty and click **Deploy**.
+A runnable artifact must be supplied only after all of the following are complete:
 
-The app-level `apps/web/vercel.json` sets static privacy headers: camera access is same-origin only,
-microphone/geolocation are disabled, and the CSP permits only app-owned assets plus the local
-`data:`/`blob:`/`mediastream:` media used by browser-local capture. Do not deploy `services/api` as a
-Vercel function in its current development/in-memory form.
+1. a lawful, provenance-reviewed and consented training-data record;
+2. exported ONNX bytes matching the fixed `darts180-board-tip-v1` tensor semantics;
+3. a lowercase SHA-256 of those exact bytes in the same-origin manifest;
+4. model-card/release-policy values calibrated against a locked, held-out real-device evaluation set; and
+5. a production manifest with training-data, licence-review, evaluation timestamp, and held-out evaluation
+   identifiers. Only that parser-gated state may set `autoRecordEnabled: true`.
 
-### 2. Create the HTTPS field-test preview
+A compiled Worker and passing unit tests do **not** prove physical dart recognition. No deployed copy should
+be described as live or accurate camera scoring until an approved artifact has completed the device test
+gates in [`16-camera-autoscoring-reset.md`](16-camera-autoscoring-reset.md).
 
-After Vercel is connected to GitHub, open the production deployment for `main` or a Preview
-Deployment for the current Camera Play pull request. Use the Vercel deployment’s **Visit** link.
+## Vercel configuration and preserved deployment identity
 
-> **Do not use an embedded development preview for this test.** Arena’s preview iframe—and many
-> in-app browsers—cannot show a normal camera permission prompt. Open the resulting
-> `https://…vercel.app` URL directly in Safari or Chrome on the mounted phone/tablet.
+Keep the existing Vercel project and production URL. Do **not** create a replacement project or point a new
+URL at a different app. The repository has equivalent root and `apps/web` Vercel configurations so the
+existing project must continue to use:
 
-Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, keep a
-conventional red/green board fully visible with its physical 20 at the top of the camera image; wait
-for **BOARD FOUND**, then tap **START PLAY** once with an empty board. The normal sequence is the
-brief **STARTING LIVE PLAY** handoff followed by **BOARD FOUND · WATCHING LOCALLY**; it is not a
-clear-board detector loop. Throw one dart and wait for its result or held suggestion before throwing
-the next. If Camera Play holds a compact/ambiguous dart, or cannot isolate a safe change, use
-**CHECK / ENTER SCORE** or **REVIEW / ENTER SCORE** rather than treating a guessed endpoint as a
-result. PR #10 proved this startup path on one iPhone but did not prove live dart recording, so test
-that behavior explicitly. If a direct HTTPS tab does not prompt, use that browser’s lock/camera
-controls to set Camera to **Allow**, reload the page, and try again. On iOS, check Safari’s website
-camera setting; on Android Chrome, check the site settings behind the lock icon.
+| Vercel setting                       | Required value                                         |
+| ------------------------------------ | ------------------------------------------------------ |
+| Root Directory                       | `apps/web`                                             |
+| Include files outside Root Directory | enabled                                                |
+| Install Command                      | `cd ../.. && npm ci`                                   |
+| Build Command                        | `cd ../.. && npm run build --workspace=@darts-180/web` |
+| Output Directory                     | `dist`                                                 |
+| Environment variables                | none for the static web application                    |
 
-For the full mounted-device workflow, follow the
-[Browser camera field-test guide](14-browser-camera-field-test.md) and the
-[post-field-report remediation/retest note](15-browser-dart-field-remediation.md). The feature runs
-locally in the browser and must stay in its stated fixed-mount, correction-first envelope.
+The build emits a same-origin module Worker and ONNX Runtime Web's WASM asset. Both `vercel.json` files
+therefore preserve the restrictive camera/privacy policy while explicitly permitting only what this runtime
+needs:
 
-### 3. Share the preview URL
+- `Permissions-Policy: camera=(self), microphone=(), geolocation=()`;
+- `media-src` for same-origin, `blob:`, and `mediastream:` browser camera presentation;
+- `connect-src 'self'` for the manifest/model/WASM fetches;
+- `worker-src 'self' blob:` for the module Worker and any runtime helper worker; and
+- `script-src 'self' 'wasm-unsafe-eval'` for WebAssembly compilation. This is **not** general
+  `'unsafe-eval'` and does not allow remote scripts.
 
-Use it with a small group for controlled UX feedback. Say: “This is the Darts 180 experimental,
-browser-local camera field test; every score remains correctable.” Avoid saying “AI scoring is live”
-or publishing an accuracy claim until held-out real-device evidence supports it.
+The deployed runtime currently bundles approximately 27.8 MB of uncompressed ONNX Runtime WASM. Treat
+first-load performance, cache behavior, memory, thermal state, and CSP behavior as real-device acceptance
+criteria, not merely a Vite build success.
 
-## Vercel CLI option
+## Deploying the follow-up safely
+
+1. Review the branch diff, including model-release gate changes; confirm that no model artifact or raw
+   camera file has been added accidentally.
+2. Run the verification commands below locally and in CI.
+3. Create/review/merge the follow-up PR into the existing repository `main`.
+4. Let the **existing** Vercel project deploy `main` using `apps/web`; preserve the current production URL.
+5. Verify headers and the production build in the Vercel dashboard before inviting any direct-device tester.
+6. Test a top-level HTTPS tab on actual iOS Safari and Android Chrome. An Arena preview iframe or an
+   in-app browser cannot be used to validate a camera permission prompt.
+
+Until a runnable model release exists, the only expected direct-device result is: camera permission works
+when allowed, the local preview appears, and Camera Play accurately reports that it will not guess a score.
+Do not turn that safety state into a fallback to the retired heuristic.
+
+## Required verification
+
+From the repository root:
 
 ```bash
-npm install -g vercel
-vercel login
-cd darts-180
-vercel
+npm run format:check
+npm run docs:check
+git diff --check
+npm run typecheck
+npm run test --workspace=@darts-180/web
+npm run build --workspace=@darts-180/web
+npm run verify
+cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Accept the detected static settings. For production, use `vercel --prod` only after the working name,
-legal notices, and preview content are approved.
+The web test suite covers manifest provenance/release rejection, automatic named-landmark pose mapping,
+canonical uncertainty/ranking, near-wire review, unavailable-model abstention, timing-only event gating,
+semantic tensor decoding, Worker-client protocol, normal-route retirement of the legacy scorer, and Vercel
+Worker/WASM CSP requirements. These are engineering checks, not a real-device score-accuracy result.
 
-## Custom domain / public launch checklist
+## Direct-device model-release test protocol
 
-Do **not** buy/publish the final brand before counsel clears `Darts 180`. Once cleared:
-
-- add domain in Vercel project settings;
-- set domain/DNS exactly as Vercel requests;
-- add privacy/contact pages before collecting user details;
-- decide whether the private GitHub source link should remain visible to public testers;
-- set up basic uptime/analytics that do not capture raw gameplay media;
-- protect `main` and require the CI workflow to pass;
-- create a simple feedback form with no video upload by default.
-
-## Future architecture
-
-Vercel can continue hosting this landing/demo/site and a future authenticated dashboard. The
-realtime event API and media/ML services should run in an environment designed for long-lived
-WebSockets, managed Postgres, background workers, and privacy controls. Keep those systems separate
-from the static demo until their security/design gates are met.
+After an approved model is installed, use the current flow in
+[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md): start camera, let Camera Play find
+complete geometry automatically, arm the visit with an empty board, throw normally, and use DartCard
+correction for a review or abstention. Test every supported board/phone/environment slice against independent
+ground truth. Keep camera frames local unless a participant separately opts into the governed research
+program.
