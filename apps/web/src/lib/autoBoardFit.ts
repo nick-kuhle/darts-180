@@ -29,6 +29,10 @@ export interface AutoBoardFitResult {
   interBandFraction: number;
   /** Number of populated angular sectors in the selected outer color band. */
   outerAngularCoverage: number;
+  /** Evidence that colors alternate around the selected outer band like a conventional board. */
+  outerAlternatingColorStrength: number;
+  /** Agreement of the alternating color pattern between selected double and treble bands. */
+  bandColorPhaseAgreement: number;
   confidence: number;
   message: string;
 }
@@ -38,6 +42,7 @@ type AccentPoint = ImagePoint & Readonly<{ color: AccentColor }>;
 
 interface PolarAccentPoint extends AccentPoint {
   normalizedRadius: number;
+  angleRadians: number;
   angularSector: number;
 }
 
@@ -48,6 +53,10 @@ interface RadialBandEvidence {
   angularCoverage: number;
   redAngularCoverage: number;
   greenAngularCoverage: number;
+  /** Strength of the expected red/green alternating 20-sector pattern, from 0 to 1. */
+  alternatingColorStrength: number;
+  /** Phase of that alternating pattern; used only to compare the double and treble bands. */
+  colorPhaseRadians: number;
 }
 
 interface StandardRingPair {
@@ -56,6 +65,7 @@ interface StandardRingPair {
   outer: RadialBandEvidence;
   inner: RadialBandEvidence;
   gap: RadialBandEvidence;
+  colorPhaseAgreement: number;
   patternScore: number;
 }
 
@@ -90,6 +100,8 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
     innerRingFraction: 0,
     interBandFraction: 0,
     outerAngularCoverage: 0,
+    outerAlternatingColorStrength: 0,
+    bandColorPhaseAgreement: 0,
     confidence: 0,
     message,
   });
@@ -153,7 +165,7 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
   // estimate the broad ellipse from the other board-band color first, then use both colors to prove
   // the repeated double/treble pattern below.
   const geometryPixels = geometryPointsForColors(accentPixels, redPixelCount, greenPixelCount);
-  const center = meanPoint(geometryPixels);
+  let center = meanPoint(geometryPixels);
   const principalAxes = findPrincipalAxes(geometryPixels, center);
   if (principalAxes === null) {
     return empty(
@@ -166,13 +178,13 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
     );
   }
   const axes = orientAxesForUprightBoard(principalAxes);
-  const envelopeHorizontalRadius = percentile(
+  let envelopeHorizontalRadius = percentile(
     geometryPixels.map((point) =>
       Math.abs((point.x - center.x) * axes.horizontal.x + (point.y - center.y) * axes.horizontal.y),
     ),
     0.985,
   );
-  const envelopeVerticalRadius = percentile(
+  let envelopeVerticalRadius = percentile(
     geometryPixels.map((point) =>
       Math.abs((point.x - center.x) * axes.vertical.x + (point.y - center.y) * axes.vertical.y),
     ),
@@ -194,24 +206,46 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
     );
   }
 
-  const polarPoints = accentPixels
-    .map((point) => {
-      const deltaX = point.x - center.x;
-      const deltaY = point.y - center.y;
-      const normalizedX =
-        (deltaX * axes.horizontal.x + deltaY * axes.horizontal.y) / envelopeHorizontalRadius;
-      const normalizedY =
-        (deltaX * axes.vertical.x + deltaY * axes.vertical.y) / envelopeVerticalRadius;
-      const angle = Math.atan2(normalizedY, normalizedX);
-      return {
-        ...point,
-        normalizedRadius: Math.hypot(normalizedX, normalizedY),
-        angularSector: Math.floor(((angle + Math.PI) / (2 * Math.PI)) * 20) % 20,
-      };
-    })
-    // The expected double band lies at the geometry envelope. Exclude farther accent pixels before
-    // the radial search so a coloured surround cannot dominate the work or the candidate score.
-    .filter((point) => point.normalizedRadius <= 1.12);
+  let polarPoints = normalizeAccentPoints(
+    accentPixels,
+    center,
+    axes,
+    envelopeHorizontalRadius,
+    envelopeVerticalRadius,
+  );
+  // A standard board has a compact red/green bull. It provides a more local and less logo-sensitive
+  // center cue than red lettering, surrounds, or decorative printing near the double ring. Refine
+  // only when a two-color central cluster is close enough to the broad ring-derived center, then
+  // repeat the radial search from that consensus center.
+  const bullCenter = findTwoColorBullCenter(polarPoints);
+  if (
+    bullCenter !== null &&
+    distance(center, bullCenter) <=
+      Math.min(envelopeHorizontalRadius, envelopeVerticalRadius) * 0.22
+  ) {
+    center = bullCenter;
+    envelopeHorizontalRadius = percentile(
+      geometryPixels.map((point) =>
+        Math.abs(
+          (point.x - center.x) * axes.horizontal.x + (point.y - center.y) * axes.horizontal.y,
+        ),
+      ),
+      0.985,
+    );
+    envelopeVerticalRadius = percentile(
+      geometryPixels.map((point) =>
+        Math.abs((point.x - center.x) * axes.vertical.x + (point.y - center.y) * axes.vertical.y),
+      ),
+      0.985,
+    );
+    polarPoints = normalizeAccentPoints(
+      accentPixels,
+      center,
+      axes,
+      envelopeHorizontalRadius,
+      envelopeVerticalRadius,
+    );
+  }
   const ringPair = findStandardRingPair(polarPoints);
   if (ringPair === null) {
     return empty(
@@ -226,13 +260,13 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
 
   // Use only the selected double-band samples for final ellipse extent. This avoids an external red
   // surround inflating the guide and makes the guide track the actual scoring double wire.
-  const horizontalRadius = percentile(
+  let horizontalRadius = percentile(
     ringPair.outer.points.map((point) =>
       Math.abs((point.x - center.x) * axes.horizontal.x + (point.y - center.y) * axes.horizontal.y),
     ),
     0.985,
   );
-  const verticalRadius = percentile(
+  let verticalRadius = percentile(
     ringPair.outer.points.map((point) =>
       Math.abs((point.x - center.x) * axes.vertical.x + (point.y - center.y) * axes.vertical.y),
     ),
@@ -309,6 +343,8 @@ export function detectBoardFitFromColors(frame: CameraFrame): AutoBoardFitResult
     innerRingFraction: ringPair.inner.points.length / accentPixels.length,
     interBandFraction: ringPair.gap.points.length / accentPixels.length,
     outerAngularCoverage: ringPair.outer.angularCoverage,
+    outerAlternatingColorStrength: ringPair.outer.alternatingColorStrength,
+    bandColorPhaseAgreement: ringPair.colorPhaseAgreement,
     confidence,
     message:
       'Repeated red/green double and treble bands found. The automatic fit assumes the physical 20 is upright in the camera image.',
@@ -342,6 +378,45 @@ export function boardFitsAreSimilar(
   return first.every((point, index) => distance(point, second[index]!) <= maximumHandleDrift);
 }
 
+function normalizeAccentPoints(
+  points: readonly AccentPoint[],
+  center: ImagePoint,
+  axes: Readonly<{ horizontal: ImagePoint; vertical: ImagePoint }>,
+  horizontalRadius: number,
+  verticalRadius: number,
+): PolarAccentPoint[] {
+  return (
+    points
+      .map((point) => {
+        const deltaX = point.x - center.x;
+        const deltaY = point.y - center.y;
+        const normalizedX =
+          (deltaX * axes.horizontal.x + deltaY * axes.horizontal.y) / horizontalRadius;
+        const normalizedY = (deltaX * axes.vertical.x + deltaY * axes.vertical.y) / verticalRadius;
+        const angleRadians = Math.atan2(normalizedY, normalizedX);
+        return {
+          ...point,
+          normalizedRadius: Math.hypot(normalizedX, normalizedY),
+          angleRadians,
+          angularSector: Math.floor(((angleRadians + Math.PI) / (2 * Math.PI)) * 20) % 20,
+        };
+      })
+      // The expected double band lies at the geometry envelope. Exclude farther accent pixels before
+      // the radial search so a coloured surround cannot dominate the work or the candidate score.
+      .filter((point) => point.normalizedRadius <= 1.12)
+  );
+}
+
+function findTwoColorBullCenter(points: readonly PolarAccentPoint[]): ImagePoint | null {
+  // The outer bull is only about 9% of the double radius. Leave generous room for an initially
+  // imperfect ring center, while remaining far inside the treble band and any surrounding branding.
+  const localPoints = points.filter((point) => point.normalizedRadius <= 0.2);
+  const redPoints = localPoints.filter((point) => point.color === 'red');
+  const greenPoints = localPoints.filter((point) => point.color === 'green');
+  if (localPoints.length < 12 || redPoints.length < 3 || greenPoints.length < 3) return null;
+  return meanPoint(localPoints);
+}
+
 function findStandardRingPair(points: readonly PolarAccentPoint[]): StandardRingPair | null {
   let best: StandardRingPair | null = null;
   for (
@@ -367,6 +442,12 @@ function findStandardRingPair(points: readonly PolarAccentPoint[]): StandardRing
       gap.points.length / Math.max(1, Math.min(outer.points.length, inner.points.length));
     if (gapRatio > 0.48) continue;
 
+    // Printed red branding can be close to the double wire. A real board has an alternating
+    // red/green harmonic around both bands; decorative text may have both hues in aggregate but
+    // cannot usually reproduce the same 20-sector rhythm in the treble and double rings.
+    const colorPhaseAgreement = alternatingPhaseAgreement(outer, inner);
+    if (colorPhaseAgreement < 0.42) continue;
+
     const outerColorScore = Math.min(outer.redAngularCoverage, outer.greenAngularCoverage) / 10;
     const innerColorScore = Math.min(inner.redAngularCoverage, inner.greenAngularCoverage) / 10;
     const angularScore = (outer.angularCoverage + inner.angularCoverage) / 40;
@@ -378,15 +459,18 @@ function findStandardRingPair(points: readonly PolarAccentPoint[]): StandardRing
       0,
       1,
     );
+    const alternatingScore = (outer.alternatingColorStrength + inner.alternatingColorStrength) / 2;
     // Prefer the outer edge when adjacent samples are otherwise equally strong. This keeps the
     // inferred guide aligned with the outside of the double-color band rather than its inner wire.
     const edgePreference = clamp((outerRadius - 0.3) / 0.8, 0, 1);
     const patternScore = clamp(
-      angularScore * 0.38 +
-        ((outerColorScore + innerColorScore) / 2) * 0.26 +
-        gapScore * 0.18 +
-        signalScore * 0.14 +
-        edgePreference * 0.04,
+      angularScore * 0.29 +
+        ((outerColorScore + innerColorScore) / 2) * 0.21 +
+        gapScore * 0.15 +
+        signalScore * 0.11 +
+        alternatingScore * 0.17 +
+        colorPhaseAgreement * 0.05 +
+        edgePreference * 0.02,
       0,
       1,
     );
@@ -395,7 +479,15 @@ function findStandardRingPair(points: readonly PolarAccentPoint[]): StandardRing
       patternScore > best.patternScore + 0.0001 ||
       (Math.abs(patternScore - best.patternScore) <= 0.0001 && outerRadius > best.outerRadius)
     ) {
-      best = { outerRadius, innerRadius, outer, inner, gap, patternScore };
+      best = {
+        outerRadius,
+        innerRadius,
+        outer,
+        inner,
+        gap,
+        colorPhaseAgreement,
+        patternScore,
+      };
     }
   }
   return best;
@@ -411,9 +503,20 @@ function hasRepeatedBoardColors(band: RadialBandEvidence): boolean {
     band.greenAngularCoverage >= 4 &&
     band.points.length >= 36 &&
     // A red surround can share an ellipse with a board. Alternating scoring bands have meaningful
-    // samples of both colors, while a surround adds one color across every sector.
-    colorBalance >= 0.2
+    // samples of both colors, while a surround adds one color across every sector. The harmonic
+    // also rejects one-color logos that happen to sit near a plausible ellipse.
+    colorBalance >= 0.2 &&
+    band.alternatingColorStrength >= 0.16
   );
+}
+
+function alternatingPhaseAgreement(first: RadialBandEvidence, second: RadialBandEvidence): number {
+  if (first.alternatingColorStrength < 0.0001 || second.alternatingColorStrength < 0.0001) {
+    return 0;
+  }
+  // Some board makers reverse the red/green assignment between rings. Treat equal and inverse
+  // phases as consistent, while rejecting unrelated logo colors or a single accidental arc.
+  return Math.abs(Math.cos(first.colorPhaseRadians - second.colorPhaseRadians));
 }
 
 function evaluateRadialBand(
@@ -427,10 +530,17 @@ function evaluateRadialBand(
   const greenSectors = new Set<number>();
   let redPointCount = 0;
   let greenPointCount = 0;
+  let alternatingCosine = 0;
+  let alternatingSine = 0;
   for (const point of points) {
     if (Math.abs(point.normalizedRadius - targetRadius) > halfWidth) continue;
     selected.push(point);
     sectors.add(point.angularSector);
+    const colorSign = point.color === 'red' ? 1 : -1;
+    // Red/green scoring beds alternate twenty times around the board. A tenth angular harmonic
+    // captures that structure without assuming where sector boundaries land in a camera frame.
+    alternatingCosine += colorSign * Math.cos(point.angleRadians * 10);
+    alternatingSine += colorSign * Math.sin(point.angleRadians * 10);
     if (point.color === 'red') {
       redSectors.add(point.angularSector);
       redPointCount += 1;
@@ -439,6 +549,7 @@ function evaluateRadialBand(
       greenPointCount += 1;
     }
   }
+  const alternatingMagnitude = Math.hypot(alternatingCosine, alternatingSine);
   return {
     points: selected,
     redPointCount,
@@ -446,6 +557,8 @@ function evaluateRadialBand(
     angularCoverage: sectors.size,
     redAngularCoverage: redSectors.size,
     greenAngularCoverage: greenSectors.size,
+    alternatingColorStrength: alternatingMagnitude / Math.max(1, selected.length),
+    colorPhaseRadians: Math.atan2(alternatingSine, alternatingCosine),
   };
 }
 
@@ -454,14 +567,15 @@ function geometryPointsForColors(
   redPixelCount: number,
   greenPixelCount: number,
 ): readonly AccentPoint[] {
-  // Surfaces/surrounds are commonly a single saturated color. Let the less common scoring-band
-  // color define the broad geometry when one color is more than 1.5× as prevalent; the later
-  // radial-pair check still requires both colors around both scoring bands.
-  if (redPixelCount > greenPixelCount * 1.5) {
+  // Surfaces/surrounds and printed board branding are commonly one saturated color. A genuine
+  // double/treble palette has similar red/green area, so let the less common color define broad
+  // geometry as soon as one color is moderately more prevalent; the later radial-pair check still
+  // requires both colors around both scoring bands.
+  if (redPixelCount > greenPixelCount * 1.18) {
     const greenPoints = points.filter((point) => point.color === 'green');
     if (greenPoints.length >= 24) return greenPoints;
   }
-  if (greenPixelCount > redPixelCount * 1.5) {
+  if (greenPixelCount > redPixelCount * 1.18) {
     const redPoints = points.filter((point) => point.color === 'red');
     if (redPoints.length >= 24) return redPoints;
   }

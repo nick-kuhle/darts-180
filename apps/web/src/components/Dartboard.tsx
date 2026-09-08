@@ -2,6 +2,8 @@ import type { DartZone } from '@darts-180/contracts';
 import { decodeBoardPoint, STANDARD_SEGMENT_ORDER } from '@darts-180/rules';
 import type { PointerEvent } from 'react';
 
+import { conventionalSegmentAppearance } from '../lib/boardAppearance';
+
 const VIEWBOX_SIZE = 500;
 const CENTER = VIEWBOX_SIZE / 2;
 const SCALE = 1.18;
@@ -59,9 +61,7 @@ export function Dartboard({ markers, onScore }: DartboardProps) {
         />
 
         {STANDARD_SEGMENT_ORDER.map((segment, index) => {
-          const primary = index % 2 === 0;
-          const singleColor = primary ? '#e6d6b8' : '#1f2927';
-          const accentColor = primary ? '#d6463d' : '#1b9568';
+          const { singleColor, accentColor } = conventionalSegmentAppearance(index);
           const start = index * 18 - 9;
           const end = index * 18 + 9;
           return (

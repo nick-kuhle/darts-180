@@ -75,6 +75,8 @@ export interface DifferenceAnalysis {
   differenceThreshold: number;
   changedPixels: number;
   changedFraction: number;
+  /** Bounded integer frame translation applied before differencing to absorb small mount vibration. */
+  alignmentOffset: ImagePoint;
   shapes: readonly DartShape[];
   candidates: readonly DartTipCandidate[];
 }
@@ -91,6 +93,7 @@ export interface DifferenceOptions {
 const STANDARD_DOUBLE_DIAMETER_MM = BOARD_RADII_MM.doubleOuter * 2;
 const CARDINAL_ANCHOR_SEPARATION_MM = 332;
 const MAX_CHANGED_FRACTION = 0.12;
+const NO_FRAME_TRANSLATION: Readonly<ImagePoint> = { x: 0, y: 0 };
 
 /**
  * Produces transparent setup feedback from four manually clicked cardinal double beds:
@@ -250,6 +253,7 @@ export function analyzeDartDifference(
     differenceThreshold: 0,
     changedPixels: 0,
     changedFraction: 0,
+    alignmentOffset: NO_FRAME_TRANSLATION,
     shapes: [],
     candidates: [],
   });
@@ -268,8 +272,15 @@ export function analyzeDartDifference(
   }
 
   const { width, height } = current;
-  const adjustments = estimateChannelAdjustments(reference, current);
-  const adaptiveNoise = estimateAdaptiveNoise(reference, current, adjustments);
+  const preliminaryAdjustments = estimateChannelAdjustments(reference, current);
+  const alignmentOffset = estimateFrameTranslation(
+    reference,
+    current,
+    homography,
+    preliminaryAdjustments,
+  );
+  const adjustments = estimateChannelAdjustments(reference, current, alignmentOffset);
+  const adaptiveNoise = estimateAdaptiveNoise(reference, current, adjustments, alignmentOffset);
   // A board-centreline camera often sees a dart flight as a compact local occlusion instead of a
   // long shaft. Keep the floor low enough to preserve that subtle stable change, then let adaptive
   // noise, shape checks, and the two-frame stability gate reject ordinary video noise.
@@ -286,25 +297,24 @@ export function analyzeDartDifference(
 
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
+      const referenceX = x - alignmentOffset.x;
+      const referenceY = y - alignmentOffset.y;
+      if (referenceX < 1 || referenceX >= width - 1 || referenceY < 1 || referenceY >= height - 1) {
+        continue;
+      }
       const pixel = y * width + x;
-      const offset = pixel * 4;
-      const difference =
-        (Math.abs(
-          current.rgba[offset]! -
-            (reference.rgba[offset]! * adjustments.r.gain + adjustments.r.offset),
-        ) +
-          Math.abs(
-            current.rgba[offset + 1]! -
-              (reference.rgba[offset + 1]! * adjustments.g.gain + adjustments.g.offset),
-          ) +
-          Math.abs(
-            current.rgba[offset + 2]! -
-              (reference.rgba[offset + 2]! * adjustments.b.gain + adjustments.b.offset),
-          )) /
-        3;
+      const currentOffset = pixel * 4;
+      const referenceOffset = (referenceY * width + referenceX) * 4;
+      const difference = adjustedPixelDifference(
+        reference,
+        current,
+        referenceOffset,
+        currentOffset,
+        adjustments,
+      );
       if (difference < differenceThreshold) continue;
 
-      const boardPoint = mapImagePointToBoard({ x, y }, homography);
+      const boardPoint = mapAlignedImagePointToBoard({ x, y }, homography, alignmentOffset);
       if (boardPoint === null || Math.hypot(boardPoint.xMm, boardPoint.yMm) > acceptedRadiusMm) {
         continue;
       }
@@ -322,6 +332,7 @@ export function analyzeDartDifference(
       differenceThreshold,
       changedPixels,
       changedFraction,
+      alignmentOffset,
       shapes: [],
       candidates: [],
     };
@@ -334,6 +345,7 @@ export function analyzeDartDifference(
       differenceThreshold,
       changedPixels,
       changedFraction,
+      alignmentOffset,
       shapes: [],
       candidates: [],
     };
@@ -350,7 +362,15 @@ export function analyzeDartDifference(
   );
   const shapes = components
     .map((component, index) =>
-      buildDartShape(component, index, width, homography, minimumLength, boardDiameterPixels),
+      buildDartShape(
+        component,
+        index,
+        width,
+        homography,
+        alignmentOffset,
+        minimumLength,
+        boardDiameterPixels,
+      ),
     )
     .filter((shape): shape is DartShape => shape !== null)
     .filter(
@@ -369,13 +389,14 @@ export function analyzeDartDifference(
       differenceThreshold,
       changedPixels,
       changedFraction,
+      alignmentOffset,
       shapes: [],
       candidates: [],
     };
   }
 
   const candidates = deduplicateCandidates(
-    shapes.flatMap((shape) => candidatesForShape(shape, homography)),
+    shapes.flatMap((shape) => candidatesForShape(shape, homography, alignmentOffset)),
   ).slice(0, 4);
   if (candidates.length === 0) {
     return {
@@ -385,6 +406,7 @@ export function analyzeDartDifference(
       differenceThreshold,
       changedPixels,
       changedFraction,
+      alignmentOffset,
       shapes,
       candidates: [],
     };
@@ -397,6 +419,7 @@ export function analyzeDartDifference(
     differenceThreshold,
     changedPixels,
     changedFraction,
+    alignmentOffset,
     shapes,
     candidates,
   };
@@ -429,6 +452,20 @@ export function frameFromImageData(imageData: ImageData, capturedAtMs = Date.now
     rgba: imageData.data,
     capturedAtMs,
   };
+}
+
+function mapAlignedImagePointToBoard(
+  imagePoint: ImagePoint,
+  homography: Homography,
+  alignmentOffset: Readonly<ImagePoint> = NO_FRAME_TRANSLATION,
+): CanonicalPoint | null {
+  return mapImagePointToBoard(
+    {
+      x: imagePoint.x - alignmentOffset.x,
+      y: imagePoint.y - alignmentOffset.y,
+    },
+    homography,
+  );
 }
 
 function isFrameUsable(frame: CameraFrame): boolean {
@@ -502,9 +539,120 @@ type ChannelAdjustments = Readonly<{
   b: ChannelAdjustment;
 }>;
 
+function adjustedPixelDifference(
+  reference: CameraFrame,
+  current: CameraFrame,
+  referenceOffset: number,
+  currentOffset: number,
+  adjustments: ChannelAdjustments,
+): number {
+  return (
+    (Math.abs(
+      current.rgba[currentOffset]! -
+        (reference.rgba[referenceOffset]! * adjustments.r.gain + adjustments.r.offset),
+    ) +
+      Math.abs(
+        current.rgba[currentOffset + 1]! -
+          (reference.rgba[referenceOffset + 1]! * adjustments.g.gain + adjustments.g.offset),
+      ) +
+      Math.abs(
+        current.rgba[currentOffset + 2]! -
+          (reference.rgba[referenceOffset + 2]! * adjustments.b.gain + adjustments.b.offset),
+      )) /
+    3
+  );
+}
+
+/**
+ * Absorbs a few pixels of camera/cabinet vibration before declaring a broad frame change. This is
+ * deliberately a bounded integer translation—not general motion compensation—so a hand, large
+ * occlusion, or an actual reframing remains a safety hold instead of being normalized away.
+ */
+function estimateFrameTranslation(
+  reference: CameraFrame,
+  current: CameraFrame,
+  homography: Homography,
+  adjustments: ChannelAdjustments,
+): Readonly<ImagePoint> {
+  const maximumShift = Math.min(
+    8,
+    Math.max(2, Math.round(Math.min(reference.width, reference.height) * 0.012)),
+  );
+  // Use an odd sparse interval so it does not repeatedly alias the regular 8 px/score-wire-like
+  // texture that is common in a board view.
+  const nominalStep = Math.max(11, Math.round(Math.min(reference.width, reference.height) / 57));
+  const step = nominalStep % 2 === 0 ? nominalStep + 1 : nominalStep;
+  const samples: ImagePoint[] = [];
+  for (let y = maximumShift + 1; y < current.height - maximumShift - 1; y += step) {
+    for (let x = maximumShift + 1; x < current.width - maximumShift - 1; x += step) {
+      const boardPoint = mapImagePointToBoard({ x, y }, homography);
+      // Sample the stable board face rather than the room or space occupied by a protruding flight.
+      if (
+        boardPoint !== null &&
+        Math.hypot(boardPoint.xMm, boardPoint.yMm) <= BOARD_RADII_MM.doubleOuter - 8
+      ) {
+        samples.push({ x, y });
+      }
+    }
+  }
+  if (samples.length < 40) return NO_FRAME_TRANSLATION;
+
+  const scoreOffset = (offsetX: number, offsetY: number) => {
+    let total = 0;
+    let count = 0;
+    for (const sample of samples) {
+      const referenceX = sample.x - offsetX;
+      const referenceY = sample.y - offsetY;
+      if (
+        referenceX < 1 ||
+        referenceX >= reference.width - 1 ||
+        referenceY < 1 ||
+        referenceY >= reference.height - 1
+      ) {
+        continue;
+      }
+      const currentOffset = (sample.y * current.width + sample.x) * 4;
+      const referenceOffset = (referenceY * reference.width + referenceX) * 4;
+      // Cap the contribution of a dart/flight or a local glare change so normal board texture
+      // determines the alignment.
+      total += Math.min(
+        52,
+        adjustedPixelDifference(reference, current, referenceOffset, currentOffset, adjustments),
+      );
+      count += 1;
+    }
+    return count === 0 ? Number.POSITIVE_INFINITY : total / count;
+  };
+
+  const stationaryScore = scoreOffset(0, 0);
+  let bestOffset = NO_FRAME_TRANSLATION;
+  let bestScore = stationaryScore;
+  for (let offsetY = -maximumShift; offsetY <= maximumShift; offsetY += 1) {
+    for (let offsetX = -maximumShift; offsetX <= maximumShift; offsetX += 1) {
+      if (offsetX === 0 && offsetY === 0) continue;
+      const score = scoreOffset(offsetX, offsetY);
+      const shiftLength = Math.hypot(offsetX, offsetY);
+      const bestShiftLength = Math.hypot(bestOffset.x, bestOffset.y);
+      if (
+        score < bestScore - 0.0001 ||
+        (Math.abs(score - bestScore) <= 0.0001 && shiftLength < bestShiftLength)
+      ) {
+        bestScore = score;
+        bestOffset = { x: offsetX, y: offsetY };
+      }
+    }
+  }
+
+  const improvement = (stationaryScore - bestScore) / Math.max(1, stationaryScore);
+  return improvement >= 0.18 && stationaryScore - bestScore >= 1.5
+    ? bestOffset
+    : NO_FRAME_TRANSLATION;
+}
+
 function estimateChannelAdjustments(
   reference: CameraFrame,
   current: CameraFrame,
+  alignmentOffset: Readonly<ImagePoint> = NO_FRAME_TRANSLATION,
 ): ChannelAdjustments {
   let referenceR = 0;
   let referenceG = 0;
@@ -522,13 +670,24 @@ function estimateChannelAdjustments(
   const step = Math.max(4, Math.round(Math.min(reference.width, reference.height) / 80));
   for (let y = 1; y < reference.height - 1; y += step) {
     for (let x = 1; x < reference.width - 1; x += step) {
-      const offset = (y * reference.width + x) * 4;
-      const referenceRed = reference.rgba[offset]!;
-      const referenceGreen = reference.rgba[offset + 1]!;
-      const referenceBlue = reference.rgba[offset + 2]!;
-      const currentRed = current.rgba[offset]!;
-      const currentGreen = current.rgba[offset + 1]!;
-      const currentBlue = current.rgba[offset + 2]!;
+      const referenceX = x - alignmentOffset.x;
+      const referenceY = y - alignmentOffset.y;
+      if (
+        referenceX < 1 ||
+        referenceX >= reference.width - 1 ||
+        referenceY < 1 ||
+        referenceY >= reference.height - 1
+      ) {
+        continue;
+      }
+      const referenceOffset = (referenceY * reference.width + referenceX) * 4;
+      const currentOffset = (y * current.width + x) * 4;
+      const referenceRed = reference.rgba[referenceOffset]!;
+      const referenceGreen = reference.rgba[referenceOffset + 1]!;
+      const referenceBlue = reference.rgba[referenceOffset + 2]!;
+      const currentRed = current.rgba[currentOffset]!;
+      const currentGreen = current.rgba[currentOffset + 1]!;
+      const currentBlue = current.rgba[currentOffset + 2]!;
       referenceR += referenceRed;
       referenceG += referenceGreen;
       referenceB += referenceBlue;
@@ -573,26 +732,26 @@ function estimateAdaptiveNoise(
   reference: CameraFrame,
   current: CameraFrame,
   adjustments: ChannelAdjustments,
+  alignmentOffset: Readonly<ImagePoint>,
 ): number {
   const values: number[] = [];
   const step = Math.max(6, Math.round(Math.min(reference.width, reference.height) / 70));
   for (let y = 1; y < reference.height - 1; y += step) {
     for (let x = 1; x < reference.width - 1; x += step) {
-      const offset = (y * reference.width + x) * 4;
+      const referenceX = x - alignmentOffset.x;
+      const referenceY = y - alignmentOffset.y;
+      if (
+        referenceX < 1 ||
+        referenceX >= reference.width - 1 ||
+        referenceY < 1 ||
+        referenceY >= reference.height - 1
+      ) {
+        continue;
+      }
+      const referenceOffset = (referenceY * reference.width + referenceX) * 4;
+      const currentOffset = (y * current.width + x) * 4;
       values.push(
-        (Math.abs(
-          current.rgba[offset]! -
-            (reference.rgba[offset]! * adjustments.r.gain + adjustments.r.offset),
-        ) +
-          Math.abs(
-            current.rgba[offset + 1]! -
-              (reference.rgba[offset + 1]! * adjustments.g.gain + adjustments.g.offset),
-          ) +
-          Math.abs(
-            current.rgba[offset + 2]! -
-              (reference.rgba[offset + 2]! * adjustments.b.gain + adjustments.b.offset),
-          )) /
-          3,
+        adjustedPixelDifference(reference, current, referenceOffset, currentOffset, adjustments),
       );
     }
   }
@@ -672,6 +831,7 @@ function buildDartShape(
   index: number,
   width: number,
   homography: Homography,
+  alignmentOffset: Readonly<ImagePoint>,
   minimumLength: number,
   boardDiameterPixels: number,
 ): DartShape | null {
@@ -746,7 +906,9 @@ function buildDartShape(
     minimumProjection,
     maximumProjection,
   );
-  const endpointMaps = endpoints.map((endpoint) => mapImagePointToBoard(endpoint, homography));
+  const endpointMaps = endpoints.map((endpoint) =>
+    mapAlignedImagePointToBoard(endpoint, homography, alignmentOffset),
+  );
   if (endpointMaps.every((point) => point === null)) return null;
   const lengthScore = clamp((lineLengthPixels / minimumLength - 1) / 2.5, 0, 1);
   const aspectScore = clamp((aspectRatio - 1.8) / 4, 0, 1);
@@ -819,13 +981,15 @@ function measureEndpointWidths(
   ) as [number, number];
 }
 
-function candidatesForShape(shape: DartShape, homography: Homography): DartTipCandidate[] {
+function candidatesForShape(
+  shape: DartShape,
+  homography: Homography,
+  alignmentOffset: Readonly<ImagePoint>,
+): DartTipCandidate[] {
   if (shape.kind === 'compact') {
-    const boardPoint = mapImagePointToBoard(shape.center, homography);
-    if (
-      boardPoint === null ||
-      Math.hypot(boardPoint.xMm, boardPoint.yMm) > BOARD_RADII_MM.doubleOuter + 12
-    ) {
+    const boardPoint = mapAlignedImagePointToBoard(shape.center, homography, alignmentOffset);
+    const zone = boardPoint === null ? null : decodeBoardPoint(boardPoint);
+    if (boardPoint === null || zone === null || zone.ring === 'MISS') {
       return [];
     }
     // The actual tip may be hidden by a compact flight in a near-centreline view. The centroid is
@@ -838,7 +1002,7 @@ function candidatesForShape(shape: DartShape, homography: Homography): DartTipCa
         endpoint: 'center',
         imagePoint: shape.center,
         boardPoint,
-        zone: decodeBoardPoint(boardPoint),
+        zone,
         wireMarginMm: nearestWireMarginMm(boardPoint),
         tipLikelihood: 0.36,
         confidence: clamp(shape.confidence * 0.72, 0.12, 0.44),
@@ -847,19 +1011,21 @@ function candidatesForShape(shape: DartShape, homography: Homography): DartTipCa
     ];
   }
 
-  const mappedEndpoints = shape.endpoints.map((point) => mapImagePointToBoard(point, homography));
-  const endpointOnBoard = mappedEndpoints.map(
-    (point) => point !== null && Math.hypot(point.xMm, point.yMm) <= BOARD_RADII_MM.doubleOuter + 3,
+  const mappedEndpoints = shape.endpoints.map((point) =>
+    mapAlignedImagePointToBoard(point, homography, alignmentOffset),
   );
+  const endpointZones = mappedEndpoints.map((point) =>
+    point === null ? null : decodeBoardPoint(point),
+  );
+  // A protruding flight can legitimately lie outside the double wire while the dart point is on
+  // the board. It must never be recorded as an automatic MISS: retain only endpoints that map to a
+  // real scoring bed and hold the change for review when no entry point can be established.
+  const endpointOnBoard = endpointZones.map((zone) => zone !== null && zone.ring !== 'MISS');
   const onlyEndpointOnBoard = endpointOnBoard.filter(Boolean).length === 1;
 
   return mappedEndpoints.flatMap((boardPoint, index) => {
-    if (
-      boardPoint === null ||
-      Math.hypot(boardPoint.xMm, boardPoint.yMm) > BOARD_RADII_MM.doubleOuter + 12
-    ) {
-      return [];
-    }
+    const zone = endpointZones[index] ?? null;
+    if (boardPoint === null || zone === null || zone.ring === 'MISS') return [];
     const directionEvidence = onlyEndpointOnBoard ? 'only-endpoint-on-board' : 'ambiguous-endpoint';
     const endpointWidth = shape.endpointWidths[index] ?? 0;
     const oppositeEndpointWidth = shape.endpointWidths[index === 0 ? 1 : 0] ?? 0;
@@ -887,7 +1053,7 @@ function candidatesForShape(shape: DartShape, homography: Homography): DartTipCa
         endpoint: index === 0 ? 'A' : 'B',
         imagePoint: shape.endpoints[index]!,
         boardPoint,
-        zone: decodeBoardPoint(boardPoint),
+        zone,
         wireMarginMm: nearestWireMarginMm(boardPoint),
         tipLikelihood,
         confidence,
