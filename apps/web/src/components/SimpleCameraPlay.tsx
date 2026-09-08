@@ -27,7 +27,10 @@ import {
   type GuidedCalibrationQuality,
 } from '../lib/cameraScoring';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
-import { advanceClearBoardBaseline } from '../lib/clearBoardBaseline';
+import {
+  resolveStartPlayReferenceCapture,
+  START_PLAY_REFERENCE_SETTLE_MS,
+} from '../lib/startPlayReferenceCapture';
 import type { CameraTurnProposal } from '../lib/cameraProposal';
 import {
   BOARD_FIT_CANONICAL_ANCHORS,
@@ -55,7 +58,7 @@ type CameraPhase =
   | 'finding-board'
   | 'manual-fit'
   | 'ready-to-play'
-  | 'arming-baseline'
+  | 'capturing-reference'
   | 'watching'
   | 'reviewing-candidate'
   | 'turn-ready'
@@ -135,11 +138,8 @@ export function SimpleCameraPlay({
     count: number;
     misses: number;
   } | null>(null);
-  const baselineStabilityRef = useRef<{
-    frame: CameraFrame;
-    stableComparisons: number;
-    broadMotionComparisons: number;
-  } | null>(null);
+  const referenceCaptureTimerRef = useRef<number | null>(null);
+  const referenceCaptureGenerationRef = useRef(0);
   const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
   const recordingRef = useRef(false);
 
@@ -186,10 +186,18 @@ export function SimpleCameraPlay({
     phase === 'ready-to-play' &&
     !gameComplete;
   const isWatching = phase === 'watching';
-  const isArmingBaseline = phase === 'arming-baseline';
+  const isCapturingReference = phase === 'capturing-reference';
   const isReviewingCandidate = phase === 'reviewing-candidate';
-  const isLiveScoring = isWatching || isArmingBaseline;
-  const isDetectorStateVisible = isLiveScoring || isReviewingCandidate;
+  const isLiveScoring = isWatching || isCapturingReference;
+  const isDetectorStateVisible = isWatching || isReviewingCandidate;
+
+  const clearReferenceCapture = useCallback(() => {
+    referenceCaptureGenerationRef.current += 1;
+    if (referenceCaptureTimerRef.current !== null) {
+      window.clearTimeout(referenceCaptureTimerRef.current);
+      referenceCaptureTimerRef.current = null;
+    }
+  }, []);
 
   const stopCamera = useCallback(() => {
     if (renderFrameRef.current !== null) {
@@ -201,8 +209,8 @@ export function SimpleCameraPlay({
     if (videoRef.current !== null) videoRef.current.srcObject = null;
     activePointersRef.current.clear();
     gestureRef.current = null;
+    clearReferenceCapture();
     stabilityRef.current = null;
-    baselineStabilityRef.current = null;
     autoFitStabilityRef.current = null;
     recordingRef.current = false;
     setCameraActive(false);
@@ -213,7 +221,7 @@ export function SimpleCameraPlay({
     setAutomaticFit(null);
     setHeldCandidate(null);
     setPhase('finding-board');
-  }, []);
+  }, [clearReferenceCapture]);
 
   useEffect(() => stopCamera, [stopCamera]);
 
@@ -346,6 +354,7 @@ export function SimpleCameraPlay({
   }, [cameraActive, guideLocked, lastRecorded?.imagePoint, lastRecorded?.zone, workingDimensions]);
 
   const restartAutomaticBoardFind = () => {
+    clearReferenceCapture();
     if (!cameraActive) {
       setLiveMessage(
         'Start the rear camera first, then Darts 180 can look for the board automatically.',
@@ -362,7 +371,6 @@ export function SimpleCameraPlay({
     setLastRecorded(null);
     setPhase('finding-board');
     stabilityRef.current = null;
-    baselineStabilityRef.current = null;
     autoFitStabilityRef.current = null;
     setLiveMessage(
       'Looking for the board’s red and green scoring colors. Keep the full board in view and the physical 20 at the top of the camera image.',
@@ -397,7 +405,7 @@ export function SimpleCameraPlay({
       autoFitStabilityRef.current = { fit: result.fit, count };
       setFit(result.fit);
       if (count < 2) {
-        setLiveMessage('Board colors found. Checking that the automatic guide is steady…');
+        setLiveMessage('Board colors found. Confirming the board in the live view…');
         return;
       }
 
@@ -436,6 +444,7 @@ export function SimpleCameraPlay({
   }, [cameraActive, captureFrame, gameComplete, phase]);
 
   const startOptionalManualGuide = () => {
+    clearReferenceCapture();
     const frame = captureFrame();
     if (frame === null) {
       setLiveMessage(
@@ -488,38 +497,65 @@ export function SimpleCameraPlay({
     setLiveMessage('Optional guide recovery is ready. With the board clear, tap Start Play.');
   };
 
-  const armClearBoardBaseline = () => {
+  const startLiveReferenceCapture = () => {
     if (homography === null || quality?.pass !== true) {
       setLiveMessage(
         'I am still finding a usable board. Keep the board visible, or use optional recovery only if auto-find cannot recover.',
       );
       return;
     }
-    const frame = captureFrame();
-    if (frame === null) {
-      setLiveMessage('Waiting for a complete live camera frame before starting play.');
-      return;
-    }
-    // Do not turn one instantaneous phone frame into the baseline. Let camera focus, exposure, and
-    // optical stabilization settle across two local comparisons while the board is still clear.
-    baselineStabilityRef.current = {
-      frame,
-      stableComparisons: 0,
-      broadMotionComparisons: 0,
-    };
+
+    clearReferenceCapture();
+    const generation = referenceCaptureGenerationRef.current;
     setReference(null);
     setAnalysis(null);
     setHeldCandidate(null);
     setLastRecorded(null);
     stabilityRef.current = null;
-    setPhase('arming-baseline');
-    setLiveMessage(
-      'Checking that the clear board and camera are steady before watching your dart…',
+    setPhase('capturing-reference');
+    setLiveMessage('Starting live play. Keep the board clear for a brief moment…');
+
+    let missingFrameRetries = 0;
+    const captureFreshReference = () => {
+      if (generation !== referenceCaptureGenerationRef.current) return;
+      referenceCaptureTimerRef.current = null;
+      const decision = resolveStartPlayReferenceCapture(captureFrame(), {
+        retryCount: missingFrameRetries,
+      });
+      if (decision.kind === 'retry') {
+        missingFrameRetries += 1;
+        setLiveMessage('Waiting for a complete camera frame before starting live play…');
+        referenceCaptureTimerRef.current = window.setTimeout(
+          captureFreshReference,
+          decision.delayMs,
+        );
+        return;
+      }
+      if (decision.kind === 'camera-frame-unavailable') {
+        setPhase('ready-to-play');
+        setLiveMessage(
+          'The live camera frame was not ready. Wait for the preview, then tap Start Play once more.',
+        );
+        return;
+      }
+
+      // This is intentionally a bounded timed handoff, not a second dart-detection state machine.
+      // Board finding has already required two comparable automatic fits. Capturing the fresh frame
+      // here avoids treating ordinary video noise, a removed dart, or a transient hand as a reason
+      // to trap the player in setup.
+      setReference(decision.reference);
+      setAnalysis(null);
+      setPhase('watching');
+      setLiveMessage('Watching locally. Throw one dart, then step clear while it settles.');
+    };
+
+    referenceCaptureTimerRef.current = window.setTimeout(
+      captureFreshReference,
+      START_PLAY_REFERENCE_SETTLE_MS,
     );
   };
-
   const startPlay = () => {
-    armClearBoardBaseline();
+    startLiveReferenceCapture();
   };
 
   const recordCandidate = useCallback(
@@ -537,7 +573,7 @@ export function SimpleCameraPlay({
       });
       if (slot === null) return null;
 
-      // Carry a clearly accepted bounded board-relative similarity correction into the next baseline.
+      // Carry a clearly accepted bounded board-relative similarity correction into the next local reference.
       // Without this, a dart after mobile optical stabilization could be decoded against a stale
       // pre-impact guide even when its own local change was correctly aligned.
       const frameAlignment = candidateAnalysis.alignment;
@@ -580,160 +616,6 @@ export function SimpleCameraPlay({
     },
     [fit, onAddProposal],
   );
-
-  const refreshAutomaticBoardMapAfterMotion = useCallback(
-    (frame: CameraFrame): boolean => {
-      // Optional guide recovery is deliberately not overwritten by a one-frame automatic refit.
-      // Its owner can explicitly use Find Board Again if the phone has actually been repositioned.
-      if (automaticFit === null) return false;
-
-      const refreshedFit = detectBoardFitFromColors(frame);
-      setAutomaticFit(refreshedFit);
-      if (refreshedFit.fit === null) {
-        setFit(null);
-        fitRef.current = null;
-        setHomography(null);
-        setQuality(null);
-        setReference(null);
-        baselineStabilityRef.current = null;
-        autoFitStabilityRef.current = null;
-        setPhase('finding-board');
-        setLiveMessage(
-          'The view kept moving while I prepared the baseline. Finding the board again automatically…',
-        );
-        return true;
-      }
-
-      const refreshedHomography = solveImageToBoardHomography(
-        refreshedFit.fit,
-        BOARD_FIT_CANONICAL_ANCHORS,
-      );
-      const refreshedQuality = assessAutomaticBoardFitQuality(refreshedFit.fit, frame);
-      if (refreshedHomography === null || !refreshedQuality.pass) {
-        setFit(null);
-        fitRef.current = null;
-        setHomography(null);
-        setQuality(null);
-        setReference(null);
-        baselineStabilityRef.current = null;
-        autoFitStabilityRef.current = null;
-        setPhase('finding-board');
-        setLiveMessage(
-          refreshedQuality.blockers[0] ??
-            'The view changed while I prepared the baseline. Finding the board again automatically…',
-        );
-        return true;
-      }
-
-      // The color fit maps the *current* camera pose, so the next two clear-frame checks no longer
-      // compare the newly settled phone image through a stale pre-settle board guide.
-      fitRef.current = refreshedFit.fit;
-      setFit(refreshedFit.fit);
-      setHomography(refreshedHomography);
-      setQuality(refreshedQuality);
-      setReference(null);
-      setAnalysis(null);
-      baselineStabilityRef.current = {
-        frame,
-        stableComparisons: 0,
-        broadMotionComparisons: 0,
-      };
-      setLiveMessage(
-        'The camera was still settling, so I refreshed the board map. Keep the board clear and still; I will arm automatically.',
-      );
-      return true;
-    },
-    [automaticFit],
-  );
-
-  useEffect(() => {
-    if (!isArmingBaseline || homography === null || quality?.pass !== true || gameComplete) {
-      return;
-    }
-    let cancelled = false;
-    const checkClearBoard = () => {
-      if (cancelled) return;
-      const baseline = baselineStabilityRef.current;
-      const frame = captureFrame();
-      if (baseline === null || frame === null) return;
-      const nextAnalysis = analyzeDartDifference(baseline.frame, frame, homography, {
-        boardDiameterPixels: quality.boardDiameterPixels,
-      });
-      if (cancelled) return;
-      setAnalysis(nextAnalysis);
-      const baselineAdvance = advanceClearBoardBaseline(
-        {
-          stableComparisons: baseline.stableComparisons,
-          broadMotionComparisons: baseline.broadMotionComparisons,
-        },
-        nextAnalysis.status,
-      );
-      baselineStabilityRef.current = { ...baseline, ...baselineAdvance.progress };
-
-      if (baselineAdvance.action === 'armed') {
-        // Keep the original reference whose board pose is paired with the current homography. A
-        // bounded alignment still handles harmless sub-pixel camera stabilization afterwards.
-        setReference(baseline.frame);
-        setAnalysis(null);
-        baselineStabilityRef.current = null;
-        setPhase('watching');
-        setLiveMessage('Watching locally. Throw one dart, then step clear while it settles.');
-        return;
-      }
-      if (nextAnalysis.status === 'no-change') {
-        setLiveMessage(
-          'Clear board looks steady. Holding one more local frame before play starts…',
-        );
-        return;
-      }
-
-      stabilityRef.current = null;
-      if (nextAnalysis.status === 'camera-moved-or-hand-present') {
-        if (baselineAdvance.action === 'refresh-automatic-board-map') {
-          if (refreshAutomaticBoardMapAfterMotion(frame)) return;
-          setLiveMessage(
-            'The camera is still moving relative to the optional guide. Keep the board clear and mount still, or tap Find Board Again to use automatic board finding.',
-          );
-          return;
-        }
-        setLiveMessage(
-          'I see broad motion while preparing the clear-board baseline. Do not throw yet; step clear and keep the mount still for another moment.',
-        );
-        return;
-      }
-      // Localized change must never become a fresh reference: a dart, a hand, or an incompatible
-      // frame stays held until the player clears/reframes it instead of being silently absorbed.
-      if (nextAnalysis.status === 'dart-candidate') {
-        setLiveMessage(
-          'A dart-like change appeared before live scoring armed. Remove every dart, then wait for the clear-board baseline before throwing.',
-        );
-        return;
-      }
-      if (nextAnalysis.status === 'incompatible-frame') {
-        setLiveMessage(
-          'Camera framing or resolution changed. Tap Find Board Again, wait for Board Found, then Start Play with an empty board.',
-        );
-        return;
-      }
-      setLiveMessage(
-        'The clear-board check found a local change. Remove every dart, step clear, and let the camera settle.',
-      );
-    };
-    checkClearBoard();
-    const interval = window.setInterval(checkClearBoard, LOCAL_ANALYSIS_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [
-    captureFrame,
-    gameComplete,
-    homography,
-    isArmingBaseline,
-    quality?.boardDiameterPixels,
-    refreshAutomaticBoardMapAfterMotion,
-    quality?.pass,
-  ]);
 
   useEffect(() => {
     if (
@@ -911,7 +793,7 @@ export function SimpleCameraPlay({
       restartAutomaticBoardFind();
       return;
     }
-    armClearBoardBaseline();
+    startLiveReferenceCapture();
   };
 
   const confirmTurn = () => {
@@ -919,8 +801,8 @@ export function SimpleCameraPlay({
     setAnalysis(null);
     setHeldCandidate(null);
     setReference(null);
+    clearReferenceCapture();
     stabilityRef.current = null;
-    baselineStabilityRef.current = null;
     setPhase('awaiting-clear');
     setLiveMessage(
       gameComplete
@@ -968,12 +850,7 @@ export function SimpleCameraPlay({
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (phase !== 'manual-fit' || fitRef.current === null) {
-      if (cameraActive && phase === 'ready-to-play') {
-        setLiveMessage('The board was found automatically. With an empty board, tap Start Play.');
-      }
-      return;
-    }
+    if (phase !== 'manual-fit' || fitRef.current === null) return;
     const point = pointForEvent(event);
     if (point === null) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1116,8 +993,8 @@ export function SimpleCameraPlay({
                       ? 'OPTIONAL GUIDE RECOVERY'
                       : phase === 'ready-to-play'
                         ? 'BOARD FOUND'
-                        : phase === 'arming-baseline'
-                          ? 'CHECKING CLEAR BOARD'
+                        : phase === 'capturing-reference'
+                          ? 'STARTING LIVE PLAY'
                           : phase === 'reviewing-candidate'
                             ? 'CAMERA SUGGESTION HELD'
                             : 'PLAYING LOCALLY'}
@@ -1131,8 +1008,8 @@ export function SimpleCameraPlay({
                       ? 'Only use this guide if auto-find cannot recover.'
                       : phase === 'ready-to-play'
                         ? 'Board found. Clear it, then start play.'
-                        : phase === 'arming-baseline'
-                          ? 'Checking that the clear board is steady.'
+                        : phase === 'capturing-reference'
+                          ? 'Starting live play.'
                           : phase === 'reviewing-candidate'
                             ? 'Check the held camera suggestion.'
                             : 'Watching for a settled dart.'}
@@ -1152,7 +1029,7 @@ export function SimpleCameraPlay({
                   ? 'Optional manual board guide. Drag to move, use two fingers to pinch or twist, and pull each edge handle to fit the board.'
                   : phase === 'finding-board'
                     ? 'Live camera. Darts 180 is automatically looking for the board colors.'
-                    : 'Live camera with an automatically found board guide.'
+                    : 'Live camera. Board found automatically.'
               }
               className="camera-play-canvas"
               onPointerCancel={endPointer}
@@ -1182,14 +1059,14 @@ export function SimpleCameraPlay({
               <div className="camera-play-gesture-chip locked">BOARD FOUND · 20 ↑ UPRIGHT</div>
             )}
             {cameraActive &&
-              (phase === 'arming-baseline' ||
+              (phase === 'capturing-reference' ||
                 phase === 'watching' ||
                 phase === 'reviewing-candidate' ||
                 phase === 'turn-ready' ||
                 phase === 'awaiting-clear') && (
                 <div className="camera-play-gesture-chip locked">
-                  {phase === 'arming-baseline'
-                    ? 'BOARD FOUND · CHECKING CLEAR BOARD'
+                  {phase === 'capturing-reference'
+                    ? 'STARTING LIVE PLAY'
                     : phase === 'reviewing-candidate'
                       ? 'CAMERA SUGGESTION · CHECK SCORE'
                       : 'BOARD FOUND · WATCHING LOCALLY'}
@@ -1276,8 +1153,8 @@ export function SimpleCameraPlay({
                       ? isReviewingCandidate
                         ? 'Check held camera suggestion'
                         : isLiveScoring
-                          ? isArmingBaseline
-                            ? 'Checking clear-board baseline'
+                          ? isCapturingReference
+                            ? 'Starting live play'
                             : 'Watching for a settled dart'
                           : 'Waiting to play'
                       : needsReview
@@ -1339,64 +1216,70 @@ export function SimpleCameraPlay({
             {turnCount === 0 ? 'REVIEW / ENTER SCORE' : 'REVIEW OR CORRECT SCORES'}
           </button>
 
-          {automaticFit !== null && phase !== 'manual-fit' && (
-            <p className={`camera-play-auto-state ${automaticFit.status}`}>
-              <strong>AUTO BOARD FIND</strong>
-              {automaticFit.message}
-              {automaticFit.fit !== null && (
-                <span>
-                  {Math.round(automaticFit.estimatedBoardDiameterPixels)} px board ·{' '}
-                  {automaticFit.outerAngularCoverage}/20 outer-band sectors ·{' '}
-                  {automaticFit.redPixelCount.toLocaleString()} red /{' '}
-                  {automaticFit.greenPixelCount.toLocaleString()} green samples ·{' '}
-                  {Math.round(automaticFit.outerAlternatingColorStrength * 100)}% alternating ·{' '}
-                  {Math.round(automaticFit.bandColorPhaseAgreement * 100)}% band agreement ·{' '}
-                  {Math.round(automaticFit.confidence * 100)}% color-pattern cue
-                </span>
-              )}
-            </p>
-          )}
+          {(automaticFit !== null ||
+            visibleQuality !== null ||
+            (analysis !== null && isDetectorStateVisible)) && (
+            <details className="camera-play-diagnostics">
+              <summary>CAMERA DIAGNOSTICS</summary>
+              <div className="camera-play-diagnostics-body">
+                {automaticFit !== null && phase !== 'manual-fit' && (
+                  <p className={`camera-play-auto-state ${automaticFit.status}`}>
+                    <strong>AUTO BOARD FIND</strong>
+                    {automaticFit.message}
+                    {automaticFit.fit !== null && (
+                      <span>
+                        {Math.round(automaticFit.estimatedBoardDiameterPixels)} px board ·{' '}
+                        {automaticFit.outerAngularCoverage}/20 outer-band sectors ·{' '}
+                        {automaticFit.redPixelCount.toLocaleString()} red /{' '}
+                        {automaticFit.greenPixelCount.toLocaleString()} green samples ·{' '}
+                        {Math.round(automaticFit.outerAlternatingColorStrength * 100)}% alternating
+                        · {Math.round(automaticFit.bandColorPhaseAgreement * 100)}% band agreement ·{' '}
+                        {Math.round(automaticFit.confidence * 100)}% color-pattern cue
+                      </span>
+                    )}
+                  </p>
+                )}
 
-          {visibleQuality !== null && (
-            <p className={`camera-play-quality ${quality?.pass ? 'pass' : 'warn'}`}>
-              <strong>{quality?.pass ? 'BOARD CHECKED' : 'BOARD NEEDS WORK'}</strong>
-              {visibleQuality}
-              {quality?.blockers[0] !== undefined && <span>{quality.blockers[0]}</span>}
-              {quality?.warnings[0] !== undefined && <span>{quality.warnings[0]}</span>}
-            </p>
-          )}
+                {visibleQuality !== null && (
+                  <p className={`camera-play-quality ${quality?.pass ? 'pass' : 'warn'}`}>
+                    <strong>{quality?.pass ? 'BOARD CHECKED' : 'BOARD NEEDS WORK'}</strong>
+                    {visibleQuality}
+                    {quality?.blockers[0] !== undefined && <span>{quality.blockers[0]}</span>}
+                    {quality?.warnings[0] !== undefined && <span>{quality.warnings[0]}</span>}
+                  </p>
+                )}
 
-          {analysis !== null && isDetectorStateVisible && (
-            <p className="camera-play-engine-state">
-              <strong>
-                LOCAL DETECTOR ·{' '}
-                {isArmingBaseline
-                  ? 'CLEAR-BOARD CHECK'
-                  : analysis.status.replaceAll('-', ' ').toUpperCase()}
-              </strong>
-              <span>
-                {analysis.status === 'dart-candidate'
-                  ? analysis.shapes.some((shape) => shape.kind === 'compact')
-                    ? 'Compact flight/occlusion found; held for correction because its entry direction is not directly visible.'
-                    : selectAutomaticTipCandidate(analysis.candidates) === null
-                      ? 'Dart-shaped change found, but its endpoint evidence is held for correction instead of being auto-scored.'
-                      : 'Settled dart-shaped change found; checking its direct entry cue over another frame.'
-                  : analysis.status === 'camera-moved-or-hand-present'
-                    ? 'Broad movement held for safety.'
-                    : analysis.message}
-              </span>
-              <small>
-                {analysis.changedPixels.toLocaleString()} changed /{' '}
-                {analysis.comparedPixels.toLocaleString()} board-support px ·{' '}
-                {(analysis.changedFraction * 100).toFixed(2)}% support · threshold{' '}
-                {Math.round(analysis.differenceThreshold)} · align{' '}
-                {analysis.alignmentOffset.x >= 0 ? '+' : ''}
-                {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
-                {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}
-                {((analysis.alignment.rotationRadians * 180) / Math.PI).toFixed(1)}° ·{' '}
-                {analysis.shapes.length} shape{analysis.shapes.length === 1 ? '' : 's'}
-              </small>
-            </p>
+                {analysis !== null && isDetectorStateVisible && (
+                  <p className="camera-play-engine-state">
+                    <strong>
+                      LOCAL DETECTOR · {analysis.status.replaceAll('-', ' ').toUpperCase()}
+                    </strong>
+                    <span>
+                      {analysis.status === 'dart-candidate'
+                        ? analysis.shapes.some((shape) => shape.kind === 'compact')
+                          ? 'Compact flight/occlusion found; held for correction because its entry direction is not directly visible.'
+                          : selectAutomaticTipCandidate(analysis.candidates) === null
+                            ? 'Dart-shaped change found, but its endpoint evidence is held for correction instead of being auto-scored.'
+                            : 'Settled dart-shaped change found; checking its direct entry cue over another frame.'
+                        : analysis.status === 'camera-moved-or-hand-present'
+                          ? 'Broad movement held for safety.'
+                          : analysis.message}
+                    </span>
+                    <small>
+                      {analysis.changedPixels.toLocaleString()} changed /{' '}
+                      {analysis.comparedPixels.toLocaleString()} board-support px ·{' '}
+                      {(analysis.changedFraction * 100).toFixed(2)}% support · threshold{' '}
+                      {Math.round(analysis.differenceThreshold)} · align{' '}
+                      {analysis.alignmentOffset.x >= 0 ? '+' : ''}
+                      {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
+                      {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}
+                      {((analysis.alignment.rotationRadians * 180) / Math.PI).toFixed(1)}° ·{' '}
+                      {analysis.shapes.length} shape{analysis.shapes.length === 1 ? '' : 's'}
+                    </small>
+                  </p>
+                )}
+              </div>
+            </details>
           )}
         </aside>
       </div>
@@ -1413,12 +1296,12 @@ export function SimpleCameraPlay({
           </li>
           <li>
             <b>Wait for Board Found</b>
-            The browser looks for the standard board’s red/green scoring pattern and shows its
-            guide.
+            The browser looks for the standard board’s red/green scoring pattern and confirms when
+            it is ready.
           </li>
           <li>
             <b>Start Play</b>
-            With an empty board, one tap checks two local steady frames before live scoring starts.
+            With an empty board, one tap saves a fresh local reference and starts live scoring.
           </li>
           <li>
             <b>Correct only when needed</b>
@@ -1459,63 +1342,70 @@ function drawBoardGuide(
   if (fit === null) return;
   const imageToBoard = solveImageToBoardHomography(fit, BOARD_FIT_CANONICAL_ANCHORS);
   const boardToImage = imageToBoard === null ? null : invertHomography(imageToBoard);
-  const color = locked ? '#8fdcc1' : '#f5c26a';
+  // Normal Camera Play should feel like a camera, not a calibration screen. Detailed rings, spokes,
+  // handles, and the 20 marker are reserved for the explicit optional recovery guide.
+  const showRecoveryGuide = !locked;
+  const color = showRecoveryGuide ? '#f5c26a' : 'rgba(143, 220, 193, 0.72)';
   context.save();
   context.lineJoin = 'round';
   context.lineCap = 'round';
 
   if (boardToImage !== null) {
-    const rings = [
-      BOARD_RADII_MM.doubleOuter,
-      BOARD_RADII_MM.doubleInner,
-      BOARD_RADII_MM.trebleOuter,
-      BOARD_RADII_MM.trebleInner,
-      BOARD_RADII_MM.outerBull,
-      BOARD_RADII_MM.innerBull,
-    ];
+    const rings = showRecoveryGuide
+      ? [
+          BOARD_RADII_MM.doubleOuter,
+          BOARD_RADII_MM.doubleInner,
+          BOARD_RADII_MM.trebleOuter,
+          BOARD_RADII_MM.trebleInner,
+          BOARD_RADII_MM.outerBull,
+          BOARD_RADII_MM.innerBull,
+        ]
+      : [BOARD_RADII_MM.doubleOuter];
     rings.forEach((radius, index) => {
       traceProjectedCircle(context, boardToImage, radius);
       context.strokeStyle = index === 0 ? color : 'rgba(232, 255, 244, 0.62)';
-      context.lineWidth = index === 0 ? 2.8 : 1.1;
+      context.lineWidth = index === 0 ? (showRecoveryGuide ? 2.8 : 1.5) : 1.1;
       context.stroke();
     });
 
-    for (let index = 0; index < 20; index += 1) {
-      const degrees = index * 18 - 9;
-      const radians = (degrees * Math.PI) / 180;
-      const inner = mapBoardPointToImage(
-        {
-          xMm: Math.sin(radians) * BOARD_RADII_MM.outerBull,
-          yMm: -Math.cos(radians) * BOARD_RADII_MM.outerBull,
-        },
-        boardToImage,
-      );
-      const outer = mapBoardPointToImage(
-        {
-          xMm: Math.sin(radians) * BOARD_RADII_MM.doubleOuter,
-          yMm: -Math.cos(radians) * BOARD_RADII_MM.doubleOuter,
-        },
-        boardToImage,
-      );
-      if (inner === null || outer === null) continue;
-      context.beginPath();
-      context.moveTo(inner.x, inner.y);
-      context.lineTo(outer.x, outer.y);
-      context.strokeStyle = 'rgba(232, 255, 244, 0.5)';
-      context.lineWidth = 0.8;
-      context.stroke();
-    }
+    if (showRecoveryGuide) {
+      for (let index = 0; index < 20; index += 1) {
+        const degrees = index * 18 - 9;
+        const radians = (degrees * Math.PI) / 180;
+        const inner = mapBoardPointToImage(
+          {
+            xMm: Math.sin(radians) * BOARD_RADII_MM.outerBull,
+            yMm: -Math.cos(radians) * BOARD_RADII_MM.outerBull,
+          },
+          boardToImage,
+        );
+        const outer = mapBoardPointToImage(
+          {
+            xMm: Math.sin(radians) * BOARD_RADII_MM.doubleOuter,
+            yMm: -Math.cos(radians) * BOARD_RADII_MM.doubleOuter,
+          },
+          boardToImage,
+        );
+        if (inner === null || outer === null) continue;
+        context.beginPath();
+        context.moveTo(inner.x, inner.y);
+        context.lineTo(outer.x, outer.y);
+        context.strokeStyle = 'rgba(232, 255, 244, 0.5)';
+        context.lineWidth = 0.8;
+        context.stroke();
+      }
 
-    const center = mapBoardPointToImage({ xMm: 0, yMm: 0 }, boardToImage);
-    if (center !== null) {
-      context.beginPath();
-      context.moveTo(center.x - 10, center.y);
-      context.lineTo(center.x + 10, center.y);
-      context.moveTo(center.x, center.y - 10);
-      context.lineTo(center.x, center.y + 10);
-      context.strokeStyle = color;
-      context.lineWidth = 1.5;
-      context.stroke();
+      const center = mapBoardPointToImage({ xMm: 0, yMm: 0 }, boardToImage);
+      if (center !== null) {
+        context.beginPath();
+        context.moveTo(center.x - 10, center.y);
+        context.lineTo(center.x + 10, center.y);
+        context.moveTo(center.x, center.y - 10);
+        context.lineTo(center.x, center.y + 10);
+        context.strokeStyle = color;
+        context.lineWidth = 1.5;
+        context.stroke();
+      }
     }
   } else {
     context.beginPath();
@@ -1528,25 +1418,27 @@ function drawBoardGuide(
     context.stroke();
   }
 
-  fit.forEach((point, index) => {
-    context.beginPath();
-    context.arc(point.x, point.y, index === 0 ? 24 : 20, 0, Math.PI * 2);
-    context.fillStyle = index === 0 ? '#f5c26a' : color;
-    context.fill();
-    context.strokeStyle = '#062016';
-    context.lineWidth = 2;
-    context.stroke();
-    if (index === 0) {
-      context.fillStyle = '#062016';
-      context.font = '900 12px ui-sans-serif, system-ui, sans-serif';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText('20', point.x, point.y + 0.5);
-      context.fillStyle = '#f5fff9';
-      context.font = '900 11px ui-sans-serif, system-ui, sans-serif';
-      context.fillText('20 ↑', point.x, point.y - 36);
-    }
-  });
+  if (showRecoveryGuide) {
+    fit.forEach((point, index) => {
+      context.beginPath();
+      context.arc(point.x, point.y, index === 0 ? 24 : 20, 0, Math.PI * 2);
+      context.fillStyle = '#f5c26a';
+      context.fill();
+      context.strokeStyle = '#062016';
+      context.lineWidth = 2;
+      context.stroke();
+      if (index === 0) {
+        context.fillStyle = '#062016';
+        context.font = '900 12px ui-sans-serif, system-ui, sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('20', point.x, point.y + 0.5);
+        context.fillStyle = '#f5fff9';
+        context.font = '900 11px ui-sans-serif, system-ui, sans-serif';
+        context.fillText('20 ↑', point.x, point.y - 36);
+      }
+    });
+  }
 
   if (lastImagePoint !== null && lastZone !== null) {
     // This shows the internally selected image endpoint after scoring; it is never a player input.

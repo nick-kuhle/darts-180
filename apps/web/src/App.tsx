@@ -297,8 +297,8 @@ export function App() {
             <em>Keep the player in control.</em>
           </h1>
           <p className="lede">
-            A touch-first browser scorer: fit a live board guide once, then review local camera
-            suggestions only when a dart needs correction.
+            A touch-first browser scorer: point a mounted phone, let the board find itself, then
+            review local camera suggestions only when a dart needs correction.
           </p>
         </div>
         <div className="hero-side">
