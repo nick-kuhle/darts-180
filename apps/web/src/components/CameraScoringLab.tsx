@@ -485,6 +485,7 @@ export function CameraScoringLab({
               differenceThreshold: analysis.differenceThreshold,
               changedPixels: analysis.changedPixels,
               changedFraction: analysis.changedFraction,
+              alignmentOffset: analysis.alignmentOffset,
               shapes: analysis.shapes,
               candidates: analysis.candidates,
             },

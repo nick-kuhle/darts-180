@@ -81,10 +81,43 @@ function adjustExposure(frame: CameraFrame, gain: number, offset: number) {
   }
 }
 
+function translateFrame(frame: CameraFrame, offsetX: number, offsetY: number): CameraFrame {
+  const translated = makeFrame(frame.width, frame.height);
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      const sourceX = x - offsetX;
+      const sourceY = y - offsetY;
+      if (sourceX < 0 || sourceX >= frame.width || sourceY < 0 || sourceY >= frame.height) {
+        continue;
+      }
+      const sourceOffset = (sourceY * frame.width + sourceX) * 4;
+      const targetOffset = (y * frame.width + x) * 4;
+      translated.rgba[targetOffset] = frame.rgba[sourceOffset]!;
+      translated.rgba[targetOffset + 1] = frame.rgba[sourceOffset + 1]!;
+      translated.rgba[targetOffset + 2] = frame.rgba[sourceOffset + 2]!;
+      translated.rgba[targetOffset + 3] = frame.rgba[sourceOffset + 3]!;
+    }
+  }
+  return translated;
+}
+
 function drawCheckerboard(frame: CameraFrame) {
   for (let y = 80; y < 640; y += 1) {
     for (let x = 80; x < 640; x += 1) {
       setPixel(frame, x, y, (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0 ? 135 : 230);
+    }
+  }
+}
+
+function drawTranslationTexture(frame: CameraFrame) {
+  for (let y = 80; y < 640; y += 1) {
+    for (let x = 80; x < 640; x += 1) {
+      // Vary individual 8 px tiles so a large periodic shift cannot imitate a small safe
+      // vibration in the translation tests.
+      const tileX = Math.floor(x / 8);
+      const tileY = Math.floor(y / 8);
+      const hash = (Math.imul(tileX, 73_856_093) ^ Math.imul(tileY, 19_349_663)) >>> 0;
+      setPixel(frame, x, y, 110 + (hash % 120));
     }
   }
 }
@@ -136,6 +169,23 @@ test('finds reviewable endpoint candidates for a newly visible elongated change'
   assert.ok(result.candidates.some((candidate) => candidate.id === selected.id));
 });
 
+test('never proposes a protruding flight endpoint as an automatic MISS', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  // The upper end is 6–8 mm beyond the outer double while the lower end is on the board. This
+  // mirrors a flight/shaft extending past the ring from a real dart point and used to create a
+  // false automatic MISS when both endpoints were retained for ranking.
+  drawDarkLine(current, 360, 62, 300);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+  assert.equal(result.status, 'dart-candidate');
+  assert.ok(result.candidates.length >= 1);
+  assert.ok(result.candidates.every((candidate) => candidate.zone.ring !== 'MISS'));
+  assert.notEqual(selectAutomaticTipCandidate(result.candidates)?.zone.ring, 'MISS');
+});
+
 test('finds a subtle compact flight change for a near-centreline camera view', () => {
   const reference = makeFrame(720, 720, 110);
   const current = makeFrame(720, 720, 110);
@@ -167,6 +217,38 @@ test('keeps a compact dart proposal through modest global exposure drift', () =>
   });
   assert.equal(result.status, 'dart-candidate');
   assert.ok(result.changedFraction < 0.02);
+});
+
+test('absorbs bounded mount vibration before detecting a newly inserted dart', () => {
+  const reference = makeFrame();
+  drawTranslationTexture(reference);
+  // The board moves four pixels right and three pixels up after an impact. The new dart stays at
+  // the same board location, so it is translated with the board before its local change is drawn.
+  const current = translateFrame(reference, 4, -3);
+  drawDarkLine(current, 364, 187, 387);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+  assert.equal(result.status, 'dart-candidate');
+  assert.deepEqual(result.alignmentOffset, { x: 4, y: -3 });
+  const selected = selectAutomaticTipCandidate(result.candidates);
+  assert.ok(selected !== null);
+  assert.equal(selected?.zone.ring, 'T');
+  assert.equal(selected?.zone.segment, 20);
+});
+
+test('does not normalize a board translation beyond the bounded vibration allowance', () => {
+  const reference = makeFrame();
+  drawTranslationTexture(reference);
+  const current = translateFrame(reference, 14, 0);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+  assert.equal(result.status, 'camera-moved-or-hand-present');
+  assert.ok(Math.abs(result.alignmentOffset.x) <= 8);
+  assert.ok(Math.abs(result.alignmentOffset.y) <= 8);
 });
 
 test('manual visible-tip selection maps through the same canonical scorer', () => {
