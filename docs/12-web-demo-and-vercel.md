@@ -13,8 +13,9 @@ an unfinished camera API or claiming live AI scoring.
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
 - an experimental browser-local **Camera Play** field-test flow: automatic conventional red/green
-  board-color finding with a visible 20-up guide; one-tap baseline capture via **Start Play**;
-  automatic temporal dart-shape proposals; ordinary DartCard correction when needed; and optional
+  board-color finding with a visible 20-up guide; one-tap clear-board stabilization via **Start
+  Play**; bounded local temporal alignment; direct-entry-only automatic scoring with explicit
+  compact/ambiguous abstention; ordinary DartCard entry/correction when needed; and optional
   gesture-based visual-guide recovery for auto-find failures;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
@@ -25,10 +26,12 @@ an unfinished camera API or claiming live AI scoring.
 It has **no account, database, raw camera upload, or trained CV model**. Camera Play uses an
 inspectable fixed-camera frame-difference heuristic for controlled field testing, but it is not a
 trained entry-point model or a proven auto-scoring claim. The normal flow automatically estimates a
-standard board from its red/green scoring colors, then makes an internal deterministic
-endpoint/candidate estimate rather than asking a player to identify a steel or soft dart tip. It
-assumes a level, 20-up board because color alone cannot identify every number-ring rotation;
-correction remains available for every score. Capture and Annotation Labs keep their
+standard board from its red/green scoring colors, then auto-scores only an internal candidate with
+direct entry-direction evidence rather than asking a player to identify a steel or soft dart tip.
+One isolated compact/ambiguous visual clue can be displayed as a held suggestion that requires an
+explicit player use; competing/unsafe clues stay unscored until ordinary correction/entry. It assumes
+a level, 20-up board because color alone cannot identify every number-ring rotation; correction
+remains available for every score. Capture and Annotation Labs keep their
 media/labels browser-local until their user explicitly downloads them. Camera access is requested
 only after a click. That is intentional: it is safe to share as a product/UX prototype and deploy as
 a static site.
@@ -41,9 +44,12 @@ merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #3](https://github.com/nick-kuhle/darts-180/pull/3),
 [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and
 [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
-remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). The follow-up in
-[PR #7](https://github.com/nick-kuhle/darts-180/pull/7) awaits direct field validation. Review each
-diff and its GitHub Actions result before using a build for external testing.
+remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
+follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
+report found better board finding but failed dart resolution; the dedicated remediation awaits
+pull-request delivery and a new direct-device test. Review each diff and its GitHub Actions result
+before using a build for external testing. See
+[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
 credential is stored in source, Git configuration, or the remote URL; revoke any short-lived
 delivery token once the delivery is confirmed.
@@ -81,14 +87,17 @@ Deployment for the current Camera Play pull request. Use the Vercel deployment�
 
 Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, keep a
 conventional red/green board fully visible with its physical 20 at the top of the camera image; wait
-for **BOARD FOUND**, then tap **START PLAY** with an empty board. If a direct HTTPS tab does not
+for **BOARD FOUND**, then tap **START PLAY** with an empty board and wait for its brief automatic
+clear-board check before throwing. If Camera Play holds a compact/ambiguous dart, use **REVIEW /
+ENTER SCORE** rather than treating a guessed endpoint as a result. If a direct HTTPS tab does not
 prompt, use that browser’s lock/camera controls to set Camera to **Allow**, reload the page, and try
 again. On iOS, check Safari’s website camera setting; on Android Chrome, check the site settings
 behind the lock icon.
 
 For the full mounted-device workflow, follow the
-[Browser camera field-test guide](14-browser-camera-field-test.md). The feature runs locally in the
-browser and must stay in its stated fixed-mount, review-required envelope.
+[Browser camera field-test guide](14-browser-camera-field-test.md) and the
+[post-field-report remediation/retest note](15-browser-dart-field-remediation.md). The feature runs
+locally in the browser and must stay in its stated fixed-mount, correction-first envelope.
 
 ### 3. Share the preview URL
 

@@ -2646,6 +2646,7 @@ h3 {
 }
 
 .camera-play-last-score,
+.camera-play-held-candidate,
 .camera-play-quality,
 .camera-play-engine-state {
   display: grid;
@@ -2655,6 +2656,35 @@ h3 {
   border: 1px solid #395247;
   border-radius: 10px;
   background: #11211a;
+}
+
+.camera-play-held-candidate {
+  border-color: #7b622f;
+  background: linear-gradient(100deg, rgba(93, 62, 18, 0.38), #1e2118);
+}
+
+.camera-play-held-candidate span {
+  color: #ffcf80;
+  font-size: 0.55rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.camera-play-held-candidate strong {
+  color: #fff3d2;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.camera-play-held-candidate p {
+  margin: 0;
+  color: #e0ceaa;
+  font-size: 0.67rem;
+  line-height: 1.42;
+}
+
+.camera-play-held-candidate .button {
+  margin: 3px 0 0;
 }
 
 .camera-play-last-score span,

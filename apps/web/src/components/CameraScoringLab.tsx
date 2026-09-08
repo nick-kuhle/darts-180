@@ -12,6 +12,7 @@ import {
   assessGuidedCalibration,
   candidateFromManualPoint,
   frameFromImageData,
+  isAutomaticTipCandidateEligible,
   type CameraFrame,
   type DartShape,
   type DartTipCandidate,
@@ -229,10 +230,7 @@ export function CameraScoringLab({
       if (count < 2) return;
       setAnalysis(nextAnalysis);
       lastAnalyzedFrameRef.current = frame;
-      const preferred = nextAnalysis.candidates.find(
-        (candidate) =>
-          candidate.directionEvidence === 'only-endpoint-on-board' && candidate.wireMarginMm >= 1.5,
-      );
+      const preferred = nextAnalysis.candidates.find(isAutomaticTipCandidateEligible);
       setSelectedCandidateId(preferred?.id ?? null);
       setManualCandidate(null);
       setWatching(false);
@@ -304,10 +302,7 @@ export function CameraScoringLab({
     setAnalysis(nextAnalysis);
     lastAnalyzedFrameRef.current = frame;
     setManualCandidate(null);
-    const preferred = nextAnalysis.candidates.find(
-      (candidate) =>
-        candidate.directionEvidence === 'only-endpoint-on-board' && candidate.wireMarginMm >= 1.5,
-    );
+    const preferred = nextAnalysis.candidates.find(isAutomaticTipCandidateEligible);
     setSelectedCandidateId(preferred?.id ?? null);
     setCameraError(null);
     setNotice(nextAnalysis.message);
@@ -422,11 +417,7 @@ export function CameraScoringLab({
       return;
     }
     const detectorSelected = selectedCandidate.shapeId !== 'manual';
-    const canCallAuto =
-      detectorSelected &&
-      selectedCandidate.directionEvidence === 'only-endpoint-on-board' &&
-      selectedCandidate.confidence >= 0.55 &&
-      selectedCandidate.wireMarginMm >= 1.5;
+    const canCallAuto = detectorSelected && isAutomaticTipCandidateEligible(selectedCandidate);
     const source = detectorSelected ? (canCallAuto ? 'auto' : 'corrected') : 'manual';
     const slot = onAddProposal({
       zone: selectedCandidate.zone,
@@ -484,8 +475,10 @@ export function CameraScoringLab({
               message: analysis.message,
               differenceThreshold: analysis.differenceThreshold,
               changedPixels: analysis.changedPixels,
+              comparedPixels: analysis.comparedPixels,
               changedFraction: analysis.changedFraction,
               alignmentOffset: analysis.alignmentOffset,
+              alignment: analysis.alignment,
               shapes: analysis.shapes,
               candidates: analysis.candidates,
             },
@@ -759,8 +752,13 @@ export function CameraScoringLab({
         {analysis !== null && (
           <p className="camera-analysis-message">
             {analysis.message} Processed locally with threshold{' '}
-            {Math.round(analysis.differenceThreshold)}; changed area{' '}
-            {(analysis.changedFraction * 100).toFixed(2)}%.
+            {Math.round(analysis.differenceThreshold)}; {analysis.changedPixels.toLocaleString()} /{' '}
+            {analysis.comparedPixels.toLocaleString()} scoring-face px changed ({' '}
+            {(analysis.changedFraction * 100).toFixed(2)}%); align{' '}
+            {analysis.alignmentOffset.x >= 0 ? '+' : ''}
+            {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
+            {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}
+            {((analysis.alignment.rotationRadians * 180) / Math.PI).toFixed(1)}°.
           </p>
         )}
 
@@ -782,7 +780,9 @@ export function CameraScoringLab({
                 ENDPOINT {candidate.endpoint} ·{' '}
                 {candidate.directionEvidence === 'only-endpoint-on-board'
                   ? 'BOARD-SIDE'
-                  : 'CHECK VISUALLY'}
+                  : candidate.directionEvidence === 'narrow-endpoint-shape'
+                    ? 'NARROW-END CUE'
+                    : 'CHECK VISUALLY'}
               </span>
               <strong>{formatZone(candidate.zone)}</strong>
               <em>

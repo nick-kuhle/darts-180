@@ -17,9 +17,12 @@ The active browser UX is Camera Play: automatic red/green board finding and one-
 with visual-guide gestures reserved for recovery rather than normal setup. The initial simplification
 merged in [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), followed by automatic board
 finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) and the initial browser-camera
-reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). The follow-up
-real-board reliability work in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7) requires
-direct device evidence; the specific inventory and non-claims live in
+reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), followed by the
+first reliability update in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct
+post-merge device report found automatic board finding improved but dart resolution materially failed.
+The post-field-report browser remediation requires a new direct-device retest; its evidence taxonomy,
+retest procedure, and non-claims live in
+[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

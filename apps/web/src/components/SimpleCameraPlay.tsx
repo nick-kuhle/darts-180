@@ -20,7 +20,9 @@ import {
   assessBoardFitCalibration,
   frameFromImageData,
   selectAutomaticTipCandidate,
+  selectReviewTipCandidate,
   type CameraFrame,
+  type DartTipCandidate,
   type DifferenceAnalysis,
   type GuidedCalibrationQuality,
 } from '../lib/cameraScoring';
@@ -43,9 +45,20 @@ import {
 // still samples sparsely.
 const MAX_WORKING_EDGE = 1280;
 const MIN_HANDLE_HIT_RADIUS = 24;
+// A 1280 px portrait frame plus local board registration is intentionally more work than a simple
+// preview draw. Leave mobile Safari/Chrome breathing room between analyses instead of continuously
+// queuing frame reads and making focus/optical-stabilization behavior worse.
+const LOCAL_ANALYSIS_INTERVAL_MS = 800;
 
 type CameraPhase =
-  'finding-board' | 'manual-fit' | 'ready-to-play' | 'watching' | 'turn-ready' | 'awaiting-clear';
+  | 'finding-board'
+  | 'manual-fit'
+  | 'ready-to-play'
+  | 'arming-baseline'
+  | 'watching'
+  | 'reviewing-candidate'
+  | 'turn-ready'
+  | 'awaiting-clear';
 
 type GestureState =
   | {
@@ -72,6 +85,12 @@ export interface CameraPlayDraft {
   confidence: number;
   wireMarginMm: number;
   filled: boolean;
+}
+
+interface HeldCameraCandidate {
+  candidate: DartTipCandidate;
+  frame: CameraFrame;
+  analysis: DifferenceAnalysis;
 }
 
 interface SimpleCameraPlayProps {
@@ -115,6 +134,10 @@ export function SimpleCameraPlay({
     count: number;
     misses: number;
   } | null>(null);
+  const baselineStabilityRef = useRef<{
+    frame: CameraFrame;
+    stableComparisons: number;
+  } | null>(null);
   const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
   const recordingRef = useRef(false);
 
@@ -127,6 +150,7 @@ export function SimpleCameraPlay({
   const [reference, setReference] = useState<CameraFrame | null>(null);
   const [phase, setPhase] = useState<CameraPhase>('finding-board');
   const [analysis, setAnalysis] = useState<DifferenceAnalysis | null>(null);
+  const [heldCandidate, setHeldCandidate] = useState<HeldCameraCandidate | null>(null);
   const [lastRecorded, setLastRecorded] = useState<Readonly<{
     slot: number;
     zone: DartZone;
@@ -160,6 +184,10 @@ export function SimpleCameraPlay({
     phase === 'ready-to-play' &&
     !gameComplete;
   const isWatching = phase === 'watching';
+  const isArmingBaseline = phase === 'arming-baseline';
+  const isReviewingCandidate = phase === 'reviewing-candidate';
+  const isLiveScoring = isWatching || isArmingBaseline;
+  const isDetectorStateVisible = isLiveScoring || isReviewingCandidate;
 
   const stopCamera = useCallback(() => {
     if (renderFrameRef.current !== null) {
@@ -172,6 +200,7 @@ export function SimpleCameraPlay({
     activePointersRef.current.clear();
     gestureRef.current = null;
     stabilityRef.current = null;
+    baselineStabilityRef.current = null;
     autoFitStabilityRef.current = null;
     recordingRef.current = false;
     setCameraActive(false);
@@ -180,6 +209,7 @@ export function SimpleCameraPlay({
     setHomography(null);
     setQuality(null);
     setAutomaticFit(null);
+    setHeldCandidate(null);
     setPhase('finding-board');
   }, []);
 
@@ -326,9 +356,11 @@ export function SimpleCameraPlay({
     setQuality(null);
     setAutomaticFit(null);
     setAnalysis(null);
+    setHeldCandidate(null);
     setLastRecorded(null);
     setPhase('finding-board');
     stabilityRef.current = null;
+    baselineStabilityRef.current = null;
     autoFitStabilityRef.current = null;
     setLiveMessage(
       'Looking for the board’s red and green scoring colors. Keep the full board in view and the physical 20 at the top of the camera image.',
@@ -415,6 +447,7 @@ export function SimpleCameraPlay({
     setQuality(null);
     setAutomaticFit(null);
     setAnalysis(null);
+    setHeldCandidate(null);
     setLastRecorded(null);
     setPhase('manual-fit');
     autoFitStabilityRef.current = null;
@@ -453,7 +486,7 @@ export function SimpleCameraPlay({
     setLiveMessage('Optional guide recovery is ready. With the board clear, tap Start Play.');
   };
 
-  const startPlay = () => {
+  const armClearBoardBaseline = () => {
     if (homography === null || quality?.pass !== true) {
       setLiveMessage(
         'I am still finding a usable board. Keep the board visible, or use optional recovery only if auto-find cannot recover.',
@@ -465,15 +498,156 @@ export function SimpleCameraPlay({
       setLiveMessage('Waiting for a complete live camera frame before starting play.');
       return;
     }
-    setReference(frame);
+    // Do not turn one instantaneous phone frame into the baseline. Let camera focus, exposure, and
+    // optical stabilization settle across two local comparisons while the board is still clear.
+    baselineStabilityRef.current = { frame, stableComparisons: 0 };
+    setReference(null);
     setAnalysis(null);
+    setHeldCandidate(null);
     setLastRecorded(null);
     stabilityRef.current = null;
-    setPhase('watching');
+    setPhase('arming-baseline');
     setLiveMessage(
-      'Playing locally. Throw one dart, step clear, and the score will appear after it settles.',
+      'Checking that the clear board and camera are steady before watching your dart…',
     );
   };
+
+  const startPlay = () => {
+    armClearBoardBaseline();
+  };
+
+  const recordCandidate = useCallback(
+    (
+      candidate: DartTipCandidate,
+      frame: CameraFrame,
+      candidateAnalysis: DifferenceAnalysis,
+      source: 'auto' | 'corrected',
+    ): number | null => {
+      const slot = onAddProposal({
+        zone: candidate.zone,
+        confidence: candidate.confidence,
+        wireMarginMm: candidate.wireMarginMm,
+        source,
+      });
+      if (slot === null) return null;
+
+      // Carry a clearly accepted bounded board-relative similarity correction into the next baseline.
+      // Without this, a dart after mobile optical stabilization could be decoded against a stale
+      // pre-impact guide even when its own local change was correctly aligned.
+      const frameAlignment = candidateAnalysis.alignment;
+      const hasPoseCorrection =
+        frameAlignment.offset.x !== 0 ||
+        frameAlignment.offset.y !== 0 ||
+        frameAlignment.scale !== 1 ||
+        frameAlignment.rotationRadians !== 0;
+      if (fit !== null && hasPoseCorrection) {
+        const currentFitCenter = boardFitCenter(fit);
+        const correctedFit = transformBoardFit(
+          fit,
+          currentFitCenter,
+          {
+            x: currentFitCenter.x + frameAlignment.offset.x,
+            y: currentFitCenter.y + frameAlignment.offset.y,
+          },
+          frameAlignment.scale,
+          frameAlignment.rotationRadians,
+        );
+        const correctedHomography = solveImageToBoardHomography(
+          correctedFit,
+          BOARD_FIT_CANONICAL_ANCHORS,
+        );
+        if (correctedHomography !== null) {
+          fitRef.current = correctedFit;
+          setFit(correctedFit);
+          setHomography(correctedHomography);
+        }
+      }
+      setReference(frame);
+      setHeldCandidate(null);
+      setLastRecorded({
+        slot,
+        zone: candidate.zone,
+        imagePoint: candidate.imagePoint,
+      });
+      stabilityRef.current = null;
+      return slot;
+    },
+    [fit, onAddProposal],
+  );
+
+  useEffect(() => {
+    if (!isArmingBaseline || homography === null || quality?.pass !== true || gameComplete) {
+      return;
+    }
+    let cancelled = false;
+    const checkClearBoard = () => {
+      if (cancelled) return;
+      const baseline = baselineStabilityRef.current;
+      const frame = captureFrame();
+      if (baseline === null || frame === null) return;
+      const nextAnalysis = analyzeDartDifference(baseline.frame, frame, homography, {
+        boardDiameterPixels: quality.boardDiameterPixels,
+      });
+      if (cancelled) return;
+      setAnalysis(nextAnalysis);
+      if (nextAnalysis.status === 'no-change') {
+        const stableComparisons = baseline.stableComparisons + 1;
+        baselineStabilityRef.current = { ...baseline, stableComparisons };
+        if (stableComparisons >= 2) {
+          // Keep the original reference whose board pose is paired with the current homography. A
+          // bounded alignment still handles harmless sub-pixel camera stabilization afterwards.
+          setReference(baseline.frame);
+          setAnalysis(null);
+          baselineStabilityRef.current = null;
+          setPhase('watching');
+          setLiveMessage('Watching locally. Throw one dart, then step clear while it settles.');
+          return;
+        }
+        setLiveMessage(
+          'Clear board looks steady. Holding one more local frame before play starts…',
+        );
+        return;
+      }
+      // Stable comparisons must be consecutive. A hand, dart, or broad pose change must not
+      // leave one earlier clean comparison credited toward a baseline captured after it clears.
+      baselineStabilityRef.current = { ...baseline, stableComparisons: 0 };
+      stabilityRef.current = null;
+      if (nextAnalysis.status === 'camera-moved-or-hand-present') {
+        setLiveMessage(
+          'I see broad motion. Step clear and keep the mount still while I check the baseline.',
+        );
+        return;
+      }
+      if (nextAnalysis.status === 'dart-candidate') {
+        setLiveMessage(
+          'A dart-like change appeared while checking the clear board. Remove it, then wait for the baseline check.',
+        );
+        return;
+      }
+      if (nextAnalysis.status === 'incompatible-frame') {
+        setLiveMessage(
+          'Camera framing or resolution changed. Tap Find Board Again, wait for Board Found, then Start Play with an empty board.',
+        );
+        return;
+      }
+      setLiveMessage(
+        'The clear-board check needs a quieter frame. Step clear and let the camera settle.',
+      );
+    };
+    checkClearBoard();
+    const interval = window.setInterval(checkClearBoard, LOCAL_ANALYSIS_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    captureFrame,
+    gameComplete,
+    homography,
+    isArmingBaseline,
+    quality?.boardDiameterPixels,
+    quality?.pass,
+  ]);
 
   useEffect(() => {
     if (
@@ -533,36 +707,60 @@ export function SimpleCameraPlay({
         return;
       }
 
+      // `selectAutomaticTipCandidate` is an eligibility gate as well as a ranker: it refuses a
+      // compact-flight centroid, an equal-width endpoint pair, a near-wire endpoint, and MISS.
+      // Never convert those clues into an arbitrary score just because they persisted twice.
       const candidate = selectAutomaticTipCandidate(nextAnalysis.candidates);
-      if (candidate === null) {
+      const reviewCandidate =
+        candidate === null ? selectReviewTipCandidate(nextAnalysis.candidates) : null;
+      const stableCandidate = candidate ?? reviewCandidate;
+      if (stableCandidate === null) {
         const previous = stabilityRef.current;
         stabilityRef.current =
           previous !== null && previous.misses === 0 ? { ...previous, misses: 1 } : null;
-        setLiveMessage('A dart-like change needs another moment before a score can be proposed.');
+        setLiveMessage(
+          'Dart-like changes compete or cannot be mapped safely. Nothing was auto-scored; use Review / Enter Score if the dart is settled.',
+        );
         return;
       }
       // Component ordering and an elongated shaft's apparent endpoint can fluctuate by a few pixels
       // between video frames. Stabilize the physical board zone plus nearby image location instead
       // of the temporary connected-component id, otherwise a real settled dart can be held forever.
-      const zoneKey = `${candidate.zone.ring}:${candidate.zone.segment ?? 'bull'}`;
+      const zoneKey = `${stableCandidate.zone.ring}:${stableCandidate.zone.segment ?? 'bull'}`;
       const previous = stabilityRef.current;
       const count =
-        previous?.zoneKey === zoneKey && distance(previous.imagePoint, candidate.imagePoint) <= 18
+        previous?.zoneKey === zoneKey &&
+        distance(previous.imagePoint, stableCandidate.imagePoint) <= 18
           ? previous.count + 1
           : 1;
-      stabilityRef.current = { zoneKey, imagePoint: candidate.imagePoint, count, misses: 0 };
+      stabilityRef.current = { zoneKey, imagePoint: stableCandidate.imagePoint, count, misses: 0 };
       if (count < 2) {
         setLiveMessage('Dart/flight change found. Holding for one more settled frame…');
         return;
       }
 
+      if (candidate === null) {
+        // The preceding stable-candidate guard makes this true in practice, but retain the explicit
+        // guard so a future selector change cannot turn an absent review candidate into a score.
+        if (reviewCandidate === null) {
+          stabilityRef.current = null;
+          setLiveMessage('The camera suggestion was incomplete. Nothing was recorded.');
+          return;
+        }
+        // A stable review suggestion is useful for correction flow, but remains unrecorded until the
+        // player deliberately accepts it. This keeps normal Camera Play tip-click-free without
+        // pretending a compact or tied endpoint is an automatic score.
+        setHeldCandidate({ candidate: reviewCandidate, frame, analysis: nextAnalysis });
+        stabilityRef.current = null;
+        setPhase('reviewing-candidate');
+        setLiveMessage(
+          `${formatZone(reviewCandidate.zone)} is a held camera suggestion, not an automatic score. Confirm it or use Review / Enter Score.`,
+        );
+        return;
+      }
+
       recordingRef.current = true;
-      const slot = onAddProposal({
-        zone: candidate.zone,
-        confidence: candidate.confidence,
-        wireMarginMm: candidate.wireMarginMm,
-        source: 'auto',
-      });
+      const slot = recordCandidate(candidate, frame, nextAnalysis, 'auto');
       if (slot === null) {
         recordingRef.current = false;
         setLiveMessage(
@@ -571,36 +769,6 @@ export function SimpleCameraPlay({
         return;
       }
 
-      // A small accepted frame translation means the physical board has moved relative to the
-      // reference image. Move the visible guide and its canonical transform with the new baseline;
-      // otherwise the first dart would score correctly but later darts would be decoded against a
-      // stale pre-vibration pose.
-      if (
-        fit !== null &&
-        (nextAnalysis.alignmentOffset.x !== 0 || nextAnalysis.alignmentOffset.y !== 0)
-      ) {
-        const translatedFit = translateBoardFit(
-          fit,
-          nextAnalysis.alignmentOffset.x,
-          nextAnalysis.alignmentOffset.y,
-        );
-        const translatedHomography = solveImageToBoardHomography(
-          translatedFit,
-          BOARD_FIT_CANONICAL_ANCHORS,
-        );
-        if (translatedHomography !== null) {
-          fitRef.current = translatedFit;
-          setFit(translatedFit);
-          setHomography(translatedHomography);
-        }
-      }
-      setReference(frame);
-      setLastRecorded({
-        slot,
-        zone: candidate.zone,
-        imagePoint: candidate.imagePoint,
-      });
-      stabilityRef.current = null;
       setLiveMessage(
         `Dart ${slot}: ${formatZone(candidate.zone)} added. ${slot >= 3 ? 'Review and confirm the turn.' : 'Throw the next dart.'}`,
       );
@@ -611,7 +779,7 @@ export function SimpleCameraPlay({
     };
 
     analyzeCurrentFrame();
-    const interval = window.setInterval(analyzeCurrentFrame, 620);
+    const interval = window.setInterval(analyzeCurrentFrame, LOCAL_ANALYSIS_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -623,36 +791,50 @@ export function SimpleCameraPlay({
     gameComplete,
     homography,
     isWatching,
-    onAddProposal,
+    recordCandidate,
     quality?.boardDiameterPixels,
     reference,
   ]);
+
+  const acceptHeldCandidate = () => {
+    if (heldCandidate === null || recordingRef.current) return;
+    recordingRef.current = true;
+    const { candidate, frame, analysis: heldAnalysis } = heldCandidate;
+    // The player has explicitly accepted this tentative location, so retain it as a corrected
+    // score rather than misrepresenting the compact/ambiguous visual cue as automatic inference.
+    const slot = recordCandidate(candidate, frame, heldAnalysis, 'corrected');
+    if (slot === null) {
+      recordingRef.current = false;
+      setLiveMessage(
+        'That turn is full. Review or confirm the scores before recording another dart.',
+      );
+      return;
+    }
+    setLiveMessage(
+      `Dart ${slot}: ${formatZone(candidate.zone)} recorded after your check. ${slot >= 3 ? 'Review and confirm the turn.' : 'Throw the next dart.'}`,
+    );
+    if (slot >= 3) setPhase('turn-ready');
+    else setPhase('watching');
+    window.setTimeout(() => {
+      recordingRef.current = false;
+    }, 700);
+  };
 
   const beginNextTurn = () => {
     if (homography === null) {
       restartAutomaticBoardFind();
       return;
     }
-    const frame = captureFrame();
-    if (frame === null) {
-      setLiveMessage(
-        'The camera has not supplied a complete clear-board frame yet. Try again in a moment.',
-      );
-      return;
-    }
-    setReference(frame);
-    setAnalysis(null);
-    setLastRecorded(null);
-    stabilityRef.current = null;
-    setPhase('watching');
-    setLiveMessage('New clear-board baseline captured locally. Throw the first dart.');
+    armClearBoardBaseline();
   };
 
   const confirmTurn = () => {
     if (!onConfirmVisit()) return;
     setAnalysis(null);
+    setHeldCandidate(null);
     setReference(null);
     stabilityRef.current = null;
+    baselineStabilityRef.current = null;
     setPhase('awaiting-clear');
     setLiveMessage(
       gameComplete
@@ -821,8 +1003,8 @@ export function SimpleCameraPlay({
           </h1>
           <p>
             Mount the phone near the board centreline. Darts 180 finds the red and green scoring
-            bands, maps the board locally, then suggests a score for each settled dart. No photos
-            leave this browser.
+            bands, maps the board locally, then auto-scores only a settled dart with a direct entry
+            cue. Ambiguous darts stay correctable. No photos leave this browser.
           </p>
         </div>
         <aside className="camera-play-privacy-card">
@@ -848,7 +1030,11 @@ export function SimpleCameraPlay({
                       ? 'OPTIONAL GUIDE RECOVERY'
                       : phase === 'ready-to-play'
                         ? 'BOARD FOUND'
-                        : 'PLAYING LOCALLY'}
+                        : phase === 'arming-baseline'
+                          ? 'CHECKING CLEAR BOARD'
+                          : phase === 'reviewing-candidate'
+                            ? 'CAMERA SUGGESTION HELD'
+                            : 'PLAYING LOCALLY'}
               </p>
               <h2>
                 {!cameraActive
@@ -859,7 +1045,11 @@ export function SimpleCameraPlay({
                       ? 'Only use this guide if auto-find cannot recover.'
                       : phase === 'ready-to-play'
                         ? 'Board found. Clear it, then start play.'
-                        : 'Watching for a settled dart.'}
+                        : phase === 'arming-baseline'
+                          ? 'Checking that the clear board is steady.'
+                          : phase === 'reviewing-candidate'
+                            ? 'Check the held camera suggestion.'
+                            : 'Watching for a settled dart.'}
               </h2>
             </div>
             <span className={`camera-state ${cameraActive ? 'on' : ''}`}>
@@ -906,9 +1096,15 @@ export function SimpleCameraPlay({
               <div className="camera-play-gesture-chip locked">BOARD FOUND · 20 ↑ UPRIGHT</div>
             )}
             {cameraActive &&
-              (phase === 'watching' || phase === 'turn-ready' || phase === 'awaiting-clear') && (
+              (phase === 'arming-baseline' ||
+                phase === 'watching' ||
+                phase === 'reviewing-candidate' ||
+                phase === 'turn-ready' ||
+                phase === 'awaiting-clear') && (
                 <div className="camera-play-gesture-chip locked">
-                  BOARD FOUND · WATCHING LOCALLY
+                  {phase === 'reviewing-candidate'
+                    ? 'CAMERA SUGGESTION · CHECK SCORE'
+                    : 'BOARD FOUND · WATCHING LOCALLY'}
                 </div>
               )}
           </div>
@@ -989,9 +1185,13 @@ export function SimpleCameraPlay({
                   <strong>{dart.filled ? formatZone(dart.zone) : '—'}</strong>
                   <em>
                     {!dart.filled
-                      ? isWatching
-                        ? 'Watching for a settled dart'
-                        : 'Waiting to play'
+                      ? isReviewingCandidate
+                        ? 'Check held camera suggestion'
+                        : isLiveScoring
+                          ? isArmingBaseline
+                            ? 'Checking clear-board baseline'
+                            : 'Watching for a settled dart'
+                          : 'Waiting to play'
                       : needsReview
                         ? 'Tap to correct if needed'
                         : 'Camera suggestion · tap to correct'}
@@ -1006,6 +1206,20 @@ export function SimpleCameraPlay({
               );
             })}
           </div>
+
+          {heldCandidate !== null && isReviewingCandidate && (
+            <div className="camera-play-held-candidate">
+              <span>HELD CAMERA SUGGESTION · NOT AUTO-RECORDED</span>
+              <strong>{formatZone(heldCandidate.candidate.zone)}</strong>
+              <p>
+                The dart-shaped change settled, but its entry direction or wire margin is not safe
+                enough to fill a DartCard automatically. Check the physical score before accepting.
+              </p>
+              <button className="button primary" onClick={acceptHeldCandidate} type="button">
+                USE {formatZone(heldCandidate.candidate.zone)}
+              </button>
+            </div>
+          )}
 
           {lastRecorded !== null && (
             <div className="camera-play-last-score">
@@ -1033,8 +1247,8 @@ export function SimpleCameraPlay({
               CONFIRM {turnCount === 3 ? 'TURN' : 'CURRENT DARTS'}
             </button>
           )}
-          <button className="button ghost" disabled={turnCount === 0} onClick={onOpenReview}>
-            REVIEW OR CORRECT SCORES
+          <button className="button ghost" disabled={gameComplete} onClick={onOpenReview}>
+            {turnCount === 0 ? 'REVIEW / ENTER SCORE' : 'REVIEW OR CORRECT SCORES'}
           </button>
 
           {automaticFit !== null && phase !== 'manual-fit' && (
@@ -1064,26 +1278,35 @@ export function SimpleCameraPlay({
             </p>
           )}
 
-          {analysis !== null && isWatching && (
+          {analysis !== null && isDetectorStateVisible && (
             <p className="camera-play-engine-state">
-              <strong>LOCAL DETECTOR · {analysis.status.replaceAll('-', ' ').toUpperCase()}</strong>
+              <strong>
+                LOCAL DETECTOR ·{' '}
+                {isArmingBaseline
+                  ? 'CLEAR-BOARD CHECK'
+                  : analysis.status.replaceAll('-', ' ').toUpperCase()}
+              </strong>
               <span>
                 {analysis.status === 'dart-candidate'
                   ? analysis.shapes.some((shape) => shape.kind === 'compact')
-                    ? 'Settled compact flight/occlusion found; proposing a prominently reviewable board location.'
-                    : 'Settled dart-shaped change found; choosing its best internal endpoint.'
+                    ? 'Compact flight/occlusion found; held for correction because its entry direction is not directly visible.'
+                    : selectAutomaticTipCandidate(analysis.candidates) === null
+                      ? 'Dart-shaped change found, but its endpoint evidence is held for correction instead of being auto-scored.'
+                      : 'Settled dart-shaped change found; checking its direct entry cue over another frame.'
                   : analysis.status === 'camera-moved-or-hand-present'
                     ? 'Broad movement held for safety.'
                     : analysis.message}
               </span>
               <small>
-                {analysis.changedPixels.toLocaleString()} changed px ·{' '}
-                {(analysis.changedFraction * 100).toFixed(2)}% of frame · threshold{' '}
+                {analysis.changedPixels.toLocaleString()} changed /{' '}
+                {analysis.comparedPixels.toLocaleString()} board-support px ·{' '}
+                {(analysis.changedFraction * 100).toFixed(2)}% support · threshold{' '}
                 {Math.round(analysis.differenceThreshold)} · align{' '}
                 {analysis.alignmentOffset.x >= 0 ? '+' : ''}
                 {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
-                {analysis.alignmentOffset.y} px · {analysis.shapes.length} shape
-                {analysis.shapes.length === 1 ? '' : 's'}
+                {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}
+                {((analysis.alignment.rotationRadians * 180) / Math.PI).toFixed(1)}° ·{' '}
+                {analysis.shapes.length} shape{analysis.shapes.length === 1 ? '' : 's'}
               </small>
             </p>
           )}
@@ -1107,7 +1330,7 @@ export function SimpleCameraPlay({
           </li>
           <li>
             <b>Start Play</b>
-            With an empty board, one tap stores a local baseline and starts live scoring.
+            With an empty board, one tap checks two local steady frames before live scoring starts.
           </li>
           <li>
             <b>Correct only when needed</b>
