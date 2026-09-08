@@ -161,20 +161,26 @@ browser camera, it:
    homography; it checks board pixels, band evidence, guide proportions, and local image detail against
    the initial 480 px / approximately 55° envelope;
 3. asks the player only to keep the physical 20 upright in the camera image and tap **Start Play**
-   with an empty board, which retains a volatile clear-board baseline and arms watching;
-4. compares each later settled frame with the current in-memory reference after bounded global
-   exposure/white-balance correction and a small board-face translation alignment for impact/mount
-   vibration; after an accepted aligned dart, it carries that offset into the in-memory guide and
-   next baseline. It still holds large movement, masks local change around the automatic board fit,
-   and ranks both elongated side-view shafts and compact near-centreline flight/occlusion changes;
-5. automatically chooses one internal candidate, preferring a one-end-on-board shaft estimate and
-   otherwise emitting a deliberately low-confidence compact-centroid estimate; it never converts a
-   protruding flight endpoint outside the double wire into an automatic `MISS`, and requires a nearby
-   same-zone candidate across two frames (with one-frame grace) before adding a reviewable ordinary
-   score proposal; and
-6. updates its in-memory reference to include the accepted dart before looking for the next one, then
-   provides a one-tap clear-board baseline for the next turn without asking the player to find the
-   board again.
+   with an empty board; it checks two consecutive clear-board comparisons before it arms watching rather
+   than trusting one instantaneous baseline frame;
+4. compares each later settled frame with the current in-memory reference after board-face-only
+   exposure/white-balance/noise estimation and bounded board-relative similarity alignment for
+   impact/mount/phone-optical-stabilization jitter (small shift, scale, and rotation). After an
+   accepted aligned dart, it carries that correction into the in-memory guide and next baseline. It
+   still holds movement that remains broad on the scoring face, while retaining a limited outside-ring
+   margin only to connect a local flight/shaft shape;
+5. ranks elongated side-view shafts and compact near-centreline flight/occlusion changes, but only
+   auto-scores a non-`MISS`, adequately separated endpoint when direction is direct: exactly one
+   endpoint is on a scoring bed or a clearly wider flight establishes the opposite narrow entry end.
+   Compact centroids, equal-width endpoint pairs, near-wire cues, and ambiguous directions are held
+   for ordinary correction instead of being converted into an arbitrary score. One isolated held
+   shape can be surfaced as an explicit camera suggestion, but cannot fill a DartCard without a
+   player action; competing shapes surface no suggestion. A protruding flight endpoint outside the
+   double wire is never an automatic `MISS`; and
+6. requires a nearby same-zone automatic-eligible candidate across two frames (with one-frame grace)
+   before adding it, then updates the in-memory reference to include that accepted dart before looking
+   for the next one. It provides the same one-tap clear-board stabilization for the next turn without
+   asking the player to find the board again.
 
 Normal play does not ask a player to name calibration points, fit a guide, download/capture a
 reference image, press a manual-analysis button, select a physical tip, or choose steel versus
@@ -185,12 +191,15 @@ bands repeat, so this browser field test deliberately assumes a level, 20-up boa
 board/number-orientation model is still required for general automatic orientation. The browser
 heuristic rejects large changes as camera movement/hand presence and reports no-change or
 ambiguous-change instead of fabricating a score. Optional visual-guide gestures plus named-anchor
-advanced diagnostics remain recovery-only. These browser changes have synthetic coverage only; real
-camera failures must be collected as diagnostic evidence, not written off as a mounting problem. The
-bridge is useful for workflow and failure-data collection; it must not be marketed as auto-accept,
-trained vision, or a substitute for native pose, temporal, and trained entry-point inference.
-Operating instructions and failure handling are in
-[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md).
+advanced diagnostics remain recovery-only. A direct post-PR #7 device report showed automatic board
+finding improving while dart resolution materially failed; the response is documented as a
+synthetic-only remediation, not proof of a fix. Real camera failures must be collected as diagnostic
+evidence, not written off as a mounting problem. The bridge is useful for workflow and failure-data
+collection; it must not be marketed as auto-accept, trained vision, or a substitute for native pose,
+temporal, and trained entry-point inference. Operating instructions, failure handling, and the
+post-field-report retest protocol are in
+[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md) and
+[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ### 4.4 Dart entry-point model
 

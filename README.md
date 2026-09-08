@@ -39,9 +39,11 @@ low-cost phone-first setup. Full design: [`docs/03-detection-engine.md`](docs/03
   event-style history, local-only Capture and Annotation Labs, and Vercel static hosting/security
   configuration.
 - An experimental browser-local **Camera Play** field-test workflow: automatic red/green board-color
-  finding, a visible 20-up guide, a one-tap local baseline via **Start Play**, automatic temporal
-  dart-shape score proposals, and DartCard correction when needed. Visual-guide gestures remain an
-  optional recovery path rather than normal setup.
+  finding, a visible 20-up guide, a one-tap **Start Play** clear-board stabilization, bounded local
+  temporal alignment, and automatic scores only when a dart has direct entry-direction evidence.
+  Compact/ambiguous clues remain held camera suggestions requiring an explicit player use, or fall
+  back to ordinary DartCard entry/correction; visual-guide gestures remain optional recovery rather
+  than normal setup.
 - Deterministic TypeScript rules for standard board geometry, X01 (straight/double/master in/out),
   Cricket (including correct bull marks), checkout routes, and correction-aware event projection,
   with executable tests.
@@ -63,8 +65,9 @@ no DartCounter integration, and no guarantee of score accuracy. The web Camera P
 transparent browser-local frame-difference field-test heuristic—not a trained or proven production
 auto-scoring claim; the native score stream remains a transparent simulation until the native CV
 milestone lands. See
-[`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) for its required
-mount, automatic-board-find, review, privacy, and failure boundaries.
+[`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) and
+[`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md) for its
+mount, automatic-board-find, abstention, review, privacy, failure, and retest boundaries.
 
 ## Repository map
 
@@ -128,9 +131,12 @@ through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #3](https://github.com/nick-kuhle/darts-180/pull/3), the initial Camera Play simplification in
 [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), automatic board finding in
 [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
-remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). The follow-up reliability
-work is in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7) and awaits direct field
-validation; synthetic tests alone do not make it merge-ready.
+remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
+follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge iPhone
+report found better automatic board finding but materially failed dart resolution. The dedicated
+post-field-report remediation now awaits pull-request delivery and a new direct-device retest;
+synthetic tests alone do not establish field improvement. See
+[`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential
 is stored in this repository; revoke any short-lived delivery token after confirming a delivery.
@@ -161,6 +167,9 @@ Start here, in order:
 6. [`docs/05-game-rules.md`](docs/05-game-rules.md) through
    [`docs/11-roadmap-and-team.md`](docs/11-roadmap-and-team.md) — gameplay, UX, API, privacy,
    quality, operations, and delivery plan.
+7. [`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) and
+   [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md) —
+   browser Camera Play limits, real-device evidence, automatic-score abstention, and retest protocol.
 
 Market research is time-stamped and intentionally separate in
 [`docs/research/2026-09-market-landscape.md`](docs/research/2026-09-market-landscape.md); re-check

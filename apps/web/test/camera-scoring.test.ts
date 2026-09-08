@@ -8,7 +8,9 @@ import {
   assessBoardFitCalibration,
   assessGuidedCalibration,
   candidateFromManualPoint,
+  isAutomaticTipCandidateEligible,
   selectAutomaticTipCandidate,
+  selectReviewTipCandidate,
   type CameraFrame,
   type DartTipCandidate,
 } from '../src/lib/cameraScoring.js';
@@ -101,6 +103,68 @@ function translateFrame(frame: CameraFrame, offsetX: number, offsetY: number): C
   return translated;
 }
 
+function drawVisibleFlightDart(frame: CameraFrame) {
+  // A connected narrow shaft with a much wider flight is the strongest non-trained direction cue
+  // available to the browser-only detector: the narrow end is the candidate board entry point.
+  drawDarkLine(frame, 360, 260, 407, 5);
+  for (let y = 220; y <= 270; y += 1) {
+    const halfWidth = Math.round(8 + (270 - y) * 0.45);
+    for (let x = 360 - halfWidth; x <= 360 + halfWidth; x += 1) setPixel(frame, x, y, 20);
+  }
+}
+
+function transformFrameSimilarity(
+  frame: CameraFrame,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+  rotationRadians: number,
+): CameraFrame {
+  const transformed = makeFrame(frame.width, frame.height);
+  const center = { x: frame.width / 2, y: frame.height / 2 };
+  const cosine = Math.cos(rotationRadians);
+  const sine = Math.sin(rotationRadians);
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      // Invert reference → current so each transformed output pixel samples the source frame.
+      const dx = x - center.x - offsetX;
+      const dy = y - center.y - offsetY;
+      const sourceX = center.x + (dx * cosine + dy * sine) / scale;
+      const sourceY = center.y + (-dx * sine + dy * cosine) / scale;
+      const left = Math.floor(sourceX);
+      const top = Math.floor(sourceY);
+      if (left < 0 || left >= frame.width - 1 || top < 0 || top >= frame.height - 1) continue;
+      const xFraction = sourceX - left;
+      const yFraction = sourceY - top;
+      const outputOffset = (y * frame.width + x) * 4;
+      for (const channel of [0, 1, 2] as const) {
+        const topLeft = frame.rgba[(top * frame.width + left) * 4 + channel]!;
+        const topRight = frame.rgba[(top * frame.width + left + 1) * 4 + channel]!;
+        const bottomLeft = frame.rgba[((top + 1) * frame.width + left) * 4 + channel]!;
+        const bottomRight = frame.rgba[((top + 1) * frame.width + left + 1) * 4 + channel]!;
+        const topValue = topLeft + (topRight - topLeft) * xFraction;
+        const bottomValue = bottomLeft + (bottomRight - bottomLeft) * xFraction;
+        transformed.rgba[outputOffset + channel] = Math.round(
+          topValue + (bottomValue - topValue) * yFraction,
+        );
+      }
+      transformed.rgba[outputOffset + 3] = 255;
+    }
+  }
+  return transformed;
+}
+
+function drawBoardSurroundChange(frame: CameraFrame) {
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      // With this test's circular calibration, 310 px is just outside the double-wire scoring
+      // face. The detector may retain this in its flight envelope but must not let it dominate the
+      // broad-motion percentage or board-face illumination estimate.
+      if (Math.hypot(x - frame.width / 2, y - frame.height / 2) > 310) setPixel(frame, x, y, 34);
+    }
+  }
+}
+
 function drawCheckerboard(frame: CameraFrame) {
   for (let y = 80; y < 640; y += 1) {
     for (let x = 80; x < 640; x += 1) {
@@ -146,6 +210,8 @@ test('reports no change when the settled frame matches the clear-board reference
   assert.equal(result.status, 'no-change');
   assert.equal(result.candidates.length, 0);
   assert.equal(result.changedPixels, 0);
+  assert.ok(result.comparedPixels > 0);
+  assert.equal(result.changedFraction, 0);
 });
 
 test('finds reviewable endpoint candidates for a newly visible elongated change', () => {
@@ -163,10 +229,35 @@ test('finds reviewable endpoint candidates for a newly visible elongated change'
   assert.ok(result.candidates.every((candidate) => candidate.confidence > 0));
   assert.ok(result.candidates.every((candidate) => candidate.tipLikelihood > 0));
   assert.ok(result.candidates.some((candidate) => candidate.zone.score >= 0));
+  // A uniformly thin line provides two plausible on-board endpoints. It remains reviewable, but
+  // must never be silently auto-recorded as whichever endpoint wins a tie-breaker.
+  assert.equal(selectAutomaticTipCandidate(result.candidates), null);
+  assert.ok(
+    result.candidates.every((candidate) => candidate.directionEvidence === 'ambiguous-endpoint'),
+  );
+  // A single held prompt may expose a deterministic suggestion, but it is intentionally separate
+  // from the automatic selector and requires a player action in Camera Play.
+  assert.notEqual(selectReviewTipCandidate(result.candidates), null);
+});
+
+test('uses a clear wider-flight cue to auto-select the narrow board-entry endpoint', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
+  drawVisibleFlightDart(current);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+
+  assert.equal(result.status, 'dart-candidate');
   const selected = selectAutomaticTipCandidate(result.candidates);
-  assert.notEqual(selected, null);
   assert.ok(selected !== null);
-  assert.ok(result.candidates.some((candidate) => candidate.id === selected.id));
+  assert.equal(selected?.directionEvidence, 'narrow-endpoint-shape');
+  assert.equal(selected?.endpoint, 'B');
+  assert.ok(isAutomaticTipCandidateEligible(selected));
+  assert.ok((selected?.imagePoint.y ?? 0) > 390);
 });
 
 test('never proposes a protruding flight endpoint as an automatic MISS', () => {
@@ -183,7 +274,9 @@ test('never proposes a protruding flight endpoint as an automatic MISS', () => {
   assert.equal(result.status, 'dart-candidate');
   assert.ok(result.candidates.length >= 1);
   assert.ok(result.candidates.every((candidate) => candidate.zone.ring !== 'MISS'));
-  assert.notEqual(selectAutomaticTipCandidate(result.candidates)?.zone.ring, 'MISS');
+  const selected = selectAutomaticTipCandidate(result.candidates);
+  assert.notEqual(selected?.zone.ring, 'MISS');
+  assert.equal(selected?.directionEvidence, 'only-endpoint-on-board');
 });
 
 test('finds a subtle compact flight change for a near-centreline camera view', () => {
@@ -197,11 +290,13 @@ test('finds a subtle compact flight change for a near-centreline camera view', (
     boardDiameterPixels: 570,
   });
   assert.equal(result.status, 'dart-candidate');
-  const selected = selectAutomaticTipCandidate(result.candidates);
-  assert.ok(selected !== null);
-  assert.equal(selected?.endpoint, 'center');
-  assert.equal(selected?.directionEvidence, 'compact-local-change');
-  assert.ok((selected?.confidence ?? 1) < 0.7);
+  const compactCandidate = result.candidates[0];
+  assert.equal(compactCandidate?.endpoint, 'center');
+  assert.equal(compactCandidate?.directionEvidence, 'compact-local-change');
+  assert.ok((compactCandidate?.confidence ?? 1) < 0.7);
+  // A compact front-on flight can prove that something changed, not where its hidden point entered.
+  assert.equal(selectAutomaticTipCandidate(result.candidates), null);
+  assert.equal(selectReviewTipCandidate(result.candidates)?.id, compactCandidate?.id);
 });
 
 test('keeps a compact dart proposal through modest global exposure drift', () => {
@@ -219,6 +314,25 @@ test('keeps a compact dart proposal through modest global exposure drift', () =>
   assert.ok(result.changedFraction < 0.02);
 });
 
+test('keeps a board-local dart detectable when the permitted flight surround changes', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
+  // A cabinet / room shadow can change outside the board while the board face itself is steady.
+  // It must not become a broad-motion event or bias the exposure adjustment away from the dart.
+  drawBoardSurroundChange(current);
+  drawDarkLine(current, 360, 190, 250);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+
+  assert.equal(result.status, 'dart-candidate');
+  assert.ok(result.changedFraction < 0.02);
+  assert.ok(result.candidates.some((candidate) => candidate.zone.segment === 20));
+});
+
 test('absorbs bounded mount vibration before detecting a newly inserted dart', () => {
   const reference = makeFrame();
   drawTranslationTexture(reference);
@@ -232,23 +346,40 @@ test('absorbs bounded mount vibration before detecting a newly inserted dart', (
   });
   assert.equal(result.status, 'dart-candidate');
   assert.deepEqual(result.alignmentOffset, { x: 4, y: -3 });
-  const selected = selectAutomaticTipCandidate(result.candidates);
-  assert.ok(selected !== null);
-  assert.equal(selected?.zone.ring, 'T');
-  assert.equal(selected?.zone.segment, 20);
+  assert.ok(result.candidates.some((candidate) => candidate.zone.ring === 'T'));
+  assert.ok(result.candidates.some((candidate) => candidate.zone.segment === 20));
+  // Translation compensation must not restore the former arbitrary equal-endpoint auto-score.
+  assert.equal(selectAutomaticTipCandidate(result.candidates), null);
+});
+
+test('absorbs bounded mobile optical-stabilization scale and rotation without inventing a dart', () => {
+  const reference = makeFrame();
+  drawTranslationTexture(reference);
+  // This is comparable to a phone re-centering by about 2% of a 570 px board after impact.
+  const current = transformFrameSimilarity(reference, 12, -3, 1.009, 0.007);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+
+  assert.equal(result.status, 'no-change');
+  assert.deepEqual(result.alignmentOffset, { x: 12, y: -3 });
+  assert.ok(Math.abs(result.alignment.scale - 1.009) < 0.002);
+  assert.ok(Math.abs(result.alignment.rotationRadians - 0.007) < 0.002);
+  assert.ok(result.alignment.improvement > 0.5);
 });
 
 test('does not normalize a board translation beyond the bounded vibration allowance', () => {
   const reference = makeFrame();
   drawTranslationTexture(reference);
-  const current = translateFrame(reference, 14, 0);
+  const current = translateFrame(reference, 28, 0);
 
   const result = analyzeDartDifference(reference, current, calibration(), {
     boardDiameterPixels: 570,
   });
   assert.equal(result.status, 'camera-moved-or-hand-present');
-  assert.ok(Math.abs(result.alignmentOffset.x) <= 8);
-  assert.ok(Math.abs(result.alignmentOffset.y) <= 8);
+  assert.ok(Math.abs(result.alignmentOffset.x) <= 16);
+  assert.ok(Math.abs(result.alignmentOffset.y) <= 16);
 });
 
 test('manual visible-tip selection maps through the same canonical scorer', () => {
@@ -260,7 +391,7 @@ test('manual visible-tip selection maps through the same canonical scorer', () =
   assert.ok(candidate.boardPoint.yMm < -90);
 });
 
-test('automatic candidate choice prefers board-direction evidence, then endpoint shape cue', () => {
+test('automatic candidate choice admits direct direction evidence and rejects arbitrary endpoints', () => {
   const base: Omit<DartTipCandidate, 'id' | 'tipLikelihood' | 'directionEvidence'> = {
     shapeId: 'shape-1',
     endpoint: 'A',
@@ -268,7 +399,7 @@ test('automatic candidate choice prefers board-direction evidence, then endpoint
     boardPoint: { xMm: -6, yMm: -82 },
     zone: makeZone('S', 20),
     wireMarginMm: 3.2,
-    confidence: 0.52,
+    confidence: 0.72,
   };
   const ambiguousWideEnd: DartTipCandidate = {
     ...base,
@@ -279,21 +410,28 @@ test('automatic candidate choice prefers board-direction evidence, then endpoint
   const containedEnd: DartTipCandidate = {
     ...base,
     id: 'contained-end',
-    tipLikelihood: 0.42,
+    tipLikelihood: 0.8,
     directionEvidence: 'only-endpoint-on-board',
   };
+  assert.equal(isAutomaticTipCandidateEligible(ambiguousWideEnd), false);
+  assert.equal(isAutomaticTipCandidateEligible(containedEnd), true);
   assert.equal(selectAutomaticTipCandidate([ambiguousWideEnd, containedEnd])?.id, 'contained-end');
 
-  const lowerShapeCue: DartTipCandidate = {
-    ...base,
-    id: 'lower-shape-cue',
-    tipLikelihood: 0.36,
-    directionEvidence: 'ambiguous-endpoint',
+  const nearWireDirectEnd: DartTipCandidate = {
+    ...containedEnd,
+    id: 'near-wire-direct-end',
+    wireMarginMm: 1.49,
   };
-  assert.equal(
-    selectAutomaticTipCandidate([lowerShapeCue, ambiguousWideEnd])?.id,
-    'ambiguous-wide-end',
-  );
+  assert.equal(isAutomaticTipCandidateEligible(nearWireDirectEnd), false);
+  assert.equal(selectAutomaticTipCandidate([ambiguousWideEnd, nearWireDirectEnd]), null);
+
+  const separateMappedChange: DartTipCandidate = {
+    ...ambiguousWideEnd,
+    id: 'separate-shape',
+    shapeId: 'shape-2',
+  };
+  assert.equal(selectAutomaticTipCandidate([containedEnd, separateMappedChange]), null);
+  assert.equal(selectReviewTipCandidate([containedEnd, separateMappedChange]), null);
 });
 
 test('rejects comparisons when camera resolution changes after reference capture', () => {
