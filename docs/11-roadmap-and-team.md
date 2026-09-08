@@ -20,10 +20,11 @@ finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) and the initi
 reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), followed by the
 first reliability update in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct
 post-merge device report found automatic board finding improved but dart resolution materially failed.
-The post-field-report browser remediation merged in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
-but a direct post-merge test exposed a clear-board baseline-arming hold. Its separate automatic
-baseline-recovery follow-up is open in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and requires a direct-device retest; the evidence
-taxonomy, retest procedure, and non-claims live in
+The post-field-report browser remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8)
+and its recovery update in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A new
+direct post-PR #9 iPhone report found a detector-gated Start Play loop despite strong automatic board
+finding. The current follow-up replaces that gate with a bounded local-reference handoff and still
+requires a direct-device retest; the evidence taxonomy, retest procedure, and non-claims live in
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
 [the current implementation status](13-current-implementation-status.md).
 

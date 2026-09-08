@@ -149,24 +149,26 @@ real-world auto-scoring performance.
 
 ### 4.3.1 Implemented browser field-test bridge
 
-The deployable web prototype now has a deliberately constrained, no-calibration **Camera Play**
+The deployable web prototype has a deliberately constrained, no-calibration **Camera Play**
 workspace for first real-board testing. It is not the production native runtime. On a fixed mounted
 browser camera, it:
 
 1. samples conventional red/green accents and searches for a repeated, color-balanced,
    alternating-color double-and-treble scoring-band pair rather than trusting the outermost colored
    pixel; this resists a red surround, printed branding, or one coloured object;
-2. uses the compact two-color bull as a local center cross-check, then estimates the band-pair ellipse,
-   requires corresponding guide handles to agree in two fits, and creates an internal outer-double
-   homography; it checks board pixels, band evidence, guide proportions, and local image detail against
-   the initial 480 px / approximately 55° envelope;
-3. asks the player only to keep the physical 20 upright in the camera image and tap **Start Play**
-   with an empty board; it checks two consecutive clear-board comparisons before it arms watching rather
-   than trusting one instantaneous baseline frame;
+2. uses the compact two-color bull as a local centre cross-check, then estimates the band-pair ellipse,
+   requires two comparable automatic fits, and creates an internal outer-double homography; it checks
+   board pixels, band evidence, proportions, and local image detail against the initial 480 px /
+   approximately 55° envelope;
+3. asks the player only to keep the physical 20 upright in the image and tap **Start Play** with an
+   empty board. After the accepted automatic fit, Start Play waits a fixed 650 ms and saves one fresh
+   volatile local reference. If no drawable browser frame exists it retries at 250 ms up to four
+   additional attempts, then returns control; a dart-like or broad-motion detector label is never
+   permitted to return normal setup to board finding or block it indefinitely;
 4. compares each later settled frame with the current in-memory reference after board-face-only
    exposure/white-balance/noise estimation and bounded board-relative similarity alignment for
    impact/mount/phone-optical-stabilization jitter (small shift, scale, and rotation). After an
-   accepted aligned dart, it carries that correction into the in-memory guide and next baseline. It
+   accepted aligned dart, it carries that correction into the in-memory mapping and next reference. It
    still holds movement that remains broad on the scoring face, while retaining a limited outside-ring
    margin only to connect a local flight/shaft shape;
 5. ranks elongated side-view shafts and compact near-centreline flight/occlusion changes, but only
@@ -179,29 +181,27 @@ browser camera, it:
    double wire is never an automatic `MISS`; and
 6. requires a nearby same-zone automatic-eligible candidate across two frames (with one-frame grace)
    before adding it, then updates the in-memory reference to include that accepted dart before looking
-   for the next one. It provides the same one-tap clear-board stabilization for the next turn without
-   asking the player to find the board again.
+   for the next one. A next turn takes the same bounded one-tap reference handoff without asking the
+   player to find the board again.
 
 Normal play does not ask a player to name calibration points, fit a guide, download/capture a
 reference image, press a manual-analysis button, select a physical tip, or choose steel versus
-soft-tip setup. The player-facing board rendering follows the conventional dark-S20/red-accent and
-light-S1/S5/green-accent pattern, but the browser fitter does **not** mistake black/white singles for
-number recognition. Colors cannot uniquely read a board’s number-ring rotation because red/green
-bands repeat, so this browser field test deliberately assumes a level, 20-up board; a trained
-board/number-orientation model is still required for general automatic orientation. The browser
-heuristic rejects large changes as camera movement/hand presence and reports no-change or
-ambiguous-change instead of fabricating a score. During the pre-throw clear-board check, two repeated
-broad holds refresh the automatic board map and restart the check; local dart/ambiguous/incompatible
-changes never become a new baseline. Optional visual-guide gestures plus named-anchor advanced
-diagnostics remain recovery-only. A direct post-PR #7 device report showed automatic board finding
-improving while dart resolution materially failed, and a direct post-merge PR #8 test exposed a
-broad-motion baseline-arming hold. The separate recovery response is [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and is documented as a synthetic-only
-remediation, not proof of a fix.
-Real camera failures must be collected as diagnostic evidence, not written off as a mounting problem.
-The bridge is useful for workflow and failure-data collection; it must not be marketed as auto-accept,
-trained vision, or a substitute for native pose, temporal, and trained entry-point inference.
-Operating instructions, failure handling, and the post-field-report retest protocol are in
-[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md) and
+soft-tip setup. In automatic normal mode, the preview contains only a subtle non-interactive board
+indication and status; detailed rings, spokes, handles, and the `20` marker live only in optional
+manual recovery. Raw fit/detector metrics are under an explicit diagnostics disclosure.
+
+The player-facing board rendering follows the conventional dark-S20/red-accent and light-S1/S5/green-
+accent pattern, but the browser fitter does **not** mistake black/white singles for number recognition.
+Colors cannot uniquely read a board’s number-ring rotation because red/green bands repeat, so this
+browser field test deliberately assumes a level, 20-up board; a trained board/number-orientation model
+is still required for general automatic orientation. Optional visual-guide gestures plus named-anchor
+advanced diagnostics remain recovery-only.
+
+[PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and
+[PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A direct post-PR #9 iPhone report
+showed strong automatic board finding but an unacceptable detector-gated setup loop. The bounded
+reference handoff described here is regression-tested but is not a claimed device fix until it is
+retested on direct top-level HTTPS iPhone and Android deployments. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ### 4.4 Dart entry-point model

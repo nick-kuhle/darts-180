@@ -20,10 +20,10 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 
 1. Player chooses **Local 501**, player names, starting score, and in/out rules.
 2. App offers **Camera setup** or **Manual mode**. It never blocks the game because a camera is unavailable.
-3. Camera setup automatically finds the conventional red/green board pattern and displays a visible
-   20-up guide. With an empty board, a player uses one **Start Play** action to retain a local
-   baseline and arm play—without named-point selection or guide fitting. Gesture fitting remains an
-   optional recovery path for unusual boards or failed automatic detection.
+3. Camera setup automatically finds the conventional red/green board pattern and displays a compact
+   20-up status rather than a calibration guide. With an empty board, a player uses one **Start Play**
+   action to retain a local reference and arm play—without named-point selection or guide fitting.
+   Gesture fitting remains an optional recovery path for unusual boards or failed automatic detection.
 4. Once a dart impacts, the vision runtime waits for wobble to settle; it does not score on the impact frame.
 5. For each recognized dart, the UI makes its best internal candidate estimate and shows a DartCard:
    - safe-looking proposal → editable camera suggestion;
@@ -48,8 +48,8 @@ No S2 UI should wait for ML accuracy. The confirmation flow validates whether pl
 ### P0: Camera setup and review UX
 
 - [ ] Request camera permission in plain language; manual mode works after denial.
-- [ ] Automatically find a conventional red/green board and show a framing guide with a comprehensible top-20 orientation and live quality dimensions: framing, focus, lighting/glare, obliqueness, obstruction.
-- [ ] Let a player begin play with one local-baseline action instead of named point picking, guide fitting, or separate reference capture. Keep drag/tap, pinch, twist, and edge handles as optional recovery only.
+- [ ] Automatically find a conventional red/green board and show concise player-facing framing / top-20 status. Keep focus, lighting/glare, obliqueness, obstruction, and fit measures behind an explicit diagnostics disclosure rather than presenting calibration controls in normal play.
+- [ ] Let a player begin play with one bounded local-reference action instead of named point picking, guide fitting, or separate reference capture. Keep drag/tap, pinch, twist, and edge handles as optional recovery only.
 - [ ] Support a selected board profile and standard-board default without a player-facing steel-tip/soft-tip setup branch.
 - [ ] Explain why a view is rejected and offer three actions: reposition, use manual entry, add a second camera later.
 - [ ] Present three independently editable DartCards, each with score, notation, confidence state, and source.
@@ -98,8 +98,8 @@ This contract is deliberately tighter than a marketing phrase. It is a transpare
 ### Camera setup acceptance
 
 - On a supported setup, board detection/quality state appears in ≤3 seconds at p95.
-- A normal player can reach Board Found from a visible conventional red/green board, verify the `20`
-  orientation marker, and start local play with one action—without calibration, named board-point
+- A normal player can reach Board Found from a visible conventional red/green board, see a compact
+  `20`-up status, and start local play with one action—without calibration, named board-point
   selection, guide fitting, image download/upload, separate reference capture, or visible-tip clicking.
 - A failed automatic fit gives an actionable cause and makes visual guide gestures available only as
   optional recovery.

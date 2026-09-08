@@ -45,7 +45,7 @@ extrinsics.
 | Permission needed         | purpose + privacy, manual fallback                     | request only after intent                   |
 | Looking for board         | automatic red/green board find and “show whole board”  | board/pose detector running                 |
 | Board found, quality poor | one dominant, actionable problem                       | quality diagnostics ranked                  |
-| Board found               | visible 20-up guide and one **Start Play** action      | retain baseline, arm scoring                |
+| Board found               | compact 20-up status and one **Start Play** action     | fixed short handoff, retain local reference |
 | Optional recovery         | drag/tap, pinch, twist, and four edge handles          | only after automatic finding cannot recover |
 | Mapping drift             | “board/camera moved—finding board again”               | pause candidates, preserve game             |
 | Unsupported               | manual-entry / reposition / later second-device option | never dead-end                              |
@@ -59,9 +59,9 @@ never as the default message.
 ### Normal automatic-board interaction
 
 The player must never have to learn named board-point labels or a homography. For a conventional board,
-the app should find red/green scoring bands automatically, display a visible `20` orientation marker,
-and ask only for **Start Play** with the board empty. Internally it infers a mapping and retains a
-local baseline; the player does not calibrate or fit a guide.
+the app should find red/green scoring bands automatically, show a compact `20`-up status, and ask only
+for **Start Play** with the board empty. Internally it infers a mapping, waits a short bounded handoff,
+and retains a local reference; the player does not calibrate or fit a guide.
 
 Red/green bands repeat around a board, so a non-trained browser heuristic cannot uniquely infer every
 number-ring rotation from color alone. The starting contract is a level camera with the physical 20

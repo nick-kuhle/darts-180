@@ -39,8 +39,8 @@ low-cost phone-first setup. Full design: [`docs/03-detection-engine.md`](docs/03
   event-style history, local-only Capture and Annotation Labs, and Vercel static hosting/security
   configuration.
 - An experimental browser-local **Camera Play** field-test workflow: automatic red/green board-color
-  finding, a visible 20-up guide, a one-tap **Start Play** clear-board stabilization, bounded local
-  temporal alignment, and automatic scores only when a dart has direct entry-direction evidence.
+  finding, a subtle automatic board indication, and a one-tap **Start Play** bounded local-reference
+  handoff before live temporal analysis. Automatic scores still require direct entry-direction evidence.
   Compact/ambiguous clues remain held camera suggestions requiring an explicit player use, or fall
   back to ordinary DartCard entry/correction; visual-guide gestures remain optional recovery rather
   than normal setup.
@@ -134,9 +134,12 @@ through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge iPhone
 report found better automatic board finding but materially failed dart resolution. The dedicated
-post-field-report remediation merged in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8), but
-a direct post-merge test exposed a clear-board baseline-arming hold. The separate baseline-recovery follow-up is open in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and awaits a new direct-device retest; synthetic tests alone do not establish
-field improvement. See
+post-field-report remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and its
+baseline-recovery follow-up in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged.
+A new direct post-PR #9 iPhone report shows that detector-gated setup still loops despite successful
+board finding. The current follow-up replaces that setup gate with a bounded fresh-reference handoff
+and requires a new physical-device retest; synthetic tests alone do not establish field improvement.
+See
 [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential

@@ -13,9 +13,9 @@ an unfinished camera API or claiming live AI scoring.
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
 - an experimental browser-local **Camera Play** field-test flow: automatic conventional red/green
-  board-color finding with a visible 20-up guide; one-tap clear-board stabilization via **Start
-  Play**; bounded local temporal alignment; direct-entry-only automatic scoring with explicit
-  compact/ambiguous abstention; ordinary DartCard entry/correction when needed; and optional
+  board-color finding with a subtle normal-play indication; a one-tap bounded fresh-reference handoff
+  via **Start Play**; bounded local temporal alignment; direct-entry-only automatic scoring with
+  explicit compact/ambiguous abstention; ordinary DartCard entry/correction when needed; and optional
   gesture-based visual-guide recovery for auto-find failures;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
@@ -46,11 +46,12 @@ merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
 remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
-report found better board finding but failed dart resolution; the dedicated remediation merged in
-[PR #8](https://github.com/nick-kuhle/darts-180/pull/8), but a direct post-merge test exposed a
-baseline-arming hold. A separate recovery follow-up is open in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and awaits a new
-direct-device test. Review each diff and its GitHub Actions result before using a build for external
-testing. See
+report found better board finding but failed dart resolution; the dedicated remediation in
+[PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and recovery update in
+[PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A new direct post-PR #9 iPhone
+report found that detector-gated setup still loops despite a successful board fit. The current
+follow-up replaces it with a bounded fresh-reference handoff and still needs a physical-device test.
+Review each diff and its GitHub Actions result before using a build for external testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
 credential is stored in source, Git configuration, or the remote URL; revoke any short-lived
@@ -89,9 +90,10 @@ Deployment for the current Camera Play pull request. Use the Vercel deployment�
 
 Camera permission is requested only after tapping **START REAR CAMERA**. In **CAMERA PLAY**, keep a
 conventional red/green board fully visible with its physical 20 at the top of the camera image; wait
-for **BOARD FOUND**, then tap **START PLAY** with an empty board and wait for its brief automatic
-clear-board check before throwing. If Camera Play holds a compact/ambiguous dart, use **REVIEW /
-ENTER SCORE** rather than treating a guessed endpoint as a result. If a direct HTTPS tab does not
+for **BOARD FOUND**, then tap **START PLAY** once with an empty board. The normal sequence is the
+brief **STARTING LIVE PLAY** handoff followed by **BOARD FOUND · WATCHING LOCALLY**; it is not a
+clear-board detector loop. If Camera Play holds a compact/ambiguous dart, use **REVIEW / ENTER
+SCORE** rather than treating a guessed endpoint as a result. If a direct HTTPS tab does not
 prompt, use that browser’s lock/camera controls to set Camera to **Allow**, reload the page, and try
 again. On iOS, check Safari’s website camera setting; on Android Chrome, check the site settings
 behind the lock icon.

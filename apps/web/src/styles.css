@@ -2479,6 +2479,7 @@ h3 {
 
 .camera-play-surface.is-locked .camera-play-canvas {
   cursor: default;
+  pointer-events: none;
 }
 
 .camera-play-empty {
@@ -2739,6 +2740,31 @@ h3 {
 
 .camera-play-engine-state {
   color: #9cb4a9;
+}
+
+/* Keep pixel counts, focus heuristics, and pose telemetry available for field debugging without
+   presenting ordinary Camera Play as a calibration/diagnostic workflow. */
+.camera-play-diagnostics {
+  margin: 0;
+  padding: 11px 12px;
+  color: #9cb4a9;
+  border: 1px solid #334a40;
+  border-radius: 10px;
+  background: rgba(13, 26, 21, 0.7);
+}
+
+.camera-play-diagnostics summary {
+  color: #a7cbbd;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.095em;
+  cursor: pointer;
+}
+
+.camera-play-diagnostics-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .camera-play-turn > .button {
