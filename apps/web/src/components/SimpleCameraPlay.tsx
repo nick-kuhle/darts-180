@@ -27,6 +27,7 @@ import {
   type GuidedCalibrationQuality,
 } from '../lib/cameraScoring';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
+import { advanceClearBoardBaseline } from '../lib/clearBoardBaseline';
 import type { CameraTurnProposal } from '../lib/cameraProposal';
 import {
   BOARD_FIT_CANONICAL_ANCHORS,
@@ -137,6 +138,7 @@ export function SimpleCameraPlay({
   const baselineStabilityRef = useRef<{
     frame: CameraFrame;
     stableComparisons: number;
+    broadMotionComparisons: number;
   } | null>(null);
   const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
   const recordingRef = useRef(false);
@@ -500,7 +502,11 @@ export function SimpleCameraPlay({
     }
     // Do not turn one instantaneous phone frame into the baseline. Let camera focus, exposure, and
     // optical stabilization settle across two local comparisons while the board is still clear.
-    baselineStabilityRef.current = { frame, stableComparisons: 0 };
+    baselineStabilityRef.current = {
+      frame,
+      stableComparisons: 0,
+      broadMotionComparisons: 0,
+    };
     setReference(null);
     setAnalysis(null);
     setHeldCandidate(null);
@@ -575,6 +581,71 @@ export function SimpleCameraPlay({
     [fit, onAddProposal],
   );
 
+  const refreshAutomaticBoardMapAfterMotion = useCallback(
+    (frame: CameraFrame): boolean => {
+      // Optional guide recovery is deliberately not overwritten by a one-frame automatic refit.
+      // Its owner can explicitly use Find Board Again if the phone has actually been repositioned.
+      if (automaticFit === null) return false;
+
+      const refreshedFit = detectBoardFitFromColors(frame);
+      setAutomaticFit(refreshedFit);
+      if (refreshedFit.fit === null) {
+        setFit(null);
+        fitRef.current = null;
+        setHomography(null);
+        setQuality(null);
+        setReference(null);
+        baselineStabilityRef.current = null;
+        autoFitStabilityRef.current = null;
+        setPhase('finding-board');
+        setLiveMessage(
+          'The view kept moving while I prepared the baseline. Finding the board again automatically…',
+        );
+        return true;
+      }
+
+      const refreshedHomography = solveImageToBoardHomography(
+        refreshedFit.fit,
+        BOARD_FIT_CANONICAL_ANCHORS,
+      );
+      const refreshedQuality = assessAutomaticBoardFitQuality(refreshedFit.fit, frame);
+      if (refreshedHomography === null || !refreshedQuality.pass) {
+        setFit(null);
+        fitRef.current = null;
+        setHomography(null);
+        setQuality(null);
+        setReference(null);
+        baselineStabilityRef.current = null;
+        autoFitStabilityRef.current = null;
+        setPhase('finding-board');
+        setLiveMessage(
+          refreshedQuality.blockers[0] ??
+            'The view changed while I prepared the baseline. Finding the board again automatically…',
+        );
+        return true;
+      }
+
+      // The color fit maps the *current* camera pose, so the next two clear-frame checks no longer
+      // compare the newly settled phone image through a stale pre-settle board guide.
+      fitRef.current = refreshedFit.fit;
+      setFit(refreshedFit.fit);
+      setHomography(refreshedHomography);
+      setQuality(refreshedQuality);
+      setReference(null);
+      setAnalysis(null);
+      baselineStabilityRef.current = {
+        frame,
+        stableComparisons: 0,
+        broadMotionComparisons: 0,
+      };
+      setLiveMessage(
+        'The camera was still settling, so I refreshed the board map. Keep the board clear and still; I will arm automatically.',
+      );
+      return true;
+    },
+    [automaticFit],
+  );
+
   useEffect(() => {
     if (!isArmingBaseline || homography === null || quality?.pass !== true || gameComplete) {
       return;
@@ -590,37 +661,51 @@ export function SimpleCameraPlay({
       });
       if (cancelled) return;
       setAnalysis(nextAnalysis);
+      const baselineAdvance = advanceClearBoardBaseline(
+        {
+          stableComparisons: baseline.stableComparisons,
+          broadMotionComparisons: baseline.broadMotionComparisons,
+        },
+        nextAnalysis.status,
+      );
+      baselineStabilityRef.current = { ...baseline, ...baselineAdvance.progress };
+
+      if (baselineAdvance.action === 'armed') {
+        // Keep the original reference whose board pose is paired with the current homography. A
+        // bounded alignment still handles harmless sub-pixel camera stabilization afterwards.
+        setReference(baseline.frame);
+        setAnalysis(null);
+        baselineStabilityRef.current = null;
+        setPhase('watching');
+        setLiveMessage('Watching locally. Throw one dart, then step clear while it settles.');
+        return;
+      }
       if (nextAnalysis.status === 'no-change') {
-        const stableComparisons = baseline.stableComparisons + 1;
-        baselineStabilityRef.current = { ...baseline, stableComparisons };
-        if (stableComparisons >= 2) {
-          // Keep the original reference whose board pose is paired with the current homography. A
-          // bounded alignment still handles harmless sub-pixel camera stabilization afterwards.
-          setReference(baseline.frame);
-          setAnalysis(null);
-          baselineStabilityRef.current = null;
-          setPhase('watching');
-          setLiveMessage('Watching locally. Throw one dart, then step clear while it settles.');
-          return;
-        }
         setLiveMessage(
           'Clear board looks steady. Holding one more local frame before play starts…',
         );
         return;
       }
-      // Stable comparisons must be consecutive. A hand, dart, or broad pose change must not
-      // leave one earlier clean comparison credited toward a baseline captured after it clears.
-      baselineStabilityRef.current = { ...baseline, stableComparisons: 0 };
+
       stabilityRef.current = null;
       if (nextAnalysis.status === 'camera-moved-or-hand-present') {
+        if (baselineAdvance.action === 'refresh-automatic-board-map') {
+          if (refreshAutomaticBoardMapAfterMotion(frame)) return;
+          setLiveMessage(
+            'The camera is still moving relative to the optional guide. Keep the board clear and mount still, or tap Find Board Again to use automatic board finding.',
+          );
+          return;
+        }
         setLiveMessage(
-          'I see broad motion. Step clear and keep the mount still while I check the baseline.',
+          'I see broad motion while preparing the clear-board baseline. Do not throw yet; step clear and keep the mount still for another moment.',
         );
         return;
       }
+      // Localized change must never become a fresh reference: a dart, a hand, or an incompatible
+      // frame stays held until the player clears/reframes it instead of being silently absorbed.
       if (nextAnalysis.status === 'dart-candidate') {
         setLiveMessage(
-          'A dart-like change appeared while checking the clear board. Remove it, then wait for the baseline check.',
+          'A dart-like change appeared before live scoring armed. Remove every dart, then wait for the clear-board baseline before throwing.',
         );
         return;
       }
@@ -631,7 +716,7 @@ export function SimpleCameraPlay({
         return;
       }
       setLiveMessage(
-        'The clear-board check needs a quieter frame. Step clear and let the camera settle.',
+        'The clear-board check found a local change. Remove every dart, step clear, and let the camera settle.',
       );
     };
     checkClearBoard();
@@ -646,6 +731,7 @@ export function SimpleCameraPlay({
     homography,
     isArmingBaseline,
     quality?.boardDiameterPixels,
+    refreshAutomaticBoardMapAfterMotion,
     quality?.pass,
   ]);
 
@@ -1102,9 +1188,11 @@ export function SimpleCameraPlay({
                 phase === 'turn-ready' ||
                 phase === 'awaiting-clear') && (
                 <div className="camera-play-gesture-chip locked">
-                  {phase === 'reviewing-candidate'
-                    ? 'CAMERA SUGGESTION · CHECK SCORE'
-                    : 'BOARD FOUND · WATCHING LOCALLY'}
+                  {phase === 'arming-baseline'
+                    ? 'BOARD FOUND · CHECKING CLEAR BOARD'
+                    : phase === 'reviewing-candidate'
+                      ? 'CAMERA SUGGESTION · CHECK SCORE'
+                      : 'BOARD FOUND · WATCHING LOCALLY'}
                 </div>
               )}
           </div>

@@ -1,6 +1,6 @@
 # Browser Camera Play — automatic board-find field-test guide
 
-**Status:** browser-local experimental player flow; dart-detection remediation awaiting direct-device retest, September 2026
+**Status:** browser-local experimental player flow; post-PR #8 baseline-recovery follow-up awaiting pull-request delivery and direct-device retest, September 2026
 
 **Purpose:** test the simplest viable mounted-phone experience while native runtime and trained
 vision models are still being built. A player starts the camera, lets the browser find the board’s
@@ -22,8 +22,10 @@ photo download, manual frame-analysis action, or visible-tip click.
    standard board’s repeated red/green double and treble scoring bands—not merely the outermost
    colored object—then estimates the board shape and draws a guide.
 3. **Start Play.** With no darts in the board and people clear of the view, tap **START PLAY**. The
-   browser checks two consecutive local clear-board comparisons before it arms live scoring; the player has not
-   calibrated anything or captured a separate reference.
+   chip first says **BOARD FOUND · CHECKING CLEAR BOARD** while the browser checks two consecutive
+   local clear-board comparisons. Do **not** throw until it changes to **BOARD FOUND · WATCHING
+   LOCALLY**. If two broad-motion checks persist, automatic mode refreshes the current board map and
+   repeats the short check; the player has not calibrated anything or captured a separate reference.
 4. **Throw naturally.** Throw one dart, step clear, and wait for it to settle. The detector compares
    the new frame with the local baseline. It adds a score only when it can establish a direct
    board-entry direction (a unique on-board endpoint or a clearly narrower endpoint opposite a
@@ -66,7 +68,10 @@ After board finding, each dart is still a browser-local visual-change heuristic.
 are estimated on the stable board face rather than the room/background. The detector may compensate a
 bounded board-relative similarity change from impact or phone optical stabilization (up to 16 px
 center shift, about ±1.8% scale, and about ±0.8° rotation), then carries an accepted correction into
-the guide and next baseline. It rejects a change that remains broad on the scoring face.
+the guide and next baseline. It rejects a change that remains broad on the scoring face. During the
+pre-throw clear-board check only, two repeated broad holds trigger a fresh automatic board-color fit
+and restart that check; a possible local dart/ambiguous change is never silently absorbed as a new
+reference.
 
 Elongated shafts and compact near-centreline flight/occlusion changes remain useful **evidence**, but
 not every candidate can become a score. After nearby two-frame stability, automatic scoring requires
@@ -106,8 +111,9 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
    [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), the initial browser-camera remediation
    [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability follow-up
    [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A real-device report after that merge
-   found dart-resolution failures; test the dedicated remediation preview described in
-   [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) before treating
+   found dart-resolution failures. PR #8 then merged, but a direct post-merge test exposed a
+   baseline-arming hold. Test the separate recovery follow-up’s top-level HTTPS deployment as described
+   in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) before treating
    the heuristic as improved.
 2. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable
    **Include files outside the Root Directory**. `apps/web/vercel.json` runs the monorepo-root install
@@ -124,20 +130,20 @@ heuristic. Test direct top-level HTTPS deployments on actual iOS and Android har
 
 ## Expected failure behavior and recovery
 
-| In-app state                               | Meaning                                                                                 | Safe response                                                                                                                                                 |
-| ------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded-preview camera message            | The page is in an iframe that cannot request user media                                 | Open the direct `https://…vercel.app` URL in Safari/Chrome, not an Arena/in-app preview                                                                       |
-| Camera permission blocked                  | Browser/device denied or remembered a denial                                            | In the direct HTTPS tab, set Camera to Allow from lock/camera controls, reload, retry                                                                         |
-| Waiting for a complete frame               | Browser camera has not delivered drawable video data                                    | Wait briefly after permission; if a live preview is visible but this persists, update/reload to the fixed Camera Play build and report device/browser details |
-| No red/green board found                   | Color signal is weak, cropped, non-standard, or obscured                                | Show complete board, use diffuse light, reduce glare, move closer, and keep physical 20 upright                                                               |
-| Board too small                            | Not enough board pixels for the first test                                              | Move closer or use optical resolution; automatic finding resumes without player calibration                                                                   |
-| Board needs work                           | Automatic color ellipse is too oblique, soft, or malformed                              | Center/level the mount, improve light/focus, then tap **FIND BOARD AGAIN**                                                                                    |
-| Broad movement held                        | A hand/body/shadow or movement beyond bounded board-relative alignment changed too much | Step out, stabilize the mount/light, and let the board settle; retain shift, scale, rotation, board-support percentage, and threshold in a failure report     |
-| No score appears                           | Change was not an isolated dart or lacked a safe direct entry cue                       | Wait briefly; if it remains held, use **REVIEW / ENTER SCORE** and log the abstention as a recall failure rather than inducing a guessed score                |
-| Wrong/near-wire score                      | Even a direct-looking heuristic cue or geometry can be wrong                            | Tap **REVIEW OR CORRECT SCORES**, correct the DartCard, then confirm; record the known physical score and detector metrics                                    |
-| Camera framing/resolution changed          | Existing baseline/mapping is no longer trustworthy                                      | Tap **FIND BOARD AGAIN**, wait for Board Found, then Start Play with an empty board                                                                           |
-| Unusual board colors / extreme perspective | Color heuristic cannot establish a usable automatic shape                               | Open **Optional recovery & advanced diagnostics**; do not make it the normal player flow                                                                      |
-| Bounce-out/stacked/hidden dart             | One-camera visual difference is insufficiently isolated                                 | Record/correct manually; retain it as field-test failure evidence                                                                                             |
+| In-app state                               | Meaning                                                                                               | Safe response                                                                                                                                                                                                                                                                             |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded-preview camera message            | The page is in an iframe that cannot request user media                                               | Open the direct `https://…vercel.app` URL in Safari/Chrome, not an Arena/in-app preview                                                                                                                                                                                                   |
+| Camera permission blocked                  | Browser/device denied or remembered a denial                                                          | In the direct HTTPS tab, set Camera to Allow from lock/camera controls, reload, retry                                                                                                                                                                                                     |
+| Waiting for a complete frame               | Browser camera has not delivered drawable video data                                                  | Wait briefly after permission; if a live preview is visible but this persists, update/reload to the fixed Camera Play build and report device/browser details                                                                                                                             |
+| No red/green board found                   | Color signal is weak, cropped, non-standard, or obscured                                              | Show complete board, use diffuse light, reduce glare, move closer, and keep physical 20 upright                                                                                                                                                                                           |
+| Board too small                            | Not enough board pixels for the first test                                                            | Move closer or use optical resolution; automatic finding resumes without player calibration                                                                                                                                                                                               |
+| Board needs work                           | Automatic color ellipse is too oblique, soft, or malformed                                            | Center/level the mount, improve light/focus, then tap **FIND BOARD AGAIN**                                                                                                                                                                                                                |
+| Broad movement while checking clear board  | A hand/body/shadow, camera settle, or motion beyond bounded board-relative alignment changed too much | Keep every dart out and step clear. Automatic mode refreshes the board map after two consecutive broad holds; if it still repeats, stabilize the mount/light or tap **FIND BOARD AGAIN**, then retain shift, scale, rotation, board-support percentage, and threshold in a failure report |
+| No score appears                           | Change was not an isolated dart or lacked a safe direct entry cue                                     | Wait briefly; if it remains held, use **REVIEW / ENTER SCORE** and log the abstention as a recall failure rather than inducing a guessed score                                                                                                                                            |
+| Wrong/near-wire score                      | Even a direct-looking heuristic cue or geometry can be wrong                                          | Tap **REVIEW OR CORRECT SCORES**, correct the DartCard, then confirm; record the known physical score and detector metrics                                                                                                                                                                |
+| Camera framing/resolution changed          | Existing baseline/mapping is no longer trustworthy                                                    | Tap **FIND BOARD AGAIN**, wait for Board Found, then Start Play with an empty board                                                                                                                                                                                                       |
+| Unusual board colors / extreme perspective | Color heuristic cannot establish a usable automatic shape                                             | Open **Optional recovery & advanced diagnostics**; do not make it the normal player flow                                                                                                                                                                                                  |
+| Bounce-out/stacked/hidden dart             | One-camera visual difference is insufficiently isolated                                               | Record/correct manually; retain it as field-test failure evidence                                                                                                                                                                                                                         |
 
 ## Report a real failure usefully
 
