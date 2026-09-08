@@ -1,8 +1,7 @@
 # Browser Camera Play — dart-detection field remediation
 
-**Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) is merged; a separate
-baseline-arming recovery follow-up awaits pull-request delivery and a direct-device retest, 2026-09-07
-(America/Los_Angeles)
+**Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) is merged; [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) is open for
+baseline-arming recovery and awaits a direct-device retest, 2026-09-07 (America/Los_Angeles)
 
 This note records the reliability response after the browser-camera work in
 [PR #7](https://github.com/nick-kuhle/darts-180/pull/7) and [PR #8](https://github.com/nick-kuhle/darts-180/pull/8)

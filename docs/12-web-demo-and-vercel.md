@@ -48,7 +48,7 @@ remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the 
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
 report found better board finding but failed dart resolution; the dedicated remediation merged in
 [PR #8](https://github.com/nick-kuhle/darts-180/pull/8), but a direct post-merge test exposed a
-baseline-arming hold. A separate recovery follow-up awaits pull-request delivery and a new
+baseline-arming hold. A separate recovery follow-up is open in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and awaits a new
 direct-device test. Review each diff and its GitHub Actions result before using a build for external
 testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).

@@ -1,6 +1,6 @@
 # Browser Camera Play — automatic board-find field-test guide
 
-**Status:** browser-local experimental player flow; post-PR #8 baseline-recovery follow-up awaiting pull-request delivery and direct-device retest, September 2026
+**Status:** browser-local experimental player flow; post-PR #8 baseline-recovery follow-up open in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), awaiting direct-device retest, September 2026
 
 **Purpose:** test the simplest viable mounted-phone experience while native runtime and trained
 vision models are still being built. A player starts the camera, lets the browser find the board’s
@@ -112,7 +112,7 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
    [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability follow-up
    [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A real-device report after that merge
    found dart-resolution failures. PR #8 then merged, but a direct post-merge test exposed a
-   baseline-arming hold. Test the separate recovery follow-up’s top-level HTTPS deployment as described
+   baseline-arming hold. Test [PR #9](https://github.com/nick-kuhle/darts-180/pull/9)’s top-level HTTPS deployment as described
    in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) before treating
    the heuristic as improved.
 2. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable

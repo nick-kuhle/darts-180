@@ -195,7 +195,7 @@ broad holds refresh the automatic board map and restart the check; local dart/am
 changes never become a new baseline. Optional visual-guide gestures plus named-anchor advanced
 diagnostics remain recovery-only. A direct post-PR #7 device report showed automatic board finding
 improving while dart resolution materially failed, and a direct post-merge PR #8 test exposed a
-broad-motion baseline-arming hold. The separate recovery response is documented as a synthetic-only
+broad-motion baseline-arming hold. The separate recovery response is [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and is documented as a synthetic-only
 remediation, not proof of a fix.
 Real camera failures must be collected as diagnostic evidence, not written off as a mounting problem.
 The bridge is useful for workflow and failure-data collection; it must not be marketed as auto-accept,
