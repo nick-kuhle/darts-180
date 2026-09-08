@@ -16,9 +16,10 @@ field-test scorer; manifest validation; synthetic scenes; and inspectable pose/t
 The active browser UX is Camera Play: automatic red/green board finding and one-action Start Play,
 with visual-guide gestures reserved for recovery rather than normal setup. The initial simplification
 merged in [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), followed by automatic board
-finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5). The follow-up real-board
-reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6) requires direct
-device evidence; the specific inventory and non-claims live in
+finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) and the initial browser-camera
+reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). The follow-up
+real-board reliability work in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7) requires
+direct device evidence; the specific inventory and non-claims live in
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

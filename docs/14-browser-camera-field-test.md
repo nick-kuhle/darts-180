@@ -92,10 +92,11 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
 
 1. The browser field test and Vercel app-root preparation are merged in
    [PR #2](https://github.com/nick-kuhle/darts-180/pull/2),
-   [PR #3](https://github.com/nick-kuhle/darts-180/pull/3), and
-   [PR #5](https://github.com/nick-kuhle/darts-180/pull/5). Use the Vercel Preview for the follow-up
-   Camera Play reliability [PR #6](https://github.com/nick-kuhle/darts-180/pull/6) once it is
-   available.
+   [PR #3](https://github.com/nick-kuhle/darts-180/pull/3),
+   [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera
+   remediation [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). Use the Vercel Preview for
+   the follow-up Camera Play reliability work in
+   [PR #7](https://github.com/nick-kuhle/darts-180/pull/7).
 2. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable
    **Include files outside the Root Directory**. `apps/web/vercel.json` runs the monorepo-root install
    and web workspace build; no environment variables are required. See the

@@ -40,9 +40,10 @@ merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #2](https://github.com/nick-kuhle/darts-180/pull/2), and
 [PR #3](https://github.com/nick-kuhle/darts-180/pull/3),
 [PR #4](https://github.com/nick-kuhle/darts-180/pull/4), and
-[PR #5](https://github.com/nick-kuhle/darts-180/pull/5). A follow-up browser reliability
-remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6) awaits direct field
-validation. Review each diff and its GitHub Actions result before using a build for external testing.
+[PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
+remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6). The follow-up in
+[PR #7](https://github.com/nick-kuhle/darts-180/pull/7) awaits direct field validation. Review each
+diff and its GitHub Actions result before using a build for external testing.
 No delivery
 credential is stored in source, Git configuration, or the remote URL; revoke any short-lived
 delivery token once the delivery is confirmed.
