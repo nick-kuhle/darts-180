@@ -37,6 +37,22 @@ export interface AutoBoardFitResult {
   message: string;
 }
 
+/**
+ * A short-lived board-fit latch for live mobile camera sampling. A valid pattern can disappear for
+ * a frame while autofocus or auto-exposure settles; that must not force a player to start finding
+ * the same stationary board again.
+ */
+export interface AutomaticBoardFitStability {
+  fit: BoardFitPoints;
+  matchingObservations: number;
+  intermittentMisses: number;
+}
+
+/** Two matching observations still protect normal Camera Play from a one-frame false board fit. */
+export const AUTOMATIC_BOARD_FIT_REQUIRED_OBSERVATIONS = 2;
+/** At the 800 ms finder cadence, keep a matching board read for no more than 1.6 s of dropouts. */
+export const AUTOMATIC_BOARD_FIT_MAX_INTERMITTENT_MISSES = 2;
+
 type AccentColor = 'red' | 'green';
 type AccentPoint = ImagePoint & Readonly<{ color: AccentColor }>;
 
@@ -378,6 +394,36 @@ export function boardFitsAreSimilar(
   return first.every((point, index) => distance(point, second[index]!) <= maximumHandleDrift);
 }
 
+/**
+ * Advances the short mobile-camera fit latch without lowering the two-observation requirement.
+ * A null observation may be an autofocus / exposure dropout, but prolonged loss still forgets the
+ * prior board so a genuine reframe cannot inherit an old mapping.
+ */
+export function advanceAutomaticBoardFitStability(
+  previous: AutomaticBoardFitStability | null,
+  nextFit: BoardFitPoints | null,
+): AutomaticBoardFitStability | null {
+  if (nextFit === null) {
+    if (
+      previous === null ||
+      previous.intermittentMisses >= AUTOMATIC_BOARD_FIT_MAX_INTERMITTENT_MISSES
+    ) {
+      return null;
+    }
+    return {
+      ...previous,
+      intermittentMisses: previous.intermittentMisses + 1,
+    };
+  }
+
+  const matchesPrevious = previous !== null && boardFitsAreSimilar(previous.fit, nextFit);
+  return {
+    fit: nextFit,
+    matchingObservations: matchesPrevious ? previous.matchingObservations + 1 : 1,
+    intermittentMisses: 0,
+  };
+}
+
 function normalizeAccentPoints(
   points: readonly AccentPoint[],
   center: ImagePoint,
@@ -590,10 +636,13 @@ function boardAccentColor(red: number, green: number, blue: number): AccentColor
   if (saturation < 0.22) return null;
 
   const hue = hueDegrees(red, green, blue, maximum, minimum);
-  // Broad phone-camera-friendly ranges for the conventional red / green scoring bands. These are
-  // deliberately not generic “bright color” ranges: blue, orange, and a coloured room should not
-  // become scoring-board evidence.
-  if (hue <= 34 || hue >= 330) return 'red';
+  // A warmly lit sisal/cork single bed can sit at an orange-red hue with modest saturation. Hue
+  // alone then turns most of the light scoring beds into “red”, erasing the uncoloured gap that
+  // distinguishes the double and treble bands. Real red beds remain materially red-dominant even
+  // under a warm phone white balance, so require that channel relationship while allowing a little
+  // more hue tolerance than the original narrow red window.
+  const redDominant = red >= green * 1.32 && red >= blue * 1.32;
+  if ((hue <= 44 || hue >= 330) && redDominant) return 'red';
   if (hue >= 62 && hue <= 184) return 'green';
   return null;
 }

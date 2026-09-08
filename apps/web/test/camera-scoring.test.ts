@@ -4,6 +4,7 @@ import test from 'node:test';
 import { makeZone } from '@darts-180/rules';
 
 import {
+  analysisRadiusForBoardSkew,
   analyzeDartDifference,
   assessBoardFitCalibration,
   assessGuidedCalibration,
@@ -161,6 +162,18 @@ function drawBoardSurroundChange(frame: CameraFrame) {
       // face. The detector may retain this in its flight envelope but must not let it dominate the
       // broad-motion percentage or board-face illumination estimate.
       if (Math.hypot(x - frame.width / 2, y - frame.height / 2) > 310) setPixel(frame, x, y, 34);
+    }
+  }
+}
+
+function drawLowerOuterRimIntrusion(frame: CameraFrame) {
+  for (let y = 0; y < frame.height; y += 1) {
+    for (let x = 0; x < frame.width; x += 1) {
+      const radius = Math.hypot(x - frame.width / 2, y - frame.height / 2);
+      // A moving foreground beneath a centred mount can skim the bottom edge/number area. This
+      // deliberately reaches the outer scoring face enough to exceed the historic broad-motion
+      // percentage, but leaves the stable central board core untouched.
+      if (radius >= 180 && radius <= 280 && y >= 540) setPixel(frame, x, y, 20);
     }
   }
 }
@@ -333,6 +346,71 @@ test('keeps a board-local dart detectable when the permitted flight surround cha
   assert.ok(result.candidates.some((candidate) => candidate.zone.segment === 20));
 });
 
+test('keeps a lower outer-rim foreground change out of the broad-motion stop', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
+  drawLowerOuterRimIntrusion(current);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+    acceptedRadiusMm: analysisRadiusForBoardSkew(10),
+  });
+
+  assert.ok(result.changedFraction > 0.065);
+  assert.ok(result.stableCoreChangedFraction < 0.025);
+  assert.equal(result.requiresExplicitReview, true);
+  assert.notEqual(result.status, 'camera-moved-or-hand-present');
+  // A lower foreground intrusion becomes an abstention/recovery case, never an automatic score.
+  assert.equal(selectAutomaticTipCandidate(result.candidates), null);
+});
+
+test('uses a tight board-local flight envelope for a near-centreline view', () => {
+  assert.equal(analysisRadiusForBoardSkew(0), 194);
+  assert.equal(analysisRadiusForBoardSkew(18), 194);
+  assert.equal(analysisRadiusForBoardSkew(19), 212);
+  assert.equal(analysisRadiusForBoardSkew(36), 240);
+  assert.equal(analysisRadiusForBoardSkew(null), 212);
+});
+
+test('keeps a direct visible dart eligible with lower-room changes outside a centreline envelope', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
+  drawBoardSurroundChange(current);
+  drawVisibleFlightDart(current);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+    acceptedRadiusMm: analysisRadiusForBoardSkew(10),
+  });
+
+  assert.equal(result.status, 'dart-candidate');
+  assert.equal(result.requiresExplicitReview, false);
+  assert.equal(
+    selectAutomaticTipCandidate(result.candidates)?.directionEvidence,
+    'narrow-endpoint-shape',
+  );
+});
+
+test('does not turn a board-length foreground edge into a dart shape', () => {
+  const reference = makeFrame();
+  const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
+  drawDarkLine(current, 360, 100, 600, 5);
+
+  const result = analyzeDartDifference(reference, current, calibration(), {
+    boardDiameterPixels: 570,
+  });
+
+  assert.equal(result.status, 'ambiguous-change');
+  assert.equal(result.shapes.length, 0);
+  assert.equal(selectAutomaticTipCandidate(result.candidates), null);
+});
+
 test('absorbs bounded mount vibration before detecting a newly inserted dart', () => {
   const reference = makeFrame();
   drawTranslationTexture(reference);
@@ -439,14 +517,17 @@ test('rejects comparisons when camera resolution changes after reference capture
   assert.equal(result.status, 'incompatible-frame');
 });
 
-test('rejects a large frame-wide change as camera movement or a hand in view', () => {
+test('rejects a large frame-wide change that reaches the stable board core', () => {
   const reference = makeFrame();
   const current = makeFrame();
+  drawTranslationTexture(reference);
+  drawTranslationTexture(current);
   drawLargeChangedBlock(current);
 
   const result = analyzeDartDifference(reference, current, calibration(), {
     boardDiameterPixels: 570,
   });
+  assert.ok(result.changedFraction > 0.065);
   assert.equal(result.status, 'camera-moved-or-hand-present');
 });
 

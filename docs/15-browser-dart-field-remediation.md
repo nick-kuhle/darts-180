@@ -1,122 +1,146 @@
-# Browser Camera Play — post-merge field remediation
+# Browser Camera Play — post-PR #10 field remediation
 
-**Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and
-[PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. This document records a new
-post-PR #9 iPhone field report and [PR #10](https://github.com/nick-kuhle/darts-180/pull/10), which still requires a fresh physical retest. **Date:** 2026-09-07 (America/Los_Angeles).
+**Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
+[PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
+[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. This document records the
+post-PR #10 direct-iPhone result and the next browser field-remediation branch. It still requires a
+fresh direct-device retest. **Date:** 2026-09-07 (America/Los_Angeles).
 
 Camera Play remains an experimental, browser-local fixed-mount heuristic. It is not a trained
-entry-point model and this work makes no production accuracy claim.
+entry-point model, and this work makes no production accuracy claim.
 
 ## Field-report chronology
 
-| Point in the work  | Direct evidence                                                                                                                                                                                                                 | Appropriate conclusion                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| After PR #7        | Automatic board finding improved on a real iPhone/board, but dart resolution either did not occur or was materially wrong.                                                                                                      | Do not claim dart-scoring readiness.                                                                            |
-| After PR #8        | A direct device run got stuck in clear-board arming before live dart watching.                                                                                                                                                  | PR #9 added a detector-driven clear-board recovery policy.                                                      |
-| After merged PR #9 | On `darts-180-web.vercel.app`, a roughly one-yard, near-centreline, steady iPhone mount found the board strongly, but normal Camera Play cycled between dart-like / broad-motion setup messages and returned to **Start Play**. | The setup gate itself is a product defect. Do not ask the player to keep tuning an otherwise appropriate mount. |
+| Point in the work   | Direct evidence                                                                                                                                                                                                                                                                                                                                                                | Appropriate conclusion                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| After PR #7         | Automatic board finding improved on a real iPhone/board, but dart resolution either did not occur or was materially wrong.                                                                                                                                                                                                                                                     | Do not claim dart-scoring readiness.                                                                                                                                            |
+| After PR #8         | A direct device run got stuck in clear-board arming before live dart watching.                                                                                                                                                                                                                                                                                                 | PR #9 added detector-driven clear-board recovery.                                                                                                                               |
+| After merged PR #9  | A roughly one-yard, near-centreline iPhone mount found the board strongly, but normal Camera Play cycled between dart-like / broad-motion setup messages and returned to **Start Play**.                                                                                                                                                                                       | The setup gate was a product defect; do not ask the player to keep tuning an otherwise suitable mount.                                                                          |
+| After merged PR #10 | On `darts-180-web.vercel.app`, Camera Play visibly reached **BOARD FOUND · 20 ↑ UPRIGHT** → **START PLAY** → **STARTING LIVE PLAY** → **BOARD FOUND · WATCHING LOCALLY**. Board acquisition was still intermittent in use; after throws, the screen reported broad movement, a one-frame dart/flight hold, and competing/unmappable changes. No thrown dart filled a DartCard. | The bounded Start Play handoff is physically observed and must remain. Live board acquisition and temporal dart detection are still not field-proven or practically successful. |
 
-The post-PR #9 screen composites showed a strong automatic fit (approximately 530 px board,
-20/20 outer-band sectors, 2,857 red and 1,232 green samples, 56% alternation, 100% band agreement,
-and a 91% color-pattern cue). The fit therefore is not the immediate failure. A soft focus heuristic
-and a local changed-pixel readout were diagnostic observations, not proof that calibration failed.
+The supplied retest screens showed a conventional, near-centreline board and later two visible darts
+near the upper scoring area. They do **not** establish a score ground truth, a labeled video sequence,
+or an accuracy benchmark. In particular, two unresolved darts in one later frame are a reason to
+abstain rather than a reason to choose one arbitrarily.
 
-The screenshots were private diagnostic material, not source assets, raw camera frames, or an
-accuracy benchmark. They must not be used to derive a score ground truth or tune a threshold. They
-were removed from the working directory after this review and are never committed.
+The private screens were used only for diagnostic inspection and were deleted from the workspace.
+They are not source assets, test fixtures, raw camera frames, or committed material.
 
-## What this follow-up changes
+## What the next remediation changes
 
-### 1. A bounded Start Play reference handoff, not detector-gated setup
+### 1. Preserve the bounded Start Play handoff
 
-After the automatic board finder has accepted two comparable color fits, **Start Play**:
+After the automatic finder has accepted two comparable color fits, **Start Play** continues to:
 
-1. shows **STARTING LIVE PLAY**;
-2. waits a fixed short settle of **650 ms**;
-3. captures one fresh volatile browser-local reference frame; and
-4. enters **BOARD FOUND · WATCHING LOCALLY** immediately when a drawable frame exists.
+1. show **STARTING LIVE PLAY**;
+2. wait a fixed 650 ms;
+3. save one fresh, volatile browser-local reference; and
+4. enter **BOARD FOUND · WATCHING LOCALLY** whenever a drawable frame exists.
 
-If the browser has not supplied a drawable frame, it retries every 250 ms up to four additional
-captures, then returns to **Start Play** with a frame-specific message. That is the only retry
-condition. A localized visual change or broad-motion label is not allowed to loop normal setup, reset
-board finding, or demand pixel-identical clear-board comparisons. The player is still asked to begin
-with an empty board, but no separate capture action is exposed.
+A missing drawable frame retries every 250 ms up to four additional attempts, then returns control.
+A dart-like or broad-motion classifier label is never allowed to send normal setup back to board
+finding or trap the player in clear-board proof. This is the behavior PR #10 physically demonstrated;
+it is not reverted by this follow-up.
 
-This boundary is deliberate. The live dart-difference classifier remains useful _after_ a reference
-exists; it was not reliable enough to act as a proof that every setup frame in mobile video was
-identical.
+### 2. Make automatic acquisition more tolerant of the observed board
 
-### 2. Preserve conservative score safety after watching starts
+The field inspection identified two weaknesses in a hue-only bootstrap:
 
-The follow-up does **not** weaken automatic score acceptance to get through setup:
+- warm natural cork/sisal single beds can land in an orange-red hue range under phone white balance;
+  treating those broad light beds as red erases the uncoloured single-bed gap needed to prove the
+  double/treble pair; and
+- a correct conventional color pattern can fade for an isolated autofocus or auto-exposure sample.
 
-- board-color finding still requires comparable repeated conventional red/green band fits;
-- live detection continues to use board-local temporal analysis and bounded similarity alignment;
-- an automatic result needs a non-`MISS`, on-board endpoint, adequate confidence and wire margin,
-  plus a unique endpoint or a visible wider-flight/narrower-entry direction cue;
-- compact, equal-endpoint, low-margin, competing, and otherwise ambiguous changes remain unscored or
-  become one explicitly accepted held suggestion; and
-- an external shaft/flight endpoint is not silently recorded as `MISS`.
+The finder now requires red-channel dominance as well as a tolerant red hue, retains the repeated
+red/green band proof and two-color bull cross-check, and latches a matching fit through at most two
+intermittent missing observations. It still needs two comparable actual fits before **Board Found**;
+a third consecutive missing observation forgets the old mapping so a real reframe cannot inherit it.
+No calibration controls return to normal flow.
 
-Ordinary **Review / Enter Score** correction remains available. The optional manual guide and
-Advanced Field Test remain recovery/engineering paths; automatic mode does not overwrite a guide a
-player owns manually.
+### 3. Keep live analysis local to the fitted view
 
-### 3. Make normal Camera Play look like play
+The direct retest included changing foreground below the lower rim while the preferred near-centreline
+view was used. To keep that room foreground from competing with a real dart, live analysis now:
 
-With an automatically found board, the preview now uses at most a subtle non-interactive outer-board
-indication and a status chip. It no longer paints the six rings, twenty spokes, crosshair, cardinal
-handle circles, or a draggable `20` control that made the normal camera view look like calibration.
-Those details remain only inside the optional manual recovery guide.
+- chooses its permitted outside-double flight margin from measured skew: 24 mm for a front/near-
+  centreline fit, 42 mm for moderate skew, and 70 mm only for an oblique view;
+- uses a moderate 42 mm default rather than assuming a wide 70 mm surround when skew is unavailable;
+- distinguishes broad change across the stable central board core from an outer-rim/surround
+  disturbance; a large rim-only disturbance can produce a recoverable suggestion but cannot
+  auto-record a score;
+- rejects a component longer than a physically plausible projected dart instead of treating a
+  board-length foreground edge or blanket fold as a shaft; and
+- checks at a 500 ms cadence so the second settled confirmation is requested before a player would
+  normally throw a second dart.
 
-Raw color-fit measures, sharpness/skew heuristics, changed-pixel counts, thresholds, alignment, and
-shape counts live under a collapsed **Camera diagnostics** disclosure. They remain available for a
-consented failure report without being presented as ordinary player decisions.
+The collapsed diagnostics disclose the stable-core fraction alongside the existing board-support,
+threshold, alignment, and shape information. When a safe local candidate cannot be formed, the
+normal screen now puts **CHECK / ENTER SCORE** next to the failure message rather than requiring the
+player to find the lower review control. That is ordinary correction recovery, not a calibration step.
+
+### 4. Preserve conservative score safety
+
+This remediation does **not** solve recall by guessing:
+
+- automatic board finding still needs comparable repeated conventional red/green band fits;
+- an automatic result still needs a non-`MISS`, on-board endpoint, adequate confidence and wire
+  margin, plus a unique endpoint or a visible wider-flight/narrower-entry direction cue;
+- compact, equal-endpoint, low-margin, competing, exterior, and otherwise ambiguous changes remain
+  unscored or become one explicitly accepted held suggestion;
+- a high-change outer-rim frame is review-only even if it happens to contain one direct-looking
+  candidate; and
+- an exterior shaft/flight endpoint is never silently recorded as `MISS`.
+
+Ordinary **Review / Enter Score**, the optional visual guide, and Advanced Field Test remain
+available for recovery. The latter two are not normal setup.
 
 ## Evidence separated by strength
 
-| Evidence level             | Covered now                                                                                                                                                                                                                                                                                                                                           | Not proved                                                                                               |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Synthetic/build regression | The Start Play reference policy has focused unit coverage: a short fixed settle is specified, a missing browser frame retries, and a fresh frame reaches live watching even in the presence of localized or broad setup transient labels. Existing color-fit, geometry, motion-alignment, candidate-abstention, and no-automatic-`MISS` tests remain. | Accuracy on a physical board, a particular phone, either dart point style, or the production deployment. |
-| Direct physical evidence   | The post-PR #9 iPhone report proves automatic board finding can succeed while detector-gated setup still produces an unacceptable loop.                                                                                                                                                                                                               | That this replacement reaches watching on device, detects a dart, or scores any dart correctly.          |
-| Privacy-safe diagnostics   | The browser can expose fit and temporal metrics under an explicit disclosure.                                                                                                                                                                                                                                                                         | Raw-video inspection, a labeled evaluation corpus, or consent for media collection.                      |
+| Evidence level             | Covered now                                                                                                                                                                                                                                                                                                  | Not proved                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Synthetic/build regression | Warm-cork color separation, transient-fit latching, near-centreline/mid-skew flight envelopes, lower-rim foreground handling, physically implausible long-shape rejection, direct visible-flight selection, candidate abstention, no automatic `MISS`, and the bounded Start Play policy have focused tests. | Accuracy on a physical board, a particular phone, either dart point style, or the deployment.               |
+| Direct physical evidence   | PR #10’s **Start Play → Watching Locally** transition was observed on the reported iPhone/board. The subsequent live detector failed to record the shown throws.                                                                                                                                             | That this remediation acquires the board consistently, recognizes a dart, or scores it correctly on device. |
+| Privacy-safe diagnostics   | The browser can expose fit and temporal measurements under an explicit disclosure without uploading media.                                                                                                                                                                                                   | A labeled video corpus, raw-video inspection, or consent for media collection.                              |
 
 A passing local build or synthetic test must never be described as a direct-device result.
 
 ## Required physical retest
 
-Use the top-level HTTPS preview/deployment directly in Safari or Chrome. An Arena preview iframe or
-in-app browser cannot exercise the real permission/frame path.
+Use the top-level HTTPS deployment directly in Safari or Chrome. An Arena preview iframe or in-app
+browser cannot exercise the real permission/frame path.
 
-1. Mount the phone near the board centreline, about the previously successful distance if practical,
-   with the full double ring visible and the physical 20 upright in the image.
+1. Mount the phone near the board centreline at the previously workable distance, with the whole
+   double ring visible and the physical 20 upright. Keep movable foreground below the board from
+   crossing the lower double/number area when practical; this is framing hygiene, not calibration.
 2. Start the rear camera and wait for **BOARD FOUND**. Do not use the optional guide unless automatic
-   board finding actually fails.
-3. Start with an empty board and tap **START PLAY** once. The expected normal sequence is
-   **STARTING LIVE PLAY** followed, after roughly the fixed short handoff, by **BOARD FOUND · WATCHING
-   LOCALLY**. It must not display a dart-like/broad-motion baseline loop or return to **Start Play**.
-4. Throw isolated, settled singles, trebles, doubles, outer bulls, and inner bulls. Test steel and
-   soft tips as equivalent player flows where practical. Record known misses separately.
-5. Before accepting a proposed score, independently record physical ground truth. For every no-score,
-   held suggestion, or wrong proposal, use normal correction and record it as recall/precision
-   evidence rather than forcing an automatic result.
-6. Open **Camera diagnostics** only when recording a failure. Retain a privacy-safe screenshot only
-   with tester consent; do not upload raw camera media without the separate consent and intake gate.
+   board finding genuinely fails after it has had time to settle.
+3. With an empty board, tap **START PLAY** once. Verify **STARTING LIVE PLAY** then **BOARD FOUND ·
+   WATCHING LOCALLY**. The successful PR #10 transition must remain intact.
+4. Throw **one isolated dart at a time** and wait for the resulting card or held suggestion before
+   throwing the next. Start with clear, well-inside singles and trebles; record doubles, bulls,
+   misses, near-wire hits, steel tips, and soft tips as separate cases.
+5. Independently record physical ground truth before looking at the screen. For each no-score, held
+   suggestion, or wrong proposal, use normal correction and record it as recall/precision evidence
+   rather than forcing an automatic result.
+6. Open **Camera diagnostics** only for a failure report. Capture consented privacy-safe screenshots
+   if useful; do not upload raw media without the separate consent and intake gate.
 
-Use the full field sheet in
+Use the field sheet in
 [`14-browser-camera-field-test.md`](14-browser-camera-field-test.md#controlled-field-test-record).
 
 ## Exit criteria for this follow-up
 
-Do not say the field flow is fixed until a new direct iPhone retest demonstrates all of the following:
+Do not say live dart detection is fixed until a new direct iPhone retest demonstrates all of the
+following:
 
-- automatic conventional-board finding still succeeds for the reported mounted setup;
+- automatic conventional-board finding succeeds repeatedly for the reported mounted setup without
+  normal-flow calibration;
 - one **Start Play** tap reliably enters live watching without a detector-driven setup loop;
-- normal Camera Play does not expose calibration-looking handles/spokes or engineering telemetry by
-  default;
-- ambiguous/compact/exterior candidates still do not silently fill a DartCard or emit automatic
-  `MISS`; and
-- normal correction still completes a turn without calibration, frame analysis, or a visible-tip
-  click.
+- at least one isolated, clearly visible settled dart is automatically recorded at its independently
+  confirmed score, and subsequent controlled cases are recorded rather than silently discarded;
+- a changing lower foreground, compact/ambiguous cue, competing darts, and exterior endpoint do not
+  create an arbitrary auto-score or automatic `MISS`; and
+- correction still completes a turn without calibration, manual analysis, or a visible-tip click.
 
 A trained board/orientation and entry-point model, measured device performance, consented real-world
 evaluation, and native frame processing remain necessary before a production auto-scoring claim.

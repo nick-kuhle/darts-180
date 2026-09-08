@@ -10,11 +10,14 @@ import {
   type ImagePoint,
 } from '../lib/annotationGeometry';
 import {
-  boardFitsAreSimilar,
+  AUTOMATIC_BOARD_FIT_REQUIRED_OBSERVATIONS,
+  advanceAutomaticBoardFitStability,
   detectBoardFitFromColors,
   type AutoBoardFitResult,
+  type AutomaticBoardFitStability,
 } from '../lib/autoBoardFit';
 import {
+  analysisRadiusForBoardSkew,
   analyzeDartDifference,
   assessAutomaticBoardFitQuality,
   assessBoardFitCalibration,
@@ -50,9 +53,9 @@ import {
 const MAX_WORKING_EDGE = 1280;
 const MIN_HANDLE_HIT_RADIUS = 24;
 // A 1280 px portrait frame plus local board registration is intentionally more work than a simple
-// preview draw. Leave mobile Safari/Chrome breathing room between analyses instead of continuously
-// queuing frame reads and making focus/optical-stabilization behavior worse.
-const LOCAL_ANALYSIS_INTERVAL_MS = 800;
+// preview draw. A half-second cadence still leaves Safari/Chrome room to render, while confirming a
+// settled direct-entry cue before a player naturally throws a second dart.
+const LOCAL_ANALYSIS_INTERVAL_MS = 500;
 
 type CameraPhase =
   | 'finding-board'
@@ -140,7 +143,7 @@ export function SimpleCameraPlay({
   } | null>(null);
   const referenceCaptureTimerRef = useRef<number | null>(null);
   const referenceCaptureGenerationRef = useRef(0);
-  const autoFitStabilityRef = useRef<{ fit: BoardFitPoints; count: number } | null>(null);
+  const autoFitStabilityRef = useRef<AutomaticBoardFitStability | null>(null);
   const recordingRef = useRef(false);
 
   const [cameraActive, setCameraActive] = useState(false);
@@ -390,8 +393,22 @@ export function SimpleCameraPlay({
       const result = detectBoardFitFromColors(frame);
       if (cancelled) return;
       setAutomaticFit(result);
+      const nextStability = advanceAutomaticBoardFitStability(
+        autoFitStabilityRef.current,
+        result.fit,
+      );
+      autoFitStabilityRef.current = nextStability;
       if (result.fit === null) {
-        autoFitStabilityRef.current = null;
+        if (nextStability !== null) {
+          // A warm board, focus pull, or exposure correction can temporarily weaken the color
+          // pattern even though the mounted board has not moved. Retain the last fit briefly, but
+          // keep the player in finding mode until a second comparable observation arrives.
+          setFit(nextStability.fit);
+          setLiveMessage(
+            'The board color pattern briefly flickered. Keeping the last board read while the camera settles…',
+          );
+          return;
+        }
         setFit(null);
         setHomography(null);
         setQuality(null);
@@ -399,12 +416,11 @@ export function SimpleCameraPlay({
         return;
       }
 
-      const previous = autoFitStabilityRef.current;
-      const count =
-        previous !== null && boardFitsAreSimilar(previous.fit, result.fit) ? previous.count + 1 : 1;
-      autoFitStabilityRef.current = { fit: result.fit, count };
       setFit(result.fit);
-      if (count < 2) {
+      if (
+        nextStability === null ||
+        nextStability.matchingObservations < AUTOMATIC_BOARD_FIT_REQUIRED_OBSERVATIONS
+      ) {
         setLiveMessage('Board colors found. Confirming the board in the live view…');
         return;
       }
@@ -633,14 +649,15 @@ export function SimpleCameraPlay({
       if (cancelled || recordingRef.current) return;
       const frame = captureFrame();
       if (frame === null) return;
-      const nextAnalysis = analyzeDartDifference(
-        reference,
-        frame,
-        homography,
-        quality?.boardDiameterPixels === undefined
+      const nextAnalysis = analyzeDartDifference(reference, frame, homography, {
+        ...(quality?.boardDiameterPixels === undefined
           ? {}
-          : { boardDiameterPixels: quality.boardDiameterPixels },
-      );
+          : { boardDiameterPixels: quality.boardDiameterPixels }),
+        // A near-centreline mounted phone sees a dart on the board face, not across most of the
+        // lower room. Keep the outside-flight search tight there; retain more margin only when the
+        // fitted board is genuinely oblique.
+        acceptedRadiusMm: analysisRadiusForBoardSkew(quality?.estimatedOffAxisDegrees),
+      });
       if (cancelled) return;
       setAnalysis(nextAnalysis);
 
@@ -677,8 +694,12 @@ export function SimpleCameraPlay({
 
       // `selectAutomaticTipCandidate` is an eligibility gate as well as a ranker: it refuses a
       // compact-flight centroid, an equal-width endpoint pair, a near-wire endpoint, and MISS.
-      // Never convert those clues into an arbitrary score just because they persisted twice.
-      const candidate = selectAutomaticTipCandidate(nextAnalysis.candidates);
+      // Never convert those clues into an arbitrary score just because they persisted twice. A
+      // board-edge foreground disturbance can retain a local suggestion, but it must take the
+      // explicit review path even if the dart silhouette itself looks direct.
+      const candidate = nextAnalysis.requiresExplicitReview
+        ? null
+        : selectAutomaticTipCandidate(nextAnalysis.candidates);
       const reviewCandidate =
         candidate === null ? selectReviewTipCandidate(nextAnalysis.candidates) : null;
       const stableCandidate = candidate ?? reviewCandidate;
@@ -703,7 +724,11 @@ export function SimpleCameraPlay({
           : 1;
       stabilityRef.current = { zoneKey, imagePoint: stableCandidate.imagePoint, count, misses: 0 };
       if (count < 2) {
-        setLiveMessage('Dart/flight change found. Holding for one more settled frame…');
+        setLiveMessage(
+          nextAnalysis.requiresExplicitReview
+            ? 'A board-edge change is present. Holding the dart-shaped clue for one settled review frame…'
+            : 'Dart/flight change found. Holding for one more settled frame…',
+        );
         return;
       }
 
@@ -953,6 +978,15 @@ export function SimpleCameraPlay({
     if (quality === null) return null;
     return `${Math.round(quality.boardDiameterPixels)} px board · ${Math.round(quality.estimatedOffAxisDegrees)}° board skew · ${Math.round(quality.sharpness)} focus`;
   }, [quality]);
+  const needsImmediateScoreRecovery =
+    isWatching &&
+    analysis !== null &&
+    (analysis.status === 'camera-moved-or-hand-present' ||
+      analysis.status === 'ambiguous-change' ||
+      (analysis.status === 'dart-candidate' &&
+        (analysis.requiresExplicitReview ||
+          (selectAutomaticTipCandidate(analysis.candidates) === null &&
+            selectReviewTipCandidate(analysis.candidates) === null))));
 
   return (
     <section className="camera-play shell">
@@ -1121,6 +1155,11 @@ export function SimpleCameraPlay({
           <p className="camera-play-notice" role="status">
             {liveMessage}
           </p>
+          {needsImmediateScoreRecovery && (
+            <button className="text-button camera-play-inline-recovery" onClick={onOpenReview}>
+              CHECK / ENTER SCORE
+            </button>
+          )}
         </section>
 
         <aside className="camera-play-turn">
@@ -1256,11 +1295,13 @@ export function SimpleCameraPlay({
                     </strong>
                     <span>
                       {analysis.status === 'dart-candidate'
-                        ? analysis.shapes.some((shape) => shape.kind === 'compact')
-                          ? 'Compact flight/occlusion found; held for correction because its entry direction is not directly visible.'
-                          : selectAutomaticTipCandidate(analysis.candidates) === null
-                            ? 'Dart-shaped change found, but its endpoint evidence is held for correction instead of being auto-scored.'
-                            : 'Settled dart-shaped change found; checking its direct entry cue over another frame.'
+                        ? analysis.requiresExplicitReview
+                          ? 'A board-edge foreground change is present, so any isolated dart clue is held for explicit review.'
+                          : analysis.shapes.some((shape) => shape.kind === 'compact')
+                            ? 'Compact flight/occlusion found; held for correction because its entry direction is not directly visible.'
+                            : selectAutomaticTipCandidate(analysis.candidates) === null
+                              ? 'Dart-shaped change found, but its endpoint evidence is held for correction instead of being auto-scored.'
+                              : 'Settled dart-shaped change found; checking its direct entry cue over another frame.'
                         : analysis.status === 'camera-moved-or-hand-present'
                           ? 'Broad movement held for safety.'
                           : analysis.message}
@@ -1268,8 +1309,9 @@ export function SimpleCameraPlay({
                     <small>
                       {analysis.changedPixels.toLocaleString()} changed /{' '}
                       {analysis.comparedPixels.toLocaleString()} board-support px ·{' '}
-                      {(analysis.changedFraction * 100).toFixed(2)}% support · threshold{' '}
-                      {Math.round(analysis.differenceThreshold)} · align{' '}
+                      {(analysis.changedFraction * 100).toFixed(2)}% support ·{' '}
+                      {(analysis.stableCoreChangedFraction * 100).toFixed(2)}% stable core ·
+                      threshold {Math.round(analysis.differenceThreshold)} · align{' '}
                       {analysis.alignmentOffset.x >= 0 ? '+' : ''}
                       {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
                       {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}

@@ -477,6 +477,8 @@ export function CameraScoringLab({
               changedPixels: analysis.changedPixels,
               comparedPixels: analysis.comparedPixels,
               changedFraction: analysis.changedFraction,
+              stableCoreChangedFraction: analysis.stableCoreChangedFraction,
+              requiresExplicitReview: analysis.requiresExplicitReview,
               alignmentOffset: analysis.alignmentOffset,
               alignment: analysis.alignment,
               shapes: analysis.shapes,
@@ -754,7 +756,8 @@ export function CameraScoringLab({
             {analysis.message} Processed locally with threshold{' '}
             {Math.round(analysis.differenceThreshold)}; {analysis.changedPixels.toLocaleString()} /{' '}
             {analysis.comparedPixels.toLocaleString()} scoring-face px changed ({' '}
-            {(analysis.changedFraction * 100).toFixed(2)}%); align{' '}
+            {(analysis.changedFraction * 100).toFixed(2)}%;{' '}
+            {(analysis.stableCoreChangedFraction * 100).toFixed(2)}% stable core); align{' '}
             {analysis.alignmentOffset.x >= 0 ? '+' : ''}
             {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
             {analysis.alignmentOffset.y} px · {analysis.alignment.scale.toFixed(3)}× ·{' '}

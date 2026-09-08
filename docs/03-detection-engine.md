@@ -155,11 +155,14 @@ browser camera, it:
 
 1. samples conventional red/green accents and searches for a repeated, color-balanced,
    alternating-color double-and-treble scoring-band pair rather than trusting the outermost colored
-   pixel; this resists a red surround, printed branding, or one coloured object;
+   pixel. Its red cue also requires red-channel dominance, so a warmly lit orange cork/sisal single
+   bed does not erase the uncoloured ring gap; this resists a red surround, printed branding, one
+   coloured object, and a warm natural board surface;
 2. uses the compact two-color bull as a local centre cross-check, then estimates the band-pair ellipse,
-   requires two comparable automatic fits, and creates an internal outer-double homography; it checks
-   board pixels, band evidence, proportions, and local image detail against the initial 480 px /
-   approximately 55° envelope;
+   requires two comparable automatic fits, and creates an internal outer-double homography. A matching
+   fit may survive two isolated autofocus/auto-exposure color dropouts but is forgotten after a longer
+   loss; it checks board pixels, band evidence, proportions, and local image detail against the
+   initial 480 px / approximately 55° envelope;
 3. asks the player only to keep the physical 20 upright in the image and tap **Start Play** with an
    empty board. After the accepted automatic fit, Start Play waits a fixed 650 ms and saves one fresh
    volatile local reference. If no drawable browser frame exists it retries at 250 ms up to four
@@ -167,22 +170,25 @@ browser camera, it:
    permitted to return normal setup to board finding or block it indefinitely;
 4. compares each later settled frame with the current in-memory reference after board-face-only
    exposure/white-balance/noise estimation and bounded board-relative similarity alignment for
-   impact/mount/phone-optical-stabilization jitter (small shift, scale, and rotation). After an
-   accepted aligned dart, it carries that correction into the in-memory mapping and next reference. It
-   still holds movement that remains broad on the scoring face, while retaining a limited outside-ring
-   margin only to connect a local flight/shaft shape;
-5. ranks elongated side-view shafts and compact near-centreline flight/occlusion changes, but only
-   auto-scores a non-`MISS`, adequately separated endpoint when direction is direct: exactly one
-   endpoint is on a scoring bed or a clearly wider flight establishes the opposite narrow entry end.
-   Compact centroids, equal-width endpoint pairs, near-wire cues, and ambiguous directions are held
-   for ordinary correction instead of being converted into an arbitrary score. One isolated held
-   shape can be surfaced as an explicit camera suggestion, but cannot fill a DartCard without a
-   player action; competing shapes surface no suggestion. A protruding flight endpoint outside the
-   double wire is never an automatic `MISS`; and
+   impact/mount/phone-optical-stabilization jitter (small shift, scale, and rotation). Its permitted
+   outside-double shape area is 24 mm for a near-centreline fit, 42 mm for moderate skew, and 70 mm
+   only for an oblique fit. A broad-motion stop must reach the stable central board core (or be very
+   large); a high-change rim/surround disturbance is instead review-only. After an accepted aligned
+   dart, it carries that correction into the in-memory mapping and next reference;
+5. ranks elongated side-view shafts and compact near-centreline flight/occlusion changes, but rejects
+   a board-length component that cannot be a physically plausible projected dart. It only auto-scores
+   a non-`MISS`, adequately separated endpoint when direction is direct: exactly one endpoint is on a
+   scoring bed or a clearly wider flight establishes the opposite narrow entry end. Compact centroids,
+   equal-width endpoint pairs, near-wire cues, rim-disturbed frames, and ambiguous directions are held
+   for ordinary correction instead of being converted into an arbitrary score. One isolated held shape
+   can be surfaced as an explicit camera suggestion, but cannot fill a DartCard without a player
+   action; competing shapes surface no suggestion. A protruding flight endpoint outside the double
+   wire is never an automatic `MISS`; and
 6. requires a nearby same-zone automatic-eligible candidate across two frames (with one-frame grace)
    before adding it, then updates the in-memory reference to include that accepted dart before looking
-   for the next one. A next turn takes the same bounded one-tap reference handoff without asking the
-   player to find the board again.
+   for the next one. Browser Camera Play samples at a 500 ms cadence so the second settled observation
+   is sought before a player would normally throw a second dart. A next turn takes the same bounded
+   one-tap reference handoff without asking the player to find the board again.
 
 Normal play does not ask a player to name calibration points, fit a guide, download/capture a
 reference image, press a manual-analysis button, select a physical tip, or choose steel versus
@@ -197,11 +203,12 @@ browser field test deliberately assumes a level, 20-up board; a trained board/nu
 is still required for general automatic orientation. Optional visual-guide gestures plus named-anchor
 advanced diagnostics remain recovery-only.
 
-[PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and
-[PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A direct post-PR #9 iPhone report
-showed strong automatic board finding but an unacceptable detector-gated setup loop. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) contains
-the bounded reference handoff described here. It is regression-tested but is not a claimed device fix until it is
-retested on direct top-level HTTPS iPhone and Android deployments. See
+[PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
+[PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and
+[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
+physically proved the bounded reference handoff reaches watching, but did **not** record a shown dart.
+The post-PR #10 remediation described above is regression-tested, not a claimed device fix, until it
+is retested on direct top-level HTTPS iPhone and Android deployments. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ### 4.4 Dart entry-point model

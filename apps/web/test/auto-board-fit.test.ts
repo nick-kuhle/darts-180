@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { boardFitsAreSimilar, detectBoardFitFromColors } from '../src/lib/autoBoardFit.js';
+import {
+  AUTOMATIC_BOARD_FIT_MAX_INTERMITTENT_MISSES,
+  advanceAutomaticBoardFitStability,
+  boardFitsAreSimilar,
+  detectBoardFitFromColors,
+} from '../src/lib/autoBoardFit.js';
 import { assessAutomaticBoardFitQuality, type CameraFrame } from '../src/lib/cameraScoring.js';
 
 function makeFrame(width = 960, height = 720, fill = 26): CameraFrame {
@@ -22,6 +27,7 @@ function drawSyntheticAccentBoard(
   horizontalRadius: number,
   verticalRadius: number,
   rotationDegrees = 0,
+  options: Readonly<{ warmCorkSingleBeds?: boolean }> = {},
 ) {
   const radians = (rotationDegrees * Math.PI) / 180;
   const cosine = Math.cos(radians);
@@ -33,14 +39,20 @@ function drawSyntheticAccentBoard(
       const localX = imageX * cosine + imageY * sine;
       const localY = -imageX * sine + imageY * cosine;
       const radius = Math.hypot(localX / horizontalRadius, localY / verticalRadius);
+      if (radius > 1) continue;
       const angle = ((Math.atan2(localX, -localY) * 180) / Math.PI + 360) % 360;
       const sector = Math.floor((angle + 9) / 18) % 20;
       const isAccent =
         (radius >= 162 / 170 && radius <= 1) ||
         (radius >= 99 / 170 && radius <= 107 / 170) ||
         radius <= 15.9 / 170;
-      if (!isAccent) continue;
-      setPixel(frame, x, y, sector % 2 === 0 ? [214, 70, 61] : [27, 149, 104]);
+      if (isAccent) {
+        setPixel(frame, x, y, sector % 2 === 0 ? [214, 70, 61] : [27, 149, 104]);
+      } else if (options.warmCorkSingleBeds && sector % 2 === 0) {
+        // Hue/saturation alone can make a warmly lit natural sisal single bed appear orange-red.
+        // Its red channel is intentionally only ~1.2× green: it must not erase the ring gap.
+        setPixel(frame, x, y, [202, 166, 121]);
+      }
     }
   }
 }
@@ -167,6 +179,19 @@ test('uses repeated-band and bull evidence instead of lopsided red board brandin
   assert.ok(result.bandColorPhaseAgreement > 0.8);
 });
 
+test('finds red and green bands without mistaking warm cork single beds for red', () => {
+  const frame = makeFrame();
+  drawSyntheticAccentBoard(frame, 480, 360, 290, 250, 0, { warmCorkSingleBeds: true });
+
+  const result = detectBoardFitFromColors(frame);
+  assert.equal(result.status, 'found');
+  assert.ok(result.fit !== null);
+  assert.ok(Math.abs((result.center?.x ?? 0) - 480) < 8);
+  assert.ok(Math.abs((result.center?.y ?? 0) - 360) < 8);
+  assert.ok(result.outerAngularCoverage >= 18);
+  assert.ok(result.bandColorPhaseAgreement > 0.8);
+});
+
 test('rejects frames without a sufficient red/green board pattern', () => {
   const result = detectBoardFitFromColors(makeFrame());
   assert.equal(result.status, 'not-found');
@@ -200,4 +225,29 @@ test('requires two comparable color fits before treating a board as stable', () 
 
   const rotatedHandleOrder = [first.fit[1], first.fit[2], first.fit[3], first.fit[0]] as const;
   assert.equal(boardFitsAreSimilar(first.fit, rotatedHandleOrder), false);
+});
+
+test('keeps a comparable automatic fit through brief mobile autofocus/exposure dropouts', () => {
+  const frame = makeFrame();
+  drawSyntheticAccentBoard(frame, 480, 360, 290, 250);
+  const first = detectBoardFitFromColors(frame);
+  const second = detectBoardFitFromColors(frame);
+  assert.ok(first.fit !== null && second.fit !== null);
+
+  let stability = advanceAutomaticBoardFitStability(null, first.fit);
+  assert.equal(stability?.matchingObservations, 1);
+  assert.equal(stability?.intermittentMisses, 0);
+
+  stability = advanceAutomaticBoardFitStability(stability, null);
+  assert.equal(stability?.matchingObservations, 1);
+  assert.equal(stability?.intermittentMisses, 1);
+
+  stability = advanceAutomaticBoardFitStability(stability, second.fit);
+  assert.equal(stability?.matchingObservations, 2);
+  assert.equal(stability?.intermittentMisses, 0);
+
+  for (let miss = 0; miss <= AUTOMATIC_BOARD_FIT_MAX_INTERMITTENT_MISSES; miss += 1) {
+    stability = advanceAutomaticBoardFitStability(stability, null);
+  }
+  assert.equal(stability, null);
 });
