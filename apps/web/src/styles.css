@@ -2561,6 +2561,16 @@ h3 {
   line-height: 1.45;
 }
 
+.camera-play-inline-recovery {
+  width: 100%;
+  margin-top: 9px;
+  padding: 8px 11px;
+  text-align: left;
+  border: 1px solid #416554;
+  border-radius: 8px;
+  background: #10241b;
+}
+
 .camera-play-turn-head > span {
   padding: 7px 8px;
   color: #d7f5e8;

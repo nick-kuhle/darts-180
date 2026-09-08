@@ -135,11 +135,13 @@ remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the 
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge iPhone
 report found better automatic board finding but materially failed dart resolution. The dedicated
 post-field-report remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and its
-baseline-recovery follow-up in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged.
-A new direct post-PR #9 iPhone report shows that detector-gated setup still loops despite successful
-board finding. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces that setup gate with a bounded fresh-reference handoff
-and requires a new physical-device retest; synthetic tests alone do not establish field improvement.
-See
+baseline-recovery follow-up in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) and the
+bounded Start Play handoff in [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged.
+PR #10's direct iPhone retest successfully reached **Watching Locally**, but intermittent acquisition
+and live temporal detection recorded none of the shown darts. [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) is open from merged `main`; it
+retains the handoff while addressing warm-board color separation, transient-fit stability, and
+board-local foreground handling. It requires another physical-device retest. Synthetic tests alone
+do not establish field improvement. See
 [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).
 
 Verify each pull request's GitHub Actions checks and protect `main` with review policy. No credential

@@ -13,10 +13,12 @@ an unfinished camera API or claiming live AI scoring.
 - simulated camera candidates that demonstrate safe `LOCKED` versus `CHECK` behavior;
 - quality-gate examples for a good view, a board that is too far away, and a view too oblique;
 - an experimental browser-local **Camera Play** field-test flow: automatic conventional red/green
-  board-color finding with a subtle normal-play indication; a one-tap bounded fresh-reference handoff
-  via **Start Play**; bounded local temporal alignment; direct-entry-only automatic scoring with
-  explicit compact/ambiguous abstention; ordinary DartCard entry/correction when needed; and optional
-  gesture-based visual-guide recovery for auto-find failures;
+  board-color finding that separates warm cork/sisal single beds and briefly latches a matching fit
+  through autofocus/exposure dropouts; a one-tap bounded fresh-reference handoff via **Start Play**;
+  skew-aware board-local temporal analysis with bounded alignment and rim-foreground review holds;
+  direct-entry-only automatic scoring with explicit compact/ambiguous abstention; ordinary DartCard
+  entry/correction when needed; and optional gesture-based visual-guide recovery for auto-find
+  failures;
 - event-style visit history;
 - a browser **Capture Lab** that can take a board-focused still and download a local JPEG + manifest
   without uploading it anywhere;
@@ -47,10 +49,12 @@ merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
 report found better board finding but failed dart resolution; the dedicated remediation in
-[PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and recovery update in
-[PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A new direct post-PR #9 iPhone
-report found that detector-gated setup still loops despite a successful board fit. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces it
-with a bounded fresh-reference handoff and still needs a physical-device test.
+[PR #8](https://github.com/nick-kuhle/darts-180/pull/8), recovery update in
+[PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and the bounded-reference handoff in
+[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged. PR #10's direct iPhone retest
+successfully reached **Watching Locally**, but intermittent acquisition/live detector behavior
+recorded none of the shown darts. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) improves warm-board color separation, transient-fit
+stability, and board-local foreground handling; it still needs a fresh physical-device test.
 Review each diff and its GitHub Actions result before using a build for external testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
@@ -92,11 +96,13 @@ Camera permission is requested only after tapping **START REAR CAMERA**. In **CA
 conventional red/green board fully visible with its physical 20 at the top of the camera image; wait
 for **BOARD FOUND**, then tap **START PLAY** once with an empty board. The normal sequence is the
 brief **STARTING LIVE PLAY** handoff followed by **BOARD FOUND · WATCHING LOCALLY**; it is not a
-clear-board detector loop. If Camera Play holds a compact/ambiguous dart, use **REVIEW / ENTER
-SCORE** rather than treating a guessed endpoint as a result. If a direct HTTPS tab does not
-prompt, use that browser’s lock/camera controls to set Camera to **Allow**, reload the page, and try
-again. On iOS, check Safari’s website camera setting; on Android Chrome, check the site settings
-behind the lock icon.
+clear-board detector loop. Throw one dart and wait for its result or held suggestion before throwing
+the next. If Camera Play holds a compact/ambiguous dart, or cannot isolate a safe change, use
+**CHECK / ENTER SCORE** or **REVIEW / ENTER SCORE** rather than treating a guessed endpoint as a
+result. PR #10 proved this startup path on one iPhone but did not prove live dart recording, so test
+that behavior explicitly. If a direct HTTPS tab does not prompt, use that browser’s lock/camera
+controls to set Camera to **Allow**, reload the page, and try again. On iOS, check Safari’s website
+camera setting; on Android Chrome, check the site settings behind the lock icon.
 
 For the full mounted-device workflow, follow the
 [Browser camera field-test guide](14-browser-camera-field-test.md) and the

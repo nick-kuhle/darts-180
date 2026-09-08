@@ -20,12 +20,14 @@ finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) and the initi
 reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), followed by the
 first reliability update in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct
 post-merge device report found automatic board finding improved but dart resolution materially failed.
-The post-field-report browser remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8)
-and its recovery update in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A new
-direct post-PR #9 iPhone report found a detector-gated Start Play loop despite strong automatic board
-finding. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces that gate with a bounded local-reference handoff and still requires a
-direct-device retest; the evidence taxonomy, retest procedure, and non-claims live in
-[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
+The post-field-report browser remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8),
+its recovery update in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9), and bounded
+local-reference handoff in [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) are merged.
+PR #10's direct iPhone retest proved startup reaches watching, but intermittent board acquisition and
+live dart detection still recorded none of the shown throws. Open [PR #11](https://github.com/nick-kuhle/darts-180/pull/11) retains the handoff and
+targets color-fit dropout, warm natural board surfaces, and board-local foreground handling; it
+requires another direct-device retest. The evidence taxonomy, retest procedure, and
+non-claims live in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
 [the current implementation status](13-current-implementation-status.md).
 
 **M0 is not fully exited yet.** Remaining exit evidence is an approved consent/retention workflow,

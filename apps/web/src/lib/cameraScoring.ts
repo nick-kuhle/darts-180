@@ -102,6 +102,16 @@ export interface DifferenceAnalysis {
   /** Changed fraction of the compared scoring face, never the whole phone frame. */
   changedFraction: number;
   /**
+   * Changed fraction inside the stable central board core. This distinguishes a broad hand/camera
+   * change from a foreground edge/surround intrusion without treating either as a score.
+   */
+  stableCoreChangedFraction: number;
+  /**
+   * A large change was confined to the board edge/surround. Any isolated candidate remains usable
+   * as a player-reviewed suggestion, but must not be auto-recorded from that disturbed frame.
+   */
+  requiresExplicitReview: boolean;
+  /**
    * Backward-compatible shortcut for the bounded similarity correction's center displacement.
    * New callers should use `alignment` when they need scale/rotation too.
    */
@@ -120,6 +130,30 @@ export interface DifferenceOptions {
   acceptedRadiusMm?: number;
 }
 
+/**
+ * Chooses a board-local flight envelope from the fitted board skew. Front-on cameras do not need a
+ * large outside-board search area, while genuinely oblique views retain room for a projected shaft
+ * or flight. This affects shape search only—score candidates still have to land on a scoring bed.
+ */
+export function analysisRadiusForBoardSkew(
+  estimatedOffAxisDegrees: number | null | undefined,
+): number {
+  if (
+    estimatedOffAxisDegrees === null ||
+    estimatedOffAxisDegrees === undefined ||
+    !Number.isFinite(estimatedOffAxisDegrees)
+  ) {
+    return DEFAULT_ANALYSIS_RADIUS_MM;
+  }
+  if (estimatedOffAxisDegrees <= 18) {
+    return BOARD_RADII_MM.doubleOuter + CENTRELINE_ANALYSIS_MARGIN_MM;
+  }
+  if (estimatedOffAxisDegrees <= 35) {
+    return BOARD_RADII_MM.doubleOuter + MODERATE_SKEW_ANALYSIS_MARGIN_MM;
+  }
+  return BOARD_RADII_MM.doubleOuter + OBLIQUE_ANALYSIS_MARGIN_MM;
+}
+
 const STANDARD_DOUBLE_DIAMETER_MM = BOARD_RADII_MM.doubleOuter * 2;
 const CARDINAL_ANCHOR_SEPARATION_MM = 332;
 // Measured on the scoring face only. A settled dart normally changes well below one percent; a
@@ -131,10 +165,23 @@ const STABLE_BOARD_SUPPORT_RADIUS_MM = BOARD_RADII_MM.doubleOuter - 10;
 // Broad-motion decisions belong to the actual scoring face. A dart's flight may extend outside it,
 // but cabinet / wall movement in the permitted flight margin must not dominate temporal safety.
 const MOTION_BOARD_SUPPORT_RADIUS_MM = BOARD_RADII_MM.doubleOuter + 4;
-// A side-view flight can extend past the double wire, but the earlier +140 mm envelope admitted
-// most of a portrait phone image. Keep the search local to the board while retaining a practical
-// flight margin; only endpoints on a scoring bed can ever become candidates.
-const DEFAULT_ANALYSIS_RADIUS_MM = BOARD_RADII_MM.doubleOuter + 70;
+// A foreground just along the lower rim (for example a player stepping clear below a centreline
+// mount) should not be mistaken for a full-board camera/hand movement. A real reframe changes the
+// stable core too; a very large face change remains a hard safety stop regardless of core coverage.
+const STABLE_CORE_MOTION_RADIUS_MM = BOARD_RADII_MM.trebleOuter;
+const MAX_STABLE_CORE_CHANGED_FRACTION = 0.025;
+// If a broad core change pushes the median residual high, the adaptive pixel threshold may mask
+// most of that same change. Keep that signal as a second broad-motion guard rather than mistaking
+// the remaining edge fragments for a local dart.
+const MAX_LOCAL_EVENT_ADAPTIVE_NOISE = 20;
+const HARD_MAX_CHANGED_FRACTION = 0.14;
+// A side-view flight can extend past the double wire, but a generic +70 mm envelope admits a large
+// amount of lower-room foreground on a centred portrait phone. The normal generic default retains a
+// moderate margin; Camera Play selects an even tighter or wider value from the measured board skew.
+const DEFAULT_ANALYSIS_RADIUS_MM = BOARD_RADII_MM.doubleOuter + 42;
+const CENTRELINE_ANALYSIS_MARGIN_MM = 24;
+const MODERATE_SKEW_ANALYSIS_MARGIN_MM = 42;
+const OBLIQUE_ANALYSIS_MARGIN_MM = 70;
 const NO_FRAME_TRANSLATION: Readonly<ImagePoint> = { x: 0, y: 0 };
 const NO_FRAME_ALIGNMENT: Readonly<FrameAlignment> = {
   offset: NO_FRAME_TRANSLATION,
@@ -302,6 +349,8 @@ export function analyzeDartDifference(
     changedPixels: 0,
     comparedPixels: 0,
     changedFraction: 0,
+    stableCoreChangedFraction: 0,
+    requiresExplicitReview: false,
     alignmentOffset: NO_FRAME_TRANSLATION,
     alignment: NO_FRAME_ALIGNMENT,
     shapes: [],
@@ -369,6 +418,8 @@ export function analyzeDartDifference(
   const mask = new Uint8Array(width * height);
   let changedPixels = 0;
   let comparedPixels = 0;
+  let stableCoreChangedPixels = 0;
+  let stableCoreComparedPixels = 0;
 
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
@@ -379,7 +430,9 @@ export function analyzeDartDifference(
       const boardRadiusMm = Math.hypot(boardPoint.xMm, boardPoint.yMm);
       if (boardRadiusMm > acceptedRadiusMm) continue;
       const onScoringFace = boardRadiusMm <= MOTION_BOARD_SUPPORT_RADIUS_MM;
+      const onStableCore = boardRadiusMm <= STABLE_CORE_MOTION_RADIUS_MM;
       if (onScoringFace) comparedPixels += 1;
+      if (onStableCore) stableCoreComparedPixels += 1;
       const pixel = y * width + x;
       const difference = adjustedPixelDifferenceAt(
         reference,
@@ -393,10 +446,12 @@ export function analyzeDartDifference(
       // change that reaches the scoring face can trigger / classify a dart event.
       mask[pixel] = 1;
       if (onScoringFace) changedPixels += 1;
+      if (onStableCore) stableCoreChangedPixels += 1;
     }
   }
 
   const changedFraction = changedPixels / Math.max(1, comparedPixels);
+  const stableCoreChangedFraction = stableCoreChangedPixels / Math.max(1, stableCoreComparedPixels);
   if (changedPixels === 0) {
     return {
       status: 'no-change',
@@ -406,21 +461,35 @@ export function analyzeDartDifference(
       changedPixels,
       comparedPixels,
       changedFraction,
+      stableCoreChangedFraction,
+      requiresExplicitReview: false,
       alignmentOffset: alignment.offset,
       alignment,
       shapes: [],
       candidates: [],
     };
   }
-  if (changedFraction > MAX_CHANGED_FRACTION) {
+  const broadMotionTouchesStableCore =
+    stableCoreChangedFraction > MAX_STABLE_CORE_CHANGED_FRACTION ||
+    adaptiveNoise > MAX_LOCAL_EVENT_ADAPTIVE_NOISE;
+  const requiresExplicitReview =
+    changedFraction > MAX_CHANGED_FRACTION &&
+    !broadMotionTouchesStableCore &&
+    changedFraction <= HARD_MAX_CHANGED_FRACTION;
+  if (
+    changedFraction > MAX_CHANGED_FRACTION &&
+    (broadMotionTouchesStableCore || changedFraction > HARD_MAX_CHANGED_FRACTION)
+  ) {
     return {
       status: 'camera-moved-or-hand-present',
       message:
-        'Too much of the calibrated view changed. Keep the mount still, move hands out of frame, then wait for a settled dart.',
+        'Too much of the calibrated board changed. Keep the mount still, move hands out of frame, then wait for a settled dart.',
       differenceThreshold,
       changedPixels,
       comparedPixels,
       changedFraction,
+      stableCoreChangedFraction,
+      requiresExplicitReview: true,
       alignmentOffset: alignment.offset,
       alignment,
       shapes: [],
@@ -433,6 +502,7 @@ export function analyzeDartDifference(
   const boardDiameterPixels =
     options.boardDiameterPixels ?? estimateBoardDiameterFromHomography(homography);
   const minimumLength = Math.max(14, boardDiameterPixels * 0.055);
+  const maximumElongatedLength = boardDiameterPixels * maximumDartLengthRatio(acceptedRadiusMm);
   const minimumPixels = Math.max(
     22,
     Math.round(boardDiameterPixels * boardDiameterPixels * 0.00006),
@@ -447,6 +517,7 @@ export function analyzeDartDifference(
         alignment,
         alignmentCenter,
         minimumLength,
+        maximumElongatedLength,
         boardDiameterPixels,
       ),
     )
@@ -468,6 +539,8 @@ export function analyzeDartDifference(
       changedPixels,
       comparedPixels,
       changedFraction,
+      stableCoreChangedFraction,
+      requiresExplicitReview,
       alignmentOffset: alignment.offset,
       alignment,
       shapes: [],
@@ -487,6 +560,8 @@ export function analyzeDartDifference(
       changedPixels,
       comparedPixels,
       changedFraction,
+      stableCoreChangedFraction,
+      requiresExplicitReview,
       alignmentOffset: alignment.offset,
       alignment,
       shapes,
@@ -502,6 +577,8 @@ export function analyzeDartDifference(
     changedPixels,
     comparedPixels,
     changedFraction,
+    stableCoreChangedFraction,
+    requiresExplicitReview,
     alignmentOffset: alignment.offset,
     alignment,
     shapes,
@@ -1063,6 +1140,16 @@ function estimateAdaptiveNoise(
   return values[Math.floor(values.length * 0.5)] ?? 0;
 }
 
+function maximumDartLengthRatio(acceptedRadiusMm: number): number {
+  const outsideMarginMm = acceptedRadiusMm - BOARD_RADII_MM.doubleOuter;
+  // A centred camera sees a heavily foreshortened dart, so a board-length component is foreground
+  // noise rather than a plausible shaft. An oblique view genuinely projects more dart length, and
+  // its wider allowed flight envelope receives a correspondingly larger (still bounded) allowance.
+  if (outsideMarginMm <= CENTRELINE_ANALYSIS_MARGIN_MM) return 0.64;
+  if (outsideMarginMm <= MODERATE_SKEW_ANALYSIS_MARGIN_MM) return 0.74;
+  return 0.9;
+}
+
 function dilateMask(source: Uint8Array, width: number, height: number, radius: number): Uint8Array {
   const target = new Uint8Array(source.length);
   for (let y = radius; y < height - radius; y += 1) {
@@ -1137,6 +1224,7 @@ function buildDartShape(
   alignment: Readonly<FrameAlignment>,
   alignmentCenter: Readonly<ImagePoint>,
   minimumLength: number,
+  maximumElongatedLength: number,
   boardDiameterPixels: number,
 ): DartShape | null {
   if (component.pixels.length < 3) return null;
@@ -1178,7 +1266,14 @@ function buildDartShape(
   }
   const lineLengthPixels = maximumProjection - minimumProjection;
   const aspectRatio = Math.sqrt(majorVariance / Math.max(minorVariance, 0.25));
-  const elongated = lineLengthPixels >= minimumLength && aspectRatio >= 1.8;
+  // Do not let a long lower-room foreground edge, blanket fold, or board-sized shadow impersonate
+  // a narrow shaft merely because its connected-component aspect ratio is high. The allowance is
+  // chosen by the caller's fitted-view envelope: tighter for a centreline camera and broader only
+  // for a genuinely oblique view.
+  const elongated =
+    lineLengthPixels >= minimumLength &&
+    lineLengthPixels <= maximumElongatedLength &&
+    aspectRatio >= 1.8;
   // When the camera is close to the board centreline, the dart shaft is foreshortened and the
   // visible flight/occlusion is compact rather than long. A localized compact change is useful as
   // a deliberately low-confidence, correctable proposal, but cap its extent to avoid treating a
