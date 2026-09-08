@@ -137,7 +137,7 @@ report found better automatic board finding but materially failed dart resolutio
 post-field-report remediation in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and its
 baseline-recovery follow-up in [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged.
 A new direct post-PR #9 iPhone report shows that detector-gated setup still loops despite successful
-board finding. The current follow-up replaces that setup gate with a bounded fresh-reference handoff
+board finding. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces that setup gate with a bounded fresh-reference handoff
 and requires a new physical-device retest; synthetic tests alone do not establish field improvement.
 See
 [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).

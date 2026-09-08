@@ -2,8 +2,7 @@
 
 **Status:** [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. This document records a new
-post-PR #9 iPhone field report and the follow-up implementation that still requires a fresh physical
-retest. **Date:** 2026-09-07 (America/Los_Angeles).
+post-PR #9 iPhone field report and [PR #10](https://github.com/nick-kuhle/darts-180/pull/10), which still requires a fresh physical retest. **Date:** 2026-09-07 (America/Los_Angeles).
 
 Camera Play remains an experimental, browser-local fixed-mount heuristic. It is not a trained
 entry-point model and this work makes no production accuracy claim.

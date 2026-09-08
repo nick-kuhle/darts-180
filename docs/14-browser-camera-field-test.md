@@ -1,7 +1,7 @@
 # Browser Camera Play — automatic board-find field-test guide
 
 **Status:** browser-local experimental player flow. PR #9 is merged; a post-PR #9 iPhone report
-found a normal-flow setup loop, and the current follow-up requires a new direct-device retest.
+found a normal-flow setup loop. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) contains the follow-up and requires a new direct-device retest.
 **Date:** September 2026.
 
 **Purpose:** test the simplest viable mounted-phone experience while native runtime and trained
@@ -93,8 +93,8 @@ occluded, non-standard-color, or extreme side view safe for one-camera entry-poi
 ## Deploy and test on a physical device
 
 The browser field test and reliability work through [PR #9](https://github.com/nick-kuhle/darts-180/pull/9)
-are merged. Test the current follow-up's top-level HTTPS preview/deployment before treating its
-implementation as field-proven.
+are merged. Test [PR #10](https://github.com/nick-kuhle/darts-180/pull/10)'s top-level HTTPS preview/deployment before treating its implementation as
+field-proven.
 
 1. In Vercel, select **`apps/web`**—not `services` or `ml`—as Root Directory and enable **Include
    files outside the Root Directory**. `apps/web/vercel.json` runs the monorepo-root install and web

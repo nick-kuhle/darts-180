@@ -5,8 +5,8 @@
 **Repository target:** `https://github.com/nick-kuhle/darts-180.git` (private)<br />
 **Status:** foundation, playable scoring prototype, local data tooling, and an experimental
 browser-camera field-test workflow exist. [PR #8](https://github.com/nick-kuhle/darts-180/pull/8)
-and [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. The current follow-up is
-pending a new PR and a fresh direct iPhone retest; no production auto-scoring claim.
+and [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) is open and awaits a
+fresh direct iPhone retest; no production auto-scoring claim.
 
 This is the operational source of truth for what exists versus what is intentionally deferred. It
 separates synthetic/build evidence from a physical-device result.
@@ -28,7 +28,7 @@ A new direct post-PR #9 iPhone report found strong automatic board detection but
 normal-flow loop: Camera Play alternated clear-board/dart-like/broad-motion setup messages and
 returned to **Start Play** on a steady, near-centreline, roughly one-yard mount.
 
-This branch replaces detector-driven setup with a bounded, deterministic Start Play handoff:
+[PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces detector-driven setup with a bounded, deterministic Start Play handoff:
 
 - automatic board finding remains two comparable red/green color fits;
 - **Start Play** waits 650 ms, saves one fresh local reference, and enters live watching when a
@@ -41,9 +41,8 @@ This branch replaces detector-driven setup with a bounded, deterministic Start P
   detailed guide fitting remains optional recovery; and
 - color/quality/detector telemetry is collapsed under explicit **Camera diagnostics**.
 
-The branch includes focused regression coverage for the bounded reference policy. It must be built,
-reviewed, delivered in a new PR, and physically retested before this can be described as a device
-fix. See [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
+The PR includes focused regression coverage for the bounded reference policy. It must be reviewed
+and physically retested before this can be described as a device fix. See [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 ## Validation baseline
 
@@ -137,9 +136,9 @@ cd ml && PYTHONPATH=src python -m darts180_vision.synthetic --output /tmp/darts-
 
 ## Change log
 
-| Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-07 | PR #9 merged. A subsequent direct iPhone report showed strong automatic board finding but a normal Start Play loop driven by detector-based clear-board setup. The pending follow-up replaces it with a fixed 650 ms fresh-reference handoff, preserves live scoring safety gates, removes normal-mode calibration-looking overlays/telemetry, adds focused reference-policy tests, and requires a new direct-device retest. |
-| 2026-09-07 | PR #8 addressed post-PR #7 dart-resolution failures with stronger board-color fitting, board-face-only temporal support, bounded similarity alignment, direct-entry-only automatic scoring, and compact/ambiguous/exterior-`MISS` abstention.                                                                                                                                                                                |
-| 2026-09-07 | Camera Play introduced normal no-calibration automatic color-board finding, optional visual-guide/advanced recovery, browser-local privacy behavior, and in-camera correction/turn flow.                                                                                                                                                                                                                                     |
-| 2026-09-07 | Foundation work added deterministic X01/Cricket rules, Expo/web prototypes, capture/annotation contracts, development API, synthetic tools, deployment configuration, and private repository delivery.                                                                                                                                                                                                                       |
+| Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-07 | PR #9 merged. A subsequent direct iPhone report showed strong automatic board finding but a normal Start Play loop driven by detector-based clear-board setup. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces it with a fixed 650 ms fresh-reference handoff, preserves live scoring safety gates, removes normal-mode calibration-looking overlays/telemetry, adds focused reference-policy tests, and requires a new direct-device retest. |
+| 2026-09-07 | PR #8 addressed post-PR #7 dart-resolution failures with stronger board-color fitting, board-face-only temporal support, bounded similarity alignment, direct-entry-only automatic scoring, and compact/ambiguous/exterior-`MISS` abstention.                                                                                                                                                                                                                    |
+| 2026-09-07 | Camera Play introduced normal no-calibration automatic color-board finding, optional visual-guide/advanced recovery, browser-local privacy behavior, and in-camera correction/turn flow.                                                                                                                                                                                                                                                                         |
+| 2026-09-07 | Foundation work added deterministic X01/Cricket rules, Expo/web prototypes, capture/annotation contracts, development API, synthetic tools, deployment configuration, and private repository delivery.                                                                                                                                                                                                                                                           |

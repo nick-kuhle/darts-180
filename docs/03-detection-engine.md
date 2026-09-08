@@ -199,8 +199,8 @@ advanced diagnostics remain recovery-only.
 
 [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A direct post-PR #9 iPhone report
-showed strong automatic board finding but an unacceptable detector-gated setup loop. The bounded
-reference handoff described here is regression-tested but is not a claimed device fix until it is
+showed strong automatic board finding but an unacceptable detector-gated setup loop. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) contains
+the bounded reference handoff described here. It is regression-tested but is not a claimed device fix until it is
 retested on direct top-level HTTPS iPhone and Android deployments. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 

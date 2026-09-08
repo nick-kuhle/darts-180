@@ -49,8 +49,8 @@ follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct p
 report found better board finding but failed dart resolution; the dedicated remediation in
 [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and recovery update in
 [PR #9](https://github.com/nick-kuhle/darts-180/pull/9) are merged. A new direct post-PR #9 iPhone
-report found that detector-gated setup still loops despite a successful board fit. The current
-follow-up replaces it with a bounded fresh-reference handoff and still needs a physical-device test.
+report found that detector-gated setup still loops despite a successful board fit. [PR #10](https://github.com/nick-kuhle/darts-180/pull/10) replaces it
+with a bounded fresh-reference handoff and still needs a physical-device test.
 Review each diff and its GitHub Actions result before using a build for external testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
