@@ -153,19 +153,23 @@ The deployable web prototype now has a deliberately constrained, no-calibration 
 workspace for first real-board testing. It is not the production native runtime. On a fixed mounted
 browser camera, it:
 
-1. samples conventional red/green accents and searches for their repeated, color-balanced double and
-   treble scoring-band pair rather than trusting the outermost colored pixel; this avoids fitting a
-   red surround or one coloured object as the board;
-2. estimates the band-pair center and ellipse, requires corresponding guide handles to agree in two
-   fits, then creates an internal outer-double homography; checks board pixels, band evidence, guide
-   proportions, and local image detail against the initial 480 px / approximately 55° envelope;
+1. samples conventional red/green accents and searches for a repeated, color-balanced,
+   alternating-color double-and-treble scoring-band pair rather than trusting the outermost colored
+   pixel; this resists a red surround, printed branding, or one coloured object;
+2. uses the compact two-color bull as a local center cross-check, then estimates the band-pair ellipse,
+   requires corresponding guide handles to agree in two fits, and creates an internal outer-double
+   homography; it checks board pixels, band evidence, guide proportions, and local image detail against
+   the initial 480 px / approximately 55° envelope;
 3. asks the player only to keep the physical 20 upright in the camera image and tap **Start Play**
    with an empty board, which retains a volatile clear-board baseline and arms watching;
-4. compares each later settled frame with the current in-memory reference after a bounded global
-   exposure/white-balance correction, masks local change around the automatic board fit, and ranks
-   both elongated side-view shafts and compact near-centreline flight/occlusion changes;
+4. compares each later settled frame with the current in-memory reference after bounded global
+   exposure/white-balance correction and a small board-face translation alignment for impact/mount
+   vibration; after an accepted aligned dart, it carries that offset into the in-memory guide and
+   next baseline. It still holds large movement, masks local change around the automatic board fit,
+   and ranks both elongated side-view shafts and compact near-centreline flight/occlusion changes;
 5. automatically chooses one internal candidate, preferring a one-end-on-board shaft estimate and
-   otherwise emitting a deliberately low-confidence compact-centroid estimate; it requires a nearby
+   otherwise emitting a deliberately low-confidence compact-centroid estimate; it never converts a
+   protruding flight endpoint outside the double wire into an automatic `MISS`, and requires a nearby
    same-zone candidate across two frames (with one-frame grace) before adding a reviewable ordinary
    score proposal; and
 6. updates its in-memory reference to include the accepted dart before looking for the next one, then
@@ -174,8 +178,10 @@ browser camera, it:
 
 Normal play does not ask a player to name calibration points, fit a guide, download/capture a
 reference image, press a manual-analysis button, select a physical tip, or choose steel versus
-soft-tip setup. Colors cannot uniquely read a board’s number-ring rotation because red/green bands
-repeat, so this browser field test deliberately assumes a level, 20-up board; a trained
+soft-tip setup. The player-facing board rendering follows the conventional dark-S20/red-accent and
+light-S1/S5/green-accent pattern, but the browser fitter does **not** mistake black/white singles for
+number recognition. Colors cannot uniquely read a board’s number-ring rotation because red/green
+bands repeat, so this browser field test deliberately assumes a level, 20-up board; a trained
 board/number-orientation model is still required for general automatic orientation. The browser
 heuristic rejects large changes as camera movement/hand presence and reports no-change or
 ambiguous-change instead of fabricating a score. Optional visual-guide gestures plus named-anchor

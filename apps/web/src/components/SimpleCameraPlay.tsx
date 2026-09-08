@@ -571,6 +571,29 @@ export function SimpleCameraPlay({
         return;
       }
 
+      // A small accepted frame translation means the physical board has moved relative to the
+      // reference image. Move the visible guide and its canonical transform with the new baseline;
+      // otherwise the first dart would score correctly but later darts would be decoded against a
+      // stale pre-vibration pose.
+      if (
+        fit !== null &&
+        (nextAnalysis.alignmentOffset.x !== 0 || nextAnalysis.alignmentOffset.y !== 0)
+      ) {
+        const translatedFit = translateBoardFit(
+          fit,
+          nextAnalysis.alignmentOffset.x,
+          nextAnalysis.alignmentOffset.y,
+        );
+        const translatedHomography = solveImageToBoardHomography(
+          translatedFit,
+          BOARD_FIT_CANONICAL_ANCHORS,
+        );
+        if (translatedHomography !== null) {
+          fitRef.current = translatedFit;
+          setFit(translatedFit);
+          setHomography(translatedHomography);
+        }
+      }
       setReference(frame);
       setLastRecorded({
         slot,
@@ -596,6 +619,7 @@ export function SimpleCameraPlay({
   }, [
     availableSlots,
     captureFrame,
+    fit,
     gameComplete,
     homography,
     isWatching,
@@ -1023,6 +1047,8 @@ export function SimpleCameraPlay({
                   {automaticFit.outerAngularCoverage}/20 outer-band sectors ·{' '}
                   {automaticFit.redPixelCount.toLocaleString()} red /{' '}
                   {automaticFit.greenPixelCount.toLocaleString()} green samples ·{' '}
+                  {Math.round(automaticFit.outerAlternatingColorStrength * 100)}% alternating ·{' '}
+                  {Math.round(automaticFit.bandColorPhaseAgreement * 100)}% band agreement ·{' '}
                   {Math.round(automaticFit.confidence * 100)}% color-pattern cue
                 </span>
               )}
@@ -1053,7 +1079,10 @@ export function SimpleCameraPlay({
               <small>
                 {analysis.changedPixels.toLocaleString()} changed px ·{' '}
                 {(analysis.changedFraction * 100).toFixed(2)}% of frame · threshold{' '}
-                {Math.round(analysis.differenceThreshold)} · {analysis.shapes.length} shape
+                {Math.round(analysis.differenceThreshold)} · align{' '}
+                {analysis.alignmentOffset.x >= 0 ? '+' : ''}
+                {analysis.alignmentOffset.x},{analysis.alignmentOffset.y >= 0 ? '+' : ''}
+                {analysis.alignmentOffset.y} px · {analysis.shapes.length} shape
                 {analysis.shapes.length === 1 ? '' : 's'}
               </small>
             </p>

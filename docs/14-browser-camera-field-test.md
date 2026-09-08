@@ -41,10 +41,11 @@ every endpoint under every angle, flight, shadow, board surface, or occlusion.
 The browser’s automatic board fit is deliberately inspectable and conservative:
 
 1. samples the local camera frame for conventional saturated red and green board accents;
-2. finds the repeated, color-balanced outer-double and inner-treble band pair, so a red surround,
-   wall logo, or one colored object is not automatically treated as the board;
-3. estimates the band-pair center and principal ellipse, then requires two matching full guide shapes
-   before accepting a board;
+2. finds the repeated, color-balanced, alternating-color outer-double and inner-treble band pair, so
+   a red surround, printed board branding, wall logo, or one colored object is not automatically
+   treated as the board;
+3. cross-checks the broad fit against the compact two-color bull, then requires two matching full
+   guide shapes before accepting a board;
 4. creates the same internal image-to-canonical-board mapping used by deterministic scoring; and
 5. retains an in-memory clear-board frame only when the player taps **START PLAY**.
 
@@ -53,13 +54,19 @@ read the number ring or resolve every possible board rotation: alternating red/g
 around a board. For this field test, automatic mode assumes the physical **20 is upright at the top
 of the camera image**. The visible `20 ↑` guide makes that assumption inspectable. Mount the phone
 level with a normally oriented board. A future trained board/number-orientation model must replace
-this assumption before claiming arbitrary roll/board rotation support.
+this assumption before claiming arbitrary roll/board rotation support. The player-facing manual board
+now follows the conventional dark-S20/red-accent and light-S1/S5/green-accent palette. This fixes an
+old visual mismatch, but black/white beds are not yet a number-reading model and cannot independently
+prove that a particular physical wedge is 20.
 
 After board finding, each dart is still a browser-local visual-change heuristic. It compensates a
-bounded global exposure/white-balance shift, rejects broad motion, retains elongated side-view shafts
-and compact near-centreline flight/occlusion changes, projects them through canonical geometry, and
-waits for a nearby same-zone candidate in two frames (with one-frame grace) before recording an
-editable suggestion. Compact-flight locations are intentionally low-confidence and reviewable. This
+bounded global exposure/white-balance shift and a few pixels of board-face translation from impact or
+mount vibration; after it accepts an aligned dart, it carries that small offset into the in-memory
+guide and next baseline. It still rejects broad motion, retains elongated side-view shafts and
+compact near-centreline flight/occlusion changes, projects them through canonical geometry, and waits
+for a nearby same-zone candidate in two frames (with one-frame grace) before recording an editable
+suggestion. A protruding flight/shaft endpoint beyond the double wire is held rather than recorded as
+an automatic `MISS`; compact-flight locations are intentionally low-confidence and reviewable. This
 is not a learned tip detector or a calibrated score probability.
 
 ## Required first-test envelope
@@ -104,28 +111,29 @@ heuristic. Test direct top-level HTTPS deployments on actual iOS and Android har
 
 ## Expected failure behavior and recovery
 
-| In-app state                               | Meaning                                                    | Safe response                                                                                                                                                 |
-| ------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded-preview camera message            | The page is in an iframe that cannot request user media    | Open the direct `https://…vercel.app` URL in Safari/Chrome, not an Arena/in-app preview                                                                       |
-| Camera permission blocked                  | Browser/device denied or remembered a denial               | In the direct HTTPS tab, set Camera to Allow from lock/camera controls, reload, retry                                                                         |
-| Waiting for a complete frame               | Browser camera has not delivered drawable video data       | Wait briefly after permission; if a live preview is visible but this persists, update/reload to the fixed Camera Play build and report device/browser details |
-| No red/green board found                   | Color signal is weak, cropped, non-standard, or obscured   | Show complete board, use diffuse light, reduce glare, move closer, and keep physical 20 upright                                                               |
-| Board too small                            | Not enough board pixels for the first test                 | Move closer or use optical resolution; automatic finding resumes without player calibration                                                                   |
-| Board needs work                           | Automatic color ellipse is too oblique, soft, or malformed | Center/level the mount, improve light/focus, then tap **FIND BOARD AGAIN**                                                                                    |
-| Broad movement held                        | A hand/body/shadow or camera movement changed too much     | Step out, stabilize the mount/light, and let the board settle                                                                                                 |
-| No score appears                           | Change was not yet a stable isolated dart shape            | Wait, check framing, then use ordinary score correction if the dart is clear but unproposed                                                                   |
-| Wrong/near-wire score                      | Heuristic endpoint or geometry is ambiguous                | Tap **REVIEW OR CORRECT SCORES**, correct the DartCard, then confirm                                                                                          |
-| Camera framing/resolution changed          | Existing baseline/mapping is no longer trustworthy         | Tap **FIND BOARD AGAIN**, wait for Board Found, then Start Play with an empty board                                                                           |
-| Unusual board colors / extreme perspective | Color heuristic cannot establish a usable automatic shape  | Open **Optional recovery & advanced diagnostics**; do not make it the normal player flow                                                                      |
-| Bounce-out/stacked/hidden dart             | One-camera visual difference is insufficiently isolated    | Record/correct manually; retain it as field-test failure evidence                                                                                             |
+| In-app state                               | Meaning                                                                      | Safe response                                                                                                                                                 |
+| ------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded-preview camera message            | The page is in an iframe that cannot request user media                      | Open the direct `https://…vercel.app` URL in Safari/Chrome, not an Arena/in-app preview                                                                       |
+| Camera permission blocked                  | Browser/device denied or remembered a denial                                 | In the direct HTTPS tab, set Camera to Allow from lock/camera controls, reload, retry                                                                         |
+| Waiting for a complete frame               | Browser camera has not delivered drawable video data                         | Wait briefly after permission; if a live preview is visible but this persists, update/reload to the fixed Camera Play build and report device/browser details |
+| No red/green board found                   | Color signal is weak, cropped, non-standard, or obscured                     | Show complete board, use diffuse light, reduce glare, move closer, and keep physical 20 upright                                                               |
+| Board too small                            | Not enough board pixels for the first test                                   | Move closer or use optical resolution; automatic finding resumes without player calibration                                                                   |
+| Board needs work                           | Automatic color ellipse is too oblique, soft, or malformed                   | Center/level the mount, improve light/focus, then tap **FIND BOARD AGAIN**                                                                                    |
+| Broad movement held                        | A hand/body/shadow or movement beyond the bounded alignment changed too much | Step out, stabilize the mount/light, and let the board settle; retain the displayed alignment offset in a failure report                                      |
+| No score appears                           | Change was not yet a stable isolated dart shape                              | Wait, check framing, then use ordinary score correction if the dart is clear but unproposed                                                                   |
+| Wrong/near-wire score                      | Heuristic endpoint or geometry is ambiguous                                  | Tap **REVIEW OR CORRECT SCORES**, correct the DartCard, then confirm                                                                                          |
+| Camera framing/resolution changed          | Existing baseline/mapping is no longer trustworthy                           | Tap **FIND BOARD AGAIN**, wait for Board Found, then Start Play with an empty board                                                                           |
+| Unusual board colors / extreme perspective | Color heuristic cannot establish a usable automatic shape                    | Open **Optional recovery & advanced diagnostics**; do not make it the normal player flow                                                                      |
+| Bounce-out/stacked/hidden dart             | One-camera visual difference is insufficiently isolated                      | Record/correct manually; retain it as field-test failure evidence                                                                                             |
 
 ## Report a real failure usefully
 
 A real-board failure is not a cue to keep moving the mount indefinitely. In the Camera Play build,
-the **AUTO BOARD FIND** panel reports board pixels, outer-band sectors, red/green sample counts, and
-its color-pattern cue. After **START PLAY**, the **LOCAL DETECTOR** panel reports whether it saw
-`no change`, `ambiguous change`, `camera moved or hand present`, or a candidate, plus changed pixels,
-frame fraction, threshold, and shape count.
+the **AUTO BOARD FIND** panel reports board pixels, outer-band sectors, red/green sample counts,
+alternating-color strength, double/treble band agreement, and its color-pattern cue. After **START
+PLAY**, the **LOCAL DETECTOR** panel reports whether it saw `no change`, `ambiguous change`, `camera
+moved or hand present`, or a candidate, plus changed pixels, frame fraction, threshold, bounded
+alignment offset, and shape count.
 
 For a reproducible defect report, attach or securely retain (with the tester’s consent) an empty-board
 screenshot that includes the visible guide and auto-find panel; a same-mount still with one dart;

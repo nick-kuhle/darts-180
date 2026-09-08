@@ -69,6 +69,25 @@ function drawRedSurround(
   }
 }
 
+function drawLopsidedRedBranding(frame: CameraFrame) {
+  // Approximate saturated marketing lettering/decoration around one side of a board. It is not a
+  // radial scoring band and must not drag the color-fit center or guide rotation toward itself.
+  const blocks = [
+    [150, 310],
+    [180, 350],
+    [205, 390],
+    [250, 610],
+    [300, 645],
+  ] as const;
+  for (const [centerX, centerY] of blocks) {
+    for (let y = centerY - 12; y <= centerY + 12; y += 1) {
+      for (let x = centerX - 25; x <= centerX + 25; x += 1) {
+        if ((x + y) % 7 < 5) setPixel(frame, x, y, [214, 70, 61]);
+      }
+    }
+  }
+}
+
 function drawTwoColorOval(
   frame: CameraFrame,
   centerX: number,
@@ -130,6 +149,22 @@ test('finds scoring bands inside a large red surround instead of fitting the sur
   assert.ok(Math.abs((result.center?.y ?? 0) - 480) < 8);
   assert.ok(result.estimatedBoardDiameterPixels >= 520);
   assert.ok(result.estimatedBoardDiameterPixels <= 620);
+});
+
+test('uses repeated-band and bull evidence instead of lopsided red board branding', () => {
+  const frame = makeFrame();
+  drawSyntheticAccentBoard(frame, 480, 360, 290, 250);
+  drawLopsidedRedBranding(frame);
+
+  const result = detectBoardFitFromColors(frame);
+  assert.equal(result.status, 'found');
+  assert.ok(result.fit !== null);
+  assert.ok(Math.abs((result.center?.x ?? 0) - 480) < 8);
+  assert.ok(Math.abs((result.center?.y ?? 0) - 360) < 8);
+  assert.ok(result.estimatedBoardDiameterPixels >= 480);
+  assert.ok(result.estimatedBoardDiameterPixels <= 530);
+  assert.ok(result.outerAlternatingColorStrength > 0.2);
+  assert.ok(result.bandColorPhaseAgreement > 0.8);
 });
 
 test('rejects frames without a sufficient red/green board pattern', () => {
