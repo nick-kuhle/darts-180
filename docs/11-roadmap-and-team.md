@@ -20,8 +20,9 @@ finding in [PR #5](https://github.com/nick-kuhle/darts-180/pull/5) and the initi
 reliability remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), followed by the
 first reliability update in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct
 post-merge device report found automatic board finding improved but dart resolution materially failed.
-The post-field-report browser remediation requires a new direct-device retest; its evidence taxonomy,
-retest procedure, and non-claims live in
+The post-field-report browser remediation and its subsequent automatic baseline-recovery update are
+open in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8) and require a new direct-device
+retest; their evidence taxonomy, retest procedure, and non-claims live in
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) and
 [the current implementation status](13-current-implementation-status.md).
 

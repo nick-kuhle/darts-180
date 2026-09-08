@@ -46,9 +46,10 @@ merged in [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 [PR #5](https://github.com/nick-kuhle/darts-180/pull/5), and the initial browser-camera reliability
 remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge device
-report found better board finding but failed dart resolution; the dedicated remediation awaits
-pull-request delivery and a new direct-device test. Review each diff and its GitHub Actions result
-before using a build for external testing. See
+report found better board finding but failed dart resolution; the dedicated remediation and its
+baseline-arming recovery update are open in [PR #8](https://github.com/nick-kuhle/darts-180/pull/8)
+and await a new direct-device test. Review each diff and its GitHub Actions result before using a
+build for external testing. See
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 No delivery
 credential is stored in source, Git configuration, or the remote URL; revoke any short-lived

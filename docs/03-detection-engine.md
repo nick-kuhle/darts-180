@@ -190,14 +190,16 @@ number recognition. Colors cannot uniquely read a board’s number-ring rotation
 bands repeat, so this browser field test deliberately assumes a level, 20-up board; a trained
 board/number-orientation model is still required for general automatic orientation. The browser
 heuristic rejects large changes as camera movement/hand presence and reports no-change or
-ambiguous-change instead of fabricating a score. Optional visual-guide gestures plus named-anchor
-advanced diagnostics remain recovery-only. A direct post-PR #7 device report showed automatic board
-finding improving while dart resolution materially failed; the response is documented as a
-synthetic-only remediation, not proof of a fix. Real camera failures must be collected as diagnostic
-evidence, not written off as a mounting problem. The bridge is useful for workflow and failure-data
-collection; it must not be marketed as auto-accept, trained vision, or a substitute for native pose,
-temporal, and trained entry-point inference. Operating instructions, failure handling, and the
-post-field-report retest protocol are in
+ambiguous-change instead of fabricating a score. During the pre-throw clear-board check, two repeated
+broad holds refresh the automatic board map and restart the check; local dart/ambiguous/incompatible
+changes never become a new baseline. Optional visual-guide gestures plus named-anchor advanced
+diagnostics remain recovery-only. A direct post-PR #7 device report showed automatic board finding
+improving while dart resolution materially failed, and a later PR #8 test exposed a broad-motion
+baseline-arming hold. The response is documented as a synthetic-only remediation, not proof of a fix.
+Real camera failures must be collected as diagnostic evidence, not written off as a mounting problem.
+The bridge is useful for workflow and failure-data collection; it must not be marketed as auto-accept,
+trained vision, or a substitute for native pose, temporal, and trained entry-point inference.
+Operating instructions, failure handling, and the post-field-report retest protocol are in
 [`14-browser-camera-field-test.md`](14-browser-camera-field-test.md) and
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 

@@ -134,7 +134,8 @@ through [PR #1](https://github.com/nick-kuhle/darts-180/pull/1),
 remediation in [PR #6](https://github.com/nick-kuhle/darts-180/pull/6), and the first reliability
 follow-up in [PR #7](https://github.com/nick-kuhle/darts-180/pull/7). A direct post-merge iPhone
 report found better automatic board finding but materially failed dart resolution. The dedicated
-post-field-report remediation now awaits pull-request delivery and a new direct-device retest;
+post-field-report remediation and a subsequent baseline-arming recovery update are open in
+[PR #8](https://github.com/nick-kuhle/darts-180/pull/8), awaiting a new direct-device retest;
 synthetic tests alone do not establish field improvement. See
 [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md).
 
