@@ -1,4 +1,3 @@
-import { BlobPreconditionFailedError, put } from '@vercel/blob';
 import { createHash } from 'node:crypto';
 
 import {
@@ -142,7 +141,7 @@ export function createCaptureIngestHandler({
         cacheControlMaxAge: 60,
       });
     } catch (error) {
-      if (error instanceof BlobPreconditionFailedError || isNamedPreconditionError(error)) {
+      if (isNamedPreconditionError(error)) {
         return json(
           {
             error:
@@ -178,7 +177,13 @@ const captureIngest = createCaptureIngestHandler({
     // The store ID is the deliberate configuration signal; this route never handles a Blob credential.
     blobStoreId: process.env.BLOB_STORE_ID,
   }),
-  putPrivateBlob: (pathname, body, options) => put(pathname, body, options),
+  // Keep the Blob SDK out of the status-only path. A missing/unlinked store must yield the
+  // deliberate 503 configuration state—not crash the whole Function before Data Lab can explain
+  // what needs setup. The dynamic import still bundles the SDK for an actual server-side write.
+  putPrivateBlob: async (pathname, body, options) => {
+    const { put } = await import('@vercel/blob');
+    return put(pathname, body, options);
+  },
 });
 
 // Vercel's Web Standard Function contract invokes this Fetch handler without Node body parsing.
