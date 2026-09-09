@@ -18,9 +18,15 @@ It does **not** magically solve:
 - board partly outside frame or a board moved after calibration;
 - bounce-outs, robin hoods, and deep occlusion.
 
-Darts 180 expands support angle-by-angle through measured evaluation. The runtime has permission to
-say “I cannot see this reliably.” That abstention protects trust and provides an actionable setup
-instruction.
+Darts 180 expands support angle-by-angle through measured evaluation. In a **production** scorer,
+the runtime has permission to say “I cannot see this reliably.” That abstention protects trust and
+provides an actionable setup instruction.
+
+An isolated **development** scorer has a narrower purpose: when a learned model actually detects a
+dart point plus enough board geometry, it may show a provisional deterministic score immediately so
+a tester can correct it. It must label that result as an editable suggestion, require a human review
+before visit confirmation, and never turn low evidence into a fabricated score. See
+[`18-development-five-point-scorer.md`](18-development-five-point-scorer.md).
 
 ## 2. Physical board model
 
@@ -154,7 +160,7 @@ real-world auto-scoring performance.
 
 ### 4.3.1 Implemented web-first learned runtime boundary
 
-The active web branch ships a new **Learned Camera Play** route instead of the former browser heuristic.
+The active web branch ships a new **Learned Live Scoring** route instead of the former browser heuristic.
 It starts a rear camera only after a player action, sends transferable high-resolution `ImageBitmap` frames
 to a same-origin module Worker, and never exposes calibration or tip-picking controls in normal play.
 
@@ -176,11 +182,13 @@ associates stable tips over a post-impact burst, and delegates zone selection to
 package. A low-resolution luma frame may request a burst or flag material scene motion, but it has no board
 coordinate, endpoint, zone, or score eligibility role.
 
-The current checked-in manifest is deliberately `unavailable`. This means the complete browser architecture,
-UI, Worker, integrity/CSP configuration, and safety tests are implemented, while Camera Play correctly refuses
-to score until a lawful trained artifact and held-out evaluation release exist. The former red/green/
-frame-difference React components are removed from the shipped route; their historical failure baseline is
-recorded in [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
+The current checked-in **production** manifest is deliberately `unavailable`. The strict production route
+therefore correctly refuses to score until a lawful trained artifact and held-out release evidence exist. A
+separate optional development package may now run through the isolated five-point contract described below;
+it has a local hash check but always produces mandatory editable review suggestions, never a production
+claim or automatic record. The former red/green/frame-difference React components are removed from the
+shipped route; their historical failure baseline is recorded in
+[`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md).
 
 The fixed browser output contract is:
 
@@ -198,6 +206,25 @@ stage, evaluation/provenance identifiers, calibrated pose/quality/decision polic
 together. A production package also carries a separately hashed public attestation whose identity must exactly
 bind the ONNX hash, contract, provenance/evaluation IDs, timestamp, and approval ID; CI and the Worker verify
 that binding before deployment and production inference.
+
+### 4.3.2 External four-anchor development candidate
+
+A reviewed DeepDarts YOLOv8 v2 sample confirms that five numeric classes play the roles of a dart
+point plus four ordered perimeter calibration anchors. Four non-collinear ordered anchors can solve a
+homography, so this supports a practical development baseline for automatic board geometry.
+
+It is **not** compatible with the fixed production contract above: it lacks nine named/redundant
+landmarks, quality outputs, uncertainty fields, and the production evidence package. Do not pad missing
+landmarks, silently rename numeric labels, or route raw YOLO rows through the public schema-v2 manifest.
+Instead, the web code now has a separately versioned `darts180-deepdarts-yolo-dev-v1` path that accepts
+only a real local five-class artifact, maps detections to deterministic standard-board geometry, and
+emits editable review suggestions only. Production takes precedence whenever a production artifact is
+available.
+
+The adapter's source-frame `−9°` rotation is a narrow mapping hypothesis backed by source/reviewed-sample
+geometry and synthetic arithmetic tests—not a broad field-validation claim. It must be verified against
+independently scored real throws before promotion. See the [dated research intake](research/2026-09-deepdarts-yolov8-candidate.md) and the
+[development scorer contract](18-development-five-point-scorer.md).
 
 ### 4.4 Dart entry-point model
 
@@ -246,12 +273,12 @@ legal checkout); game rules process confirmed zones separately.
 A top-1 probability is not enough. A `T20` 0.99 prediction 0.1 mm from a wire is a likely UI review
 case. Initial policy:
 
-| Condition                                                       | UI disposition                                            |
-| --------------------------------------------------------------- | --------------------------------------------------------- |
-| Quality gate fails                                              | Block auto proposal; show specific camera fix/manual path |
-| Occlusion/ambiguous class                                       | Flag; manual/replay required                              |
-| `p(top1) ≥ .97` **and** wire margin ≥1.5 mm **and** stable pose | `LOCKED`, editable                                        |
-| Otherwise                                                       | `CHECK`, ranked alternatives and correction affordance    |
+| Condition                                                       | Production UI disposition                              | Development five-point behavior                                                      |
+| --------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Quality/pose gate fails                                         | Block proposal; show specific camera fix/manual path   | No suggestion without four learned anchors                                           |
+| Occlusion/ambiguous class                                       | Flag; manual/replay required                           | Future label/evaluation need; no invented occlusion output                           |
+| `p(top1) ≥ .97` **and** wire margin ≥1.5 mm **and** stable pose | `LOCKED`, editable                                     | Not applicable; no auto-recording                                                    |
+| Otherwise                                                       | `CHECK`, ranked alternatives and correction affordance | Learned detection + geometry may show `EDIT` suggestion; player must confirm/correct |
 
 Thresholds must be calibrated on the held-out dataset separately by device, angle, light, board,
 ring, and margin. Auto-accept _precision_ is a safety metric; coverage is secondary.
@@ -295,15 +322,15 @@ gets manual scoring and camera setup rather than an unreliable promise.
 - Never train directly on unreviewed production clips. Ingest consented examples, redact/validate,
   label, split before training, and preserve a sacred evaluation set.
 
-## 9. V1 build order
+## 9. Build order
 
-1. Board-quality/pose model + guided setup, no scoring claim.
-2. Offline capture/label tools; stable rig first.
-3. Temporal change/occupancy tracker; record candidate timing/false trigger metrics.
-4. Entrypoint baseline trained on controlled board/dart data.
-5. DartCard integration, confidence calibration, and correction capture.
-6. Hard-room/device/angle expansion with evaluation gates.
-7. Optional two-phone/multicam fusion for hard conditions.
+1. Ship the isolated five-point **development** path with a real locally verified YOLO detector,
+   deterministic geometry, mandatory editable DartCards, and opt-in local correction-evidence export.
+2. Train/validate that baseline from lawful local data and use corrected real throws to close coverage gaps.
+3. Add learned quality, occlusion, redundant landmarks, and calibrated uncertainty rather than pretending the
+   development detector emits them.
+4. Lock independent evaluation and promote only via the stricter production ABI/evidence gates.
+5. Expand difficult room/device/angle support with measured slices, then consider two-phone/multicam fusion.
 
 ## 10. Definition of “ready to claim auto-scoring”
 

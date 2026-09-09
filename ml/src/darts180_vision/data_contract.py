@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import datetime
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from .geometry import BoardPointMm, DartZone, decode_board_point
 
@@ -18,6 +19,10 @@ _LIGHTING_BANDS = {"low", "normal", "bright", "mixed", "glare"}
 _SPLITS = {"unassigned", "train", "validation", "eval"}
 _CAPTURE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,128}$")
 _IMAGE_FILE_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+\.(jpg|jpeg)$")
+_DEVELOPMENT_DATA_LAB_CONSENT_VERSION = "DEVELOPMENT-DATA-LAB-CONSENT-V1"
+_DEVELOPMENT_DATA_LAB_ADMISSION_STATUS = "consented-development-unreviewed"
+_SYNTHETIC_CONSENT_VERSION = "SYNTHETIC-NO-USER-DATA"
+_SYNTHETIC_ADMISSION_STATUS = "synthetic-not-real-world-evaluation"
 
 
 @dataclass(frozen=True)
@@ -47,20 +52,43 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
 
     capture_id = value.get("captureId")
     if not isinstance(capture_id, str) or not _CAPTURE_ID_PATTERN.fullmatch(capture_id):
-        issues.append(ValidationIssue("captureId", "Must be an 8–128 character pseudonymous ID using letters, numbers, _ or -."))
+        issues.append(
+            ValidationIssue(
+                "captureId",
+                "Must be an 8–128 character pseudonymous ID using letters, numbers, _ or -.",
+            )
+        )
+    session_id = value.get("sessionId")
+    if session_id is not None and (
+        not isinstance(session_id, str) or not _CAPTURE_ID_PATTERN.fullmatch(session_id)
+    ):
+        issues.append(
+            ValidationIssue(
+                "sessionId",
+                "When supplied, must be an 8–128 character pseudonymous setup/session ID.",
+            )
+        )
     for field in ("consentVersion", "boardModel", "deviceModel", "createdAt"):
         if field in value and not _is_non_empty_string(value.get(field)):
             issues.append(ValidationIssue(field, "Must be a non-empty string."))
     if not _is_iso_datetime(value.get("createdAt")):
         issues.append(ValidationIssue("createdAt", "Must be an ISO-8601 timestamp with timezone."))
+    _validate_provenance(value, issues)
     if value.get("captureMode") not in _CAPTURE_MODES:
         issues.append(ValidationIssue("captureMode", f"Must be one of {sorted(_CAPTURE_MODES)}."))
     if "captureIntent" in value and value["captureIntent"] not in _CAPTURE_INTENTS:
-        issues.append(ValidationIssue("captureIntent", f"Must be one of {sorted(_CAPTURE_INTENTS)}."))
+        issues.append(
+            ValidationIssue("captureIntent", f"Must be one of {sorted(_CAPTURE_INTENTS)}.")
+        )
     if "imageFile" in value and (
-        not isinstance(value["imageFile"], str) or not _IMAGE_FILE_PATTERN.fullmatch(value["imageFile"])
+        not isinstance(value["imageFile"], str)
+        or not _IMAGE_FILE_PATTERN.fullmatch(value["imageFile"])
     ):
-        issues.append(ValidationIssue("imageFile", "Must be a plain .jpg/.jpeg filename without path separators."))
+        issues.append(
+            ValidationIssue(
+                "imageFile", "Must be a plain .jpg/.jpeg filename without path separators."
+            )
+        )
     if "imageMime" in value and value["imageMime"] != "image/jpeg":
         issues.append(ValidationIssue("imageMime", "Must be image/jpeg when supplied."))
     if value.get("lightingBand") not in _LIGHTING_BANDS:
@@ -68,13 +96,54 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
     if "split" in value and value["split"] not in _SPLITS:
         issues.append(ValidationIssue("split", f"Must be one of {sorted(_SPLITS)}."))
     if value.get("containsFaces") is not False:
-        issues.append(ValidationIssue("containsFaces", "Must be explicitly false for accepted capture."))
+        issues.append(
+            ValidationIssue("containsFaces", "Must be explicitly false for accepted capture.")
+        )
     _validate_number(value, "offAxisDegrees", 0, 90, issues)
     _validate_number(value, "distanceMm", 200, 5000, issues)
     return tuple(issues)
 
 
-def validate_dart_label(value: Mapping[str, Any], *, tolerance_mm: float = 0.05) -> tuple[ValidationIssue, ...]:
+
+def _validate_provenance(value: Mapping[str, Any], issues: list[ValidationIssue]) -> None:
+    """Keep consented browser data and fully synthetic data distinguishable in every handoff."""
+    capture_mode = value.get("captureMode")
+    consent_version = value.get("consentVersion")
+    admission_status = value.get("admissionStatus")
+    if consent_version == _DEVELOPMENT_DATA_LAB_CONSENT_VERSION:
+        if not _is_iso_datetime(value.get("consentAcceptedAt")):
+            issues.append(
+                ValidationIssue(
+                    "consentAcceptedAt",
+                    "Development Data Lab consent requires an ISO-8601 acceptance timestamp with timezone.",
+                )
+            )
+        if admission_status != _DEVELOPMENT_DATA_LAB_ADMISSION_STATUS:
+            issues.append(
+                ValidationIssue(
+                    "admissionStatus",
+                    "New Data Lab browser records must remain consented-development-unreviewed until manual data review.",
+                )
+            )
+    if capture_mode == "synthetic":
+        if consent_version != _SYNTHETIC_CONSENT_VERSION:
+            issues.append(
+                ValidationIssue(
+                    "consentVersion",
+                    "Synthetic material must use SYNTHETIC-NO-USER-DATA provenance, never a human consent marker.",
+                )
+            )
+        if admission_status != _SYNTHETIC_ADMISSION_STATUS:
+            issues.append(
+                ValidationIssue(
+                    "admissionStatus",
+                    "Synthetic material must be marked synthetic-not-real-world-evaluation.",
+                )
+            )
+
+def validate_dart_label(
+    value: Mapping[str, Any], *, tolerance_mm: float = 0.05
+) -> tuple[ValidationIssue, ...]:
     """Ensure label point and label zone agree with the canonical board decoder.
 
     This catches a common training-data failure: a human writes T20 while coordinates actually land
@@ -106,16 +175,22 @@ def validate_dart_label(value: Mapping[str, Any], *, tolerance_mm: float = 0.05)
         )
     if "wireMarginMm" in value:
         margin = value["wireMarginMm"]
-        if not isinstance(margin, (int, float)) or isinstance(margin, bool) or margin < -tolerance_mm:
-            issues.append(ValidationIssue("wireMarginMm", "Must be a non-negative numeric wire margin."))
+        if (
+            not isinstance(margin, (int, float))
+            or isinstance(margin, bool)
+            or margin < -tolerance_mm
+        ):
+            issues.append(
+                ValidationIssue("wireMarginMm", "Must be a non-negative numeric wire margin.")
+            )
     return tuple(issues)
 
 
 def validate_capture_sidecar(value: Mapping[str, Any]) -> tuple[ValidationIssue, ...]:
-    """Validate either a Capture Lab manifest or a labeled/synthetic sidecar.
+    """Validate either a Data Lab manifest or a labeled/synthetic sidecar.
 
     Labeled sidecars place their manifest under `capture` and optional labels under `darts`.
-    A local Capture Lab export is itself a manifest and therefore needs no wrapper.
+    A local Data Lab export is itself a manifest and therefore needs no wrapper.
     """
     capture = value.get("capture", value)
     if not isinstance(capture, Mapping):
@@ -154,7 +229,7 @@ def _is_iso_datetime(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return False
     return parsed.tzinfo is not None
@@ -170,7 +245,9 @@ def _is_numeric_pair(value: Any) -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate a Darts 180 capture manifest or labeled sidecar.")
+    parser = argparse.ArgumentParser(
+        description="Validate a Darts 180 capture manifest or labeled sidecar."
+    )
     parser.add_argument("path", type=Path, help="JSON manifest or labeled sidecar path.")
     args = parser.parse_args()
     try:
@@ -180,7 +257,16 @@ def main() -> None:
     if not isinstance(value, Mapping):
         raise SystemExit("Expected a top-level JSON object.")
     issues = validate_capture_sidecar(value)
-    print(json.dumps({"path": str(args.path), "valid": not issues, "issues": [asdict(issue) for issue in issues]}, indent=2))
+    print(
+        json.dumps(
+            {
+                "path": str(args.path),
+                "valid": not issues,
+                "issues": [asdict(issue) for issue in issues],
+            },
+            indent=2,
+        )
+    )
     if issues:
         raise SystemExit(1)
 

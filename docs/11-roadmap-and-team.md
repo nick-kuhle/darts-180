@@ -17,8 +17,8 @@ line as a production strategy.
 `feat/web-first-learned-autoscoring` is the first successor implementation: shared learned vision contracts;
 a strict same-origin model manifest and release gate; Worker-owned ONNX Runtime Web with WebGPU/WASM fallback
 and SHA-256 verification; automatic named-landmark board pose; canonical tracking and deterministic proposals;
-normal Camera Play without manual calibration; and Worker/WASM CSP support. Its model manifest is deliberately
-unavailable, so no score is claimed or recorded. The former Camera Play and advanced heuristic components are
+normal Live Scoring without manual calibration; and Worker/WASM CSP support. Its model manifest is deliberately
+unavailable, so no score is claimed or recorded. The former camera-play and advanced heuristic components are
 removed from the shipped route. The existing Vercel production project/URL must be retained for the follow-up
 deployment.
 
@@ -35,7 +35,7 @@ trustworthy evidence for learned dart-tip localization—not to market a browser
 
 | Workstream        | First milestone                                         | Long-term ownership                     |
 | ----------------- | ------------------------------------------------------- | --------------------------------------- |
-| Product / design  | validated Camera Play/DartCard correction flow          | games, pricing, research, partnerships  |
+| Product / design  | validated Live Scoring/DartCard correction flow         | games, pricing, research, partnerships  |
 | Gameplay          | formal X01/Cricket corpus                               | games platform / statistics             |
 | Web runtime       | browser Worker/ONNX capture and performance evidence    | browser/local inference platform        |
 | Mobile            | reuse locked web contracts in native development builds | iOS/Android app quality                 |
@@ -128,7 +128,7 @@ not compromise player privacy or product independence.
 |   1 | Review Vercel/mobile deployment PR, assign name/legal owner, and enable CI policy         | [PR #1](https://github.com/nick-kuhle/darts-180/pull/1) and [PR #2](https://github.com/nick-kuhle/darts-180/pull/2) are merged; [PR #3](https://github.com/nick-kuhle/darts-180/pull/3), legal owner, and branch policy remain needed. |
 |   2 | Rules team reviews X01/Cricket spec and starts fixture corpus                             | Ready: rules/tests exist; expand toward the conformance corpus.                                                                                                                                                                        |
 |   3 | Web team installs the direct HTTPS build on iOS/Android browsers and tests DartCard edits | Camera permission/preview can be exercised; real learned scoring remains blocked by the unavailable model release.                                                                                                                     |
-|   4 | Vision team freezes browser landmark/tip tensor contract and safe capture test jig        | Partial: shared contracts, Worker, manifest gate, Capture/Annotation Labs, and synthetic tests exist; real rig remains.                                                                                                                |
+|   4 | Vision team freezes browser landmark/tip tensor contract and safe capture test jig        | Partial: shared contracts, Worker, manifest gate, guided Data Lab, and synthetic tests exist; real rig remains.                                                                                                                        |
 |   5 | Privacy team approves capture consent/retention/face-exclusion workflow                   | Not started: browser-local safeguards do not replace legal/privacy approval.                                                                                                                                                           |
 |   6 | Capture first 200 controlled board/dart examples across several poses                     | Blocked on Day 5 approval and safe intake.                                                                                                                                                                                             |
 |   7 | Web runtime team profiles Worker/WASM/WebGPU frames on physical browsers                  | Build and CSP paths exist; direct-device runtime/performance evidence remains.                                                                                                                                                         |

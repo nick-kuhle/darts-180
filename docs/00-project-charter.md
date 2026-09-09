@@ -130,7 +130,7 @@ conflicts, and visual identity.
 ## 12. Foundation-phase completion and remaining gate
 
 The repository foundation is now complete: it has the runnable manual scoring demos, shared rules,
-development API, local-only Capture/Annotation Labs, initial data contracts, synthetic/heuristic
+development API, guided consent-gated private Data Lab, initial data contracts, synthetic/heuristic
 vision baselines, CI, runbooks, and architecture documentation. The authoritative current snapshot
 is [`13-current-implementation-status.md`](13-current-implementation-status.md).
 

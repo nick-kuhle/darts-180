@@ -23,6 +23,26 @@ where customers play.
 
 Never let synthetic data become the evaluation set or hide weakness on genuine hardware.
 
+### 2.1 Third-party research datasets
+
+A third-party public dataset may be useful for pretraining, ablation, or a non-production baseline,
+but it never replaces Darts 180's consented field data or sacred evaluation set. Record the source
+version, licence, derivative transformations, file hashes, class map, attribution, raw-data storage
+location, and split lineage before training. Keep raw external media and weights out of Git.
+
+The currently reviewed external lead is **DeepDarts YOLOv8 v2**. Official source metadata identifies
+CC BY 4.0; the candidate export preserves only five numeric labels and uses 640×640 stretch/augmentation.
+One reviewed image/label pair confirms the roles of one dart point and four calibration anchors, but not
+export-wide lineage or performance. It still does **not** satisfy the current nine-landmark production
+contract and cannot be treated as a production model.
+
+The product may now use a lawfully acquired, audit-clean local version of that candidate for the isolated
+five-point **development** scorer: real detector output may create only editable review cards, with no
+automatic recording or production deployment claim. This is not a permission to use hosted Roboflow
+inference, credentials, unreviewed weights, or to import the candidate through the schema-v2 production
+manifest. See the [dated candidate review](research/2026-09-deepdarts-yolov8-candidate.md), the local
+aggregate audit, and [`18-development-five-point-scorer.md`](18-development-five-point-scorer.md).
+
 ## 3. Capture matrix
 
 The capture program must balance—not merely collect—the following dimensions:
@@ -56,12 +76,26 @@ accuracy for the matrix slices.
 7. Run automated validation: all required labels, score/geometry agreement, face detector pass,
    duplicate/perceptual-hash checks, and manifest schema validation.
 
-Raw board captures should be collected in a controlled workstream, not committed to Git. The
-static web Capture Lab can create a local JPEG + starter manifest without uploading it; its paired
-Annotation Lab creates a local four-anchor sidecar for clearly visible static tips. The Python
-`data_contract.py` validator and synthetic generator exercise the same metadata/geometry path. See
-`ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md), and the
-[local annotation runbook](runbooks/local-annotation.md).
+Raw board captures should be collected in a controlled workstream, not committed to Git. The guided
+web **Data Lab** is a consent-gated small-scale development workflow. Before camera controls appear,
+an unchecked notice explains that completed board-only JPEGs, labels, and limited setup metadata are
+collected privately for product/model improvement. It records a pseudonymous setup/session group,
+the consent version/time, and `consented-development-unreviewed`, then gates camera use until the
+same-origin private intake is ready. After per-still and label review, the matched JPEG/manifest/
+sidecar trio saves automatically through the guarded same-origin Function to private Blob; there is
+no Data Lab download, collection-key, browser credential, or manual-save route. The agreement is not
+authentication or automatic training admission. The local compiler rejects the wrong profile, accepts
+explicit blank-board anchor-only records, requires at least one real dart label overall, and preserves
+whole setup sessions in train/validation/test. In the separate five-point development Live Scoring
+path, a tester may opt in to hold a bounded local JPEG plus actual detector record in page memory, then
+explicitly download it only after confirming/correcting the DartCard. That separate export is a
+convenient intake bundle—not automatically consented, independently labeled, or ready to train. The
+Python `data_contract.py`, synthetic generator, and external-only synthetic five-point builder exercise
+the same metadata/geometry path.
+See `ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md), the
+[guided private Data Lab intake](20-private-capture-lab.md), the
+[development scorer contract](18-development-five-point-scorer.md), and
+[the first-model guide](19-build-the-first-camera-model.md).
 
 ## 5. Label contract
 
@@ -141,6 +175,16 @@ on a mixed set cannot mask a poor result for a supported device or angle band.
 
 ## 9. Active-learning flywheel
 
+The development scorer creates a useful **local collection loop** before any governed upload loop:
+
+1. A tester opts in to retain a local JPEG/detector record for a detected dart; default is no retained media.
+2. The tester explicitly confirms the suggestion or corrects the DartCard, then downloads the paired local
+   JPEG + JSON bundle. The app does not upload, persist, or silently reuse this media.
+3. A data operator obtains/records consent, removes faces/background identifiers, validates geometry and
+   metadata, and independently reviews a sample before admitting it to a controlled dataset.
+
+Only after that intake boundary does the governed active-learning program begin:
+
 1. On-device model predicts candidates and quality; player confirms/corrects.
 2. The app asks separately whether the de-identified board crop/short failure clip may improve the
    model. Default is no.
@@ -163,7 +207,8 @@ Every candidate model must register:
 - dataset manifest/version and split hash;
 - training config, seed, hardware/runtime;
 - exact ONNX Runtime Web artifact checksum plus future Core ML/TFLite export targets;
-- schema-v2 manifest/attestation hashes and an exact policy-binding record;
+- the applicable versioned manifest hash: schema-v2 manifest/attestation/policy binding for production,
+  or the separately reviewed schema-v1 five-point development manifest for editable experiments;
 - full metrics + stratified reports + confidence calibration;
 - evaluation approval, security/privacy review, rollout cohort, rollback owner.
 

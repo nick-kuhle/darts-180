@@ -56,7 +56,7 @@ export interface LearnedCameraPlayDraft {
   filled: boolean;
 }
 
-interface LearnedCameraPlayProps {
+export interface LearnedCameraPlayProps {
   activePlayerName: string;
   availableSlots: number;
   gameComplete: boolean;
@@ -73,7 +73,7 @@ const WATCH_SENTINEL_MS = 900;
 const LUMA_SAMPLE_MS = 90;
 
 /**
- * The normal Camera Play path. It never asks a player to fit guides, click a board point, capture
+ * The normal Live Scoring path. It never asks a player to fit guides, click a board point, capture
  * an empty reference, or upload an image: a verified model provides semantic board landmarks and
  * dart-tip observations, while the Worker owns image preprocessing and ONNX execution.
  */
@@ -595,7 +595,7 @@ export function LearnedCameraPlay({
     <section className="shell learned-camera-play">
       <div className="camera-play-intro">
         <div>
-          <p className="eyebrow">CAMERA PLAY · LEARNED VISION</p>
+          <p className="eyebrow">LIVE SCORING · LEARNED VISION</p>
           <h1>Point it. Let Darts 180 read the board.</h1>
           <p>
             The normal path uses the mounted phone’s rear camera to find the complete standard

@@ -4,9 +4,11 @@
 **Purpose:** obtain legal, useful, diverse darts examples without turning a player's home into an
 uncontrolled video dataset.
 
-For a browser-local exploratory still, follow the more specific [Capture Lab local workflow and
-approved handoff](capture-lab.md). It does not replace this controlled, consented field protocol and
-must not be used as an informal upload path.
+For a guided browser still, follow the more specific [Data Lab capture and private intake workflow](capture-lab.md).
+It does not replace this controlled, consented field protocol. Its completed-review automatic private
+save is a consent-gated small-scale development intake with private reads—not a public training admission,
+identity system, or informal upload path. Its checkbox is provenance, not authentication; follow the manual
+screening boundary in the Data Lab runbook.
 
 ## Stop conditions
 
@@ -55,8 +57,9 @@ Stop the session and escalate if:
 
 ## Required manifest facts
 
-`captureId`, consent version, board model, device model, capture mode, off-axis degrees, distance,
-lighting band, `containsFaces: false`, timestamp; see `ml/data/manifest.schema.json`.
+`captureId`, pseudonymous `sessionId`/setup group, consent version, board model, device model, capture
+mode, off-axis degrees, distance, lighting band, `containsFaces: false`, timestamp; see
+`ml/data/manifest.schema.json`.
 
 ## Label QA sampling
 

@@ -1,25 +1,34 @@
-# Local Annotation Lab: four-anchor dart labels
+# Data Lab manual labels: five-point bootstrap
 
-**Status:** development labeling aid  
-**Audience:** trained internal annotators and data operations  
-**Use only for:** an approved, board-focused static JPEG paired with its Capture Lab manifest.
+**Status:** consent-gated development labeling aid<br />
+**Audience:** an agreeing Data Lab contributor and authorized data operations<br />
+**Use only for:** an approved, board-focused static JPEG paired with its Data Lab manifest.
 
-The **Annotate** workspace in the static web prototype turns manually clicked points into a local
-JSON sidecar. It uses a four-point projective transform and the same deterministic canonical-board
-decoder used by the game prototype. It does **not** upload images or labels, discover dart tips,
-validate privacy from pixels, establish legal consent, or replace two-person annotation/adjudication.
+The visible **DATA LAB** workspace turns manually tapped points into the source-compatible five-point
+JSON sidecar needed by the first editable development scorer. It keeps the JPEG, capture manifest, and
+manual labels in one guided flow instead of asking a collector to switch to an ordinary player screen.
+It uses a four-point projective transform and the deterministic canonical-board decoder. It does **not**
+discover dart tips, validate privacy from pixels, establish legal consent, or replace two-person
+annotation/adjudication. On the configured consent-gated development deployment, completing label review
+automatically saves the matched record to private Blob after the required entry agreement. The agreement
+records `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance time, and an unreviewed admission marker; it is
+not identity verification. The Lab has no local-download, collection-key, browser credential, or manual Save
+option. That narrow intake design is covered by [`20-private-capture-lab.md`](../20-private-capture-lab.md).
 
-Follow [Capture Lab local workflow and approved handoff](capture-lab.md) and the
+Follow the [Data Lab capture and private intake runbook](capture-lab.md) and the
 [controlled field-capture runbook](field-capture.md) first.
 
 ## 1. Prerequisites and exclusions
 
 Use an image only when all conditions hold:
 
-- It has a matching Capture Lab manifest with `containsFaces: false`, `imageMime: image/jpeg`, and
+- It has a matching Data Lab manifest with `containsFaces: false`, `imageMime: image/jpeg`, and
   `imageFile` exactly equal to the selected JPEG name.
-- The image is board-focused, privacy reviewed, and locally stored on a trusted device.
-- The full double ring and the four named double beds below are visible enough to click deliberately.
+- The image is board-focused and privacy reviewed. In Data Lab it is held only in the current tab until
+  the completed review; after automatic save, only an authorized operator may retrieve it into a protected
+  local workspace.
+- The full double ring is visible enough to click deliberately. The selected profile's four named
+  points must be visible; see the profile tables below.
 - Each dart tip to be labeled is visibly resolvable. The v0 tool labels at most three darts—the
   legal turn limit. Do not force a position for a robin hood, hidden tip, bounce-out, motion blur,
   severe glare, or ambiguous shaft intersection.
@@ -31,48 +40,54 @@ a mismatched name, or a screenshot derived from a sensitive room. The filename c
 pairing guard, **not** a cryptographic proof that two files belong together; the secure intake batch
 and human review remain authoritative.
 
-## 2. Why four specific anchors
+## 2. Use the fixed five-point profile
 
-The annotator clicks the center of these named double beds, in this order:
+Data Lab fixes the bootstrap profile to **Five-point development model labels** when building Darts
+180's first own-throw model. These are intentionally **not** double-bed centres. Tap the outer-double-rim
+junctions in exact order:
 
-| Step | Visible location  | Canonical point |
-| ---: | ----------------- | --------------- |
-|    1 | D20 at 12 o’clock | `(0, -166 mm)`  |
-|    2 | D6 at 3 o’clock   | `(166 mm, 0)`   |
-|    3 | D3 at 6 o’clock   | `(0, 166 mm)`   |
-|    4 | D11 at 9 o’clock  | `(-166 mm, 0)`  |
+| Model class | Visible location                |
+| ----------: | ------------------------------- |
+| CAL 1 / `1` | rim junction between D5 and D20 |
+| CAL 2 / `2` | rim junction between D17 and D3 |
+| CAL 3 / `3` | rim junction between D8 and D11 |
+| CAL 4 / `4` | rim junction between D13 and D6 |
 
-These are known physical points on a standard correctly oriented board. Four non-degenerate image ↔
-board correspondences solve an image-to-canonical-board homography. Clicking apparent ellipse
-extrema, an outer edge, a number wire, or a similarly colored but wrong bed changes the transform
-and can corrupt every label. If the board is rotated in the image, identify the _numbered bed_, not
-the screen cardinal direction.
+This profile matches the isolated development model convention: class `0` is the dart entry, and
+classes `1`–`4` are these four ordered landmarks. It is not interchangeable with general board
+geometry labels. The local compiler rejects a sidecar with a different profile for five-point training.
+
+Four non-degenerate image ↔ board correspondences solve an image-to-canonical-board homography.
+Clicking apparent ellipse extrema, an arbitrary outer edge, a number wire, or a similarly colored but
+wrong bed/junction changes the transform and can corrupt every label. If the board is rotated in the
+image, identify the _numbered location_, not the screen cardinal direction.
 
 The app rejects degenerate points but cannot measure human click error. Reposition anchors whenever
 the mapping or an expected result looks implausible.
 
-## 3. Local labeling sequence
+## 3. Guided labeling sequence
 
-1. In the web prototype select **Annotate**.
-2. Choose the exact local `.jpg` exported by Capture Lab, then its matching
-   `darts-180-<captureId>-manifest.json`. Neither file is transmitted.
-3. Confirm no mismatch alert appears. If one appears, stop and locate the correct pair.
-4. Click the four anchor locations in order. The app marks them 1–4 and changes to **Calibrated**
-   only when it can solve the mapping.
-5. Click each _visible dart entry point_ once. The app derives the canonical mm coordinate, scoring
-   zone, score, and nearest-wire margin with `@darts-180/rules`.
-6. Review each label. A small wire margin is an explicit warning to zoom/recheck and, for evaluation
-   data, obtain independent annotation. Remove a wrong/uncertain label rather than treating the
-   calculated zone as truth.
-7. Recheck privacy and resolvability for the exact image, then complete the per-export attestation.
-   Any anchor or dart edit resets it.
-8. Select **Export local label sidecar**. The sidecar remains a browser download and has not entered
-   training data.
+1. In the web prototype select **DATA LAB**, not **LIVE SCORING**.
+2. Read and accept the Data Lab entry agreement only if it is true, then take the exact board-focused
+   JPEG and complete its per-still safety/authority confirmation. The integrated flow keeps the matching manifest automatically.
+3. Select **Next · tap the board points**. Tap the four named outer-rim junctions in the displayed
+   order. The app marks them 1–4 and changes to **Board set** only when it can solve the mapping.
+4. For **Dart test**, tap each _visible physical dart entry point_ once. A **Blank board** record is
+   correct with no dart point. The app derives canonical mm coordinates, scoring zone, score, and
+   nearest-wire margin only as a check on the manual click.
+5. Review every label. A small wire margin is a warning to recheck and, for evaluation data, obtain
+   independent annotation. Remove a wrong/uncertain point or discard the photo rather than treating
+   a calculated zone as truth.
+6. Complete the per-label review statement and select **Complete review · Auto-save**. That final
+   acknowledgement automatically saves the matched JPEG, manifest, and annotation sidecar to the
+   private development collection. Keep the tab open until all three assets show saved; only a failed
+   asset exposes a retry. The private save remains `consented-development-unreviewed` pending data review.
 
 The output records original capture metadata, image dimensions/name, the image-to-board homography,
-anchor coordinates, clicked pixels, canonical entry points, deterministic zones, wire margins, and
-`manual-<captureId>-dart-N` tracking IDs. It uses
-`manual-four-double-bed-homography-v0` as an annotation-method provenance string.
+fixed anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire
+margins, and `manual-<captureId>-dart-N` tracking IDs. It records
+`deepdarts-four-cardinal-homography-v1` as annotation-method provenance. A blank-board sidecar has
+its four anchors and an empty `darts` list; a dart-test sidecar must have at least one clear tip.
 
 ## 4. Validate and hand off
 
@@ -81,17 +96,24 @@ Before any approved intake, run the dependency-light validator:
 ```bash
 cd ml
 PYTHONPATH=src python -m darts180_vision.data_contract \
-  /safe/local/path/darts-180-<captureId>-annotations.json
+  /protected/local/path/darts-180-<captureId>-annotations.json
 ```
 
 The validator checks the nested capture manifest and recomputes every dart zone from the exported
 canonical point. A green result confirms schema-like metadata and geometry coherence only; it does
 not verify the JPEG, calibration accuracy, consent, or whether a human clicked the true physical tip.
 
-Use the approved encrypted handoff gate in [Capture Lab](capture-lab.md#4-approved-handoff-gate).
-Keep the record in `unassigned` until data operations has screened privacy, provenance, duplicate
-sessions, and split leakage. For sacred evaluation records, obtain and preserve two independent
-annotations plus adjudication rationale.
+Use the approved encrypted handoff gate in
+[Data Lab](capture-lab.md#4-authorized-model-building-handoff).
+A completed private Blob save is controlled storage—not training admission. Keep the record in
+`unassigned` until data operations has screened privacy, provenance, duplicate sessions, and split
+leakage. For sacred evaluation records, obtain and preserve two independent annotations plus
+adjudication rationale.
+
+For the first self-capture development model, do not hand-copy YOLO labels. Keep reviewed five-point
+pairs together outside Git and use `darts180_vision.local_five_point_dataset` to check pairing, session
+splits, and duplicate bytes. The exact command is in
+[`19-build-the-first-camera-model.md`](../19-build-the-first-camera-model.md).
 
 ## 5. Limits and next engineering work
 

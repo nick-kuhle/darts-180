@@ -12,11 +12,15 @@ import {
 } from '@darts-180/rules';
 import { useMemo, useState } from 'react';
 
-import { AnnotationLab } from './components/AnnotationLab';
 import { VisionDiagnostics } from './components/VisionDiagnostics';
-import { LearnedCameraPlay } from './components/LearnedCameraPlay';
-import { CaptureLab } from './components/CaptureLab';
+import { CameraPlayRouter } from './components/CameraPlayRouter';
+import { DataLab } from './components/DataLab';
 import type { CameraTurnProposal } from './lib/cameraProposal';
+import {
+  downloadCorrectedDevelopmentEvidence,
+  type CorrectedDevelopmentEvidenceSample,
+  type LocalDevelopmentEvidence,
+} from './lib/developmentVision/localEvidence';
 import { Dartboard, type DartboardMarker } from './components/Dartboard';
 
 type GameMode = 'x01' | 'cricket';
@@ -29,6 +33,10 @@ interface DartDraft {
   confidence: number;
   wireMarginMm: number;
   requiresReview: boolean;
+  /** Development suggestions require an explicit human confirm/correction before visit confirmation. */
+  developmentSuggestion: boolean;
+  /** Opt-in local JPEG + detector record, held in memory until the tester exports it. */
+  developmentEvidence?: LocalDevelopmentEvidence;
   filled: boolean;
 }
 
@@ -61,8 +69,32 @@ function blankDrafts(): DartDraft[] {
     confidence: 0,
     wireMarginMm: 0,
     requiresReview: false,
+    developmentSuggestion: false,
     filled: false,
   }));
+}
+
+function reviewedDevelopmentEvidenceFromDrafts(
+  drafts: readonly DartDraft[],
+): CorrectedDevelopmentEvidenceSample[] {
+  return drafts.flatMap((draft) => {
+    if (
+      !draft.filled ||
+      draft.requiresReview ||
+      !draft.developmentSuggestion ||
+      draft.developmentEvidence === undefined
+    ) {
+      return [];
+    }
+    return [
+      {
+        slot: draft.slot,
+        finalZone: draft.zone,
+        reviewState: draft.source === 'corrected' ? 'corrected' : 'confirmed-as-predicted',
+        evidence: draft.developmentEvidence,
+      },
+    ];
+  });
 }
 
 function newX01Game(): X01State {
@@ -74,17 +106,20 @@ function newCricketGame(): CricketState {
 }
 
 export function App() {
-  const [workspace, setWorkspace] = useState<
-    'play' | 'camera' | 'camera-lab' | 'capture' | 'annotate'
-  >('camera');
+  const [workspace, setWorkspace] = useState<'play' | 'camera' | 'camera-lab' | 'capture'>(
+    'camera',
+  );
   const [mode, setMode] = useState<GameMode>('x01');
   const [x01, setX01] = useState<X01State>(newX01Game);
   const [cricket, setCricket] = useState<CricketState>(newCricketGame);
   const [drafts, setDrafts] = useState<DartDraft[]>(blankDrafts);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [developmentEvidenceArchive, setDevelopmentEvidenceArchive] = useState<
+    CorrectedDevelopmentEvidenceSample[]
+  >([]);
   const [notice, setNotice] = useState(
-    'Choose a DartCard, then tap the board. Camera Play uses a separate browser-local learned vision path when an approved model is installed.',
+    'Choose a DartCard, then tap the board. Live Scoring uses a separate browser-local learned vision path when an approved model is installed.',
   );
 
   const gameComplete = mode === 'x01' ? x01.winnerId !== undefined : cricket.winnerId !== undefined;
@@ -97,6 +132,17 @@ export function App() {
     if (remaining === undefined || remaining > 170) return undefined;
     return findCheckoutRoutes(remaining, { limit: 1 })[0]?.notation;
   }, [remaining]);
+  const currentDevelopmentEvidence = useMemo(
+    () => reviewedDevelopmentEvidenceFromDrafts(drafts),
+    [drafts],
+  );
+  const pendingDevelopmentReviewCount = drafts.filter(
+    (draft) => draft.filled && draft.developmentSuggestion && draft.requiresReview,
+  ).length;
+  const exportableDevelopmentEvidence = [
+    ...developmentEvidenceArchive,
+    ...currentDevelopmentEvidence,
+  ];
 
   const markers: DartboardMarker[] = drafts
     .filter((draft) => draft.filled)
@@ -158,6 +204,31 @@ export function App() {
     setNotice(`Dart ${slot + 1} cleared. Tap the board or choose a quick score to replace it.`);
   };
 
+  const confirmReviewDraft = (slot: number) => {
+    const draft = drafts[slot];
+    if (draft === undefined || !draft.filled || !draft.requiresReview) return;
+    setDrafts((current) =>
+      current.map((item, index) =>
+        index === slot
+          ? {
+              ...item,
+              requiresReview: false,
+            }
+          : item,
+      ),
+    );
+    setSelectedSlot(null);
+    setNotice(`Dart ${slot + 1} confirmed as ${formatZone(draft.zone)} by the player.`);
+  };
+
+  const exportDevelopmentEvidence = () => {
+    if (exportableDevelopmentEvidence.length === 0) return;
+    downloadCorrectedDevelopmentEvidence(exportableDevelopmentEvidence);
+    setNotice(
+      `${exportableDevelopmentEvidence.length} human-reviewed local development sample${exportableDevelopmentEvidence.length === 1 ? '' : 's'} downloaded. Nothing was uploaded.`,
+    );
+  };
+
   const addCameraProposal = (proposal: CameraTurnProposal): number | null => {
     if (gameComplete) {
       setNotice('This game is finished. Start a new game before recording another dart.');
@@ -180,6 +251,10 @@ export function App() {
               confidence: proposal.confidence,
               wireMarginMm: proposal.wireMarginMm,
               requiresReview: proposal.disposition === 'review',
+              developmentSuggestion: proposal.developmentSuggestion === true,
+              ...(proposal.developmentEvidence === undefined
+                ? {}
+                : { developmentEvidence: proposal.developmentEvidence }),
               filled: true,
             }
           : draft,
@@ -193,6 +268,12 @@ export function App() {
   };
 
   const confirmVisit = (): boolean => {
+    if (pendingDevelopmentReviewCount > 0) {
+      setNotice(
+        `${pendingDevelopmentReviewCount} development suggestion${pendingDevelopmentReviewCount === 1 ? '' : 's'} still needs a player confirm or correction before this visit can be recorded.`,
+      );
+      return false;
+    }
     const filled = drafts.filter((draft) => draft.filled);
     if (activePlayer === undefined || filled.length === 0 || gameComplete) {
       setNotice(
@@ -231,9 +312,16 @@ export function App() {
         ...current,
       ].slice(0, 8),
     );
+    if (currentDevelopmentEvidence.length > 0) {
+      setDevelopmentEvidenceArchive((current) => [...current, ...currentDevelopmentEvidence]);
+    }
     setDrafts(blankDrafts());
     setSelectedSlot(null);
-    setNotice(outcome);
+    setNotice(
+      currentDevelopmentEvidence.length > 0
+        ? `${outcome} ${currentDevelopmentEvidence.length} reviewed development sample${currentDevelopmentEvidence.length === 1 ? '' : 's'} is ready for local export.`
+        : outcome,
+    );
     return true;
   };
 
@@ -261,30 +349,25 @@ export function App() {
             <em>Keep the player in control.</em>
           </h1>
           <p className="lede">
-            A touch-first browser scorer: point a mounted phone, let the board find itself, then
-            review local camera suggestions only when a dart needs correction.
+            Two clear paths: <b>Live Scoring</b> is the eventual player experience; <b>Data Lab</b>
+            is the private, guided place to teach the first real camera model with your own board
+            photos.
           </p>
         </div>
         <div className="hero-side">
           <div className="hero-status" aria-label="Prototype status">
             <span className="status-dot" />
             <div>
-              <strong>LOCAL-FIRST DEMO</strong>
-              <small>Rules engine + review UX</small>
+              <strong>WEB-FIRST DEVELOPMENT</strong>
+              <small>Live scorer + guided data collection</small>
             </div>
           </div>
-          <div className="workspace-tabs" role="group" aria-label="Choose Darts 180 prototype">
+          <div className="workspace-tabs" role="group" aria-label="Choose a Darts 180 workspace">
             <button
               className={workspace === 'camera' ? 'active' : ''}
               onClick={() => setWorkspace('camera')}
             >
-              CAMERA PLAY
-            </button>
-            <button
-              className={workspace === 'play' ? 'active' : ''}
-              onClick={() => setWorkspace('play')}
-            >
-              PLAY DEMO
+              LIVE SCORING
             </button>
             <button
               className={workspace === 'capture' ? 'active' : ''}
@@ -293,10 +376,10 @@ export function App() {
               DATA LAB
             </button>
             <button
-              className={workspace === 'annotate' ? 'active' : ''}
-              onClick={() => setWorkspace('annotate')}
+              className={workspace === 'play' ? 'active' : ''}
+              onClick={() => setWorkspace('play')}
             >
-              ANNOTATE
+              SCORE REVIEW
             </button>
           </div>
         </div>
@@ -392,7 +475,8 @@ export function App() {
                   {drafts.map((draft, index) => {
                     const needsReview =
                       draft.requiresReview ||
-                      (draft.source === 'auto' &&
+                      (!draft.developmentSuggestion &&
+                        draft.source === 'auto' &&
                         (draft.confidence < 0.97 || draft.wireMarginMm < 1.5));
                     const label = !draft.filled
                       ? 'ADD DART'
@@ -400,9 +484,11 @@ export function App() {
                         ? 'CORRECTED'
                         : needsReview
                           ? 'CHECK'
-                          : draft.source === 'auto'
-                            ? 'LOCKED'
-                            : 'MANUAL';
+                          : draft.developmentSuggestion
+                            ? 'CONFIRMED'
+                            : draft.source === 'auto'
+                              ? 'LOCKED'
+                              : 'MANUAL';
                     return (
                       <article
                         className={`dart-card ${!draft.filled ? 'is-empty' : needsReview ? 'needs-review' : 'is-confirmed'} ${selectedSlot === index ? 'is-selected' : ''}`}
@@ -428,6 +514,15 @@ export function App() {
                             </i>
                           )}
                         </button>
+                        {draft.filled && needsReview && (
+                          <button
+                            className="confirm-dart"
+                            onClick={() => confirmReviewDraft(index)}
+                            aria-label={`Confirm dart ${draft.slot} as shown`}
+                          >
+                            CONFIRM AS SHOWN
+                          </button>
+                        )}
                         {draft.filled && (
                           <button
                             className="clear-dart"
@@ -448,13 +543,44 @@ export function App() {
                     <h3>Use the learned camera path.</h3>
                   </div>
                   <p>
-                    Camera proposals are generated only in Camera Play when a verified local model
+                    Camera proposals are generated only in Live Scoring when a verified local model
                     is installed. Manual board input remains available for correction and recovery.
                   </p>
                   <button className="button secondary" onClick={() => setWorkspace('camera')}>
-                    OPEN CAMERA PLAY
+                    OPEN LIVE SCORING
                   </button>
                 </div>
+
+                {(pendingDevelopmentReviewCount > 0 ||
+                  exportableDevelopmentEvidence.length > 0) && (
+                  <section className="development-evidence-review">
+                    <small>LOCAL DEVELOPMENT EVIDENCE</small>
+                    {pendingDevelopmentReviewCount > 0 ? (
+                      <p>
+                        Confirm as shown or correct {pendingDevelopmentReviewCount} development
+                        DartCard
+                        {pendingDevelopmentReviewCount === 1 ? '' : 's'} before it can become a
+                        training sample.
+                      </p>
+                    ) : (
+                      <p>
+                        {exportableDevelopmentEvidence.length} human-reviewed sample
+                        {exportableDevelopmentEvidence.length === 1 ? '' : 's'} is in page memory.
+                        Download JPEGs and a paired manifest manually; nothing uploads.
+                      </p>
+                    )}
+                    <button
+                      className="button secondary"
+                      onClick={exportDevelopmentEvidence}
+                      disabled={
+                        pendingDevelopmentReviewCount > 0 ||
+                        exportableDevelopmentEvidence.length === 0
+                      }
+                    >
+                      DOWNLOAD REVIEWED TEST SAMPLES
+                    </button>
+                  </section>
+                )}
 
                 <div className="notice" role="status">
                   <small>SESSION LOG</small>
@@ -522,7 +648,7 @@ export function App() {
           </section>
         </section>
       ) : workspace === 'camera' ? (
-        <LearnedCameraPlay
+        <CameraPlayRouter
           activePlayerName={activePlayer?.playerId ?? 'Player'}
           availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
           gameComplete={gameComplete}
@@ -536,23 +662,21 @@ export function App() {
         <>
           <div className="shell advanced-camera-return">
             <button className="text-button" onClick={() => setWorkspace('camera')}>
-              ← BACK TO CAMERA PLAY
+              ← BACK TO LIVE SCORING
             </button>
           </div>
           <VisionDiagnostics onReturnToCamera={() => setWorkspace('camera')} />
         </>
-      ) : workspace === 'capture' ? (
-        <CaptureLab />
       ) : (
-        <AnnotationLab />
+        <DataLab onExit={() => setWorkspace('camera')} />
       )}
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> Camera Play now has a browser-local learned-vision
-          runtime path with deterministic scoring and review gates. The checked-in release has no
-          trained, integrity-verified model artifact yet, so it deliberately records no live score;
-          ordinary score correction remains available for ambiguity and recovery.
+          <strong>Darts 180 prototype.</strong> Live Scoring keeps camera inference in the browser
+          and requires a real verified model before it can propose a score. Data Lab is a separate,
+          consent-gated workflow that automatically saves completed private blank-board and
+          dart-test examples needed to build that first model.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →

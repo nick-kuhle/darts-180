@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
   invertHomography,
   mapBoardPointToImage,
   mapImagePointToBoard,
@@ -9,6 +10,7 @@ import {
   type CanonicalPoint,
   type ImagePoint,
 } from '../src/lib/annotationGeometry.js';
+import { rotateSourceCanonicalPoint } from '../src/lib/developmentVision/engine.js';
 
 function mapBoardToImage(point: CanonicalPoint): ImagePoint {
   // A non-affine, known canonical-to-image transform used to produce test correspondences.
@@ -18,6 +20,26 @@ function mapBoardToImage(point: CanonicalPoint): ImagePoint {
     y: (0.12 * point.xMm + 2.0 * point.yMm + 360) / denominator,
   };
 }
+
+test('five-point annotation landmarks match the development engine source-frame adapter', () => {
+  const sourceAnchors: CanonicalPoint[] = [
+    { xMm: 0, yMm: -170 },
+    { xMm: 0, yMm: 170 },
+    { xMm: -170, yMm: 0 },
+    { xMm: 170, yMm: 0 },
+  ];
+  assert.deepEqual(
+    DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.map((anchor) => anchor.id),
+    ['cal1', 'cal2', 'cal3', 'cal4'],
+  );
+  for (const [index, sourceAnchor] of sourceAnchors.entries()) {
+    const expected = rotateSourceCanonicalPoint(sourceAnchor);
+    const actual = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS[index]?.canonical;
+    assert.ok(actual !== undefined);
+    assert.ok(Math.abs(actual.xMm - expected.xMm) < 0.001);
+    assert.ok(Math.abs(actual.yMm - expected.yMm) < 0.001);
+  }
+});
 
 test('solves four image-to-board correspondences and maps a held-out point', () => {
   const boardPoints: CanonicalPoint[] = [

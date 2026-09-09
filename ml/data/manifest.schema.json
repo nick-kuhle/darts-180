@@ -17,7 +17,12 @@
   ],
   "properties": {
     "captureId": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,128}$" },
+    "sessionId": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,128}$" },
     "consentVersion": { "type": "string", "minLength": 1 },
+    "consentAcceptedAt": { "type": "string", "format": "date-time" },
+    "admissionStatus": {
+      "enum": ["consented-development-unreviewed", "synthetic-not-real-world-evaluation"]
+    },
     "boardModel": { "type": "string", "minLength": 1 },
     "deviceModel": { "type": "string", "minLength": 1 },
     "captureMode": { "enum": ["still", "arrival-clip", "failure-clip", "synthetic"] },
@@ -31,5 +36,32 @@
     "createdAt": { "type": "string", "format": "date-time" },
     "labelsVersion": { "type": "string" },
     "split": { "enum": ["unassigned", "train", "validation", "eval"] }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "consentVersion": { "const": "DEVELOPMENT-DATA-LAB-CONSENT-V1" } },
+        "required": ["consentVersion"]
+      },
+      "then": {
+        "required": ["consentAcceptedAt", "admissionStatus"],
+        "properties": {
+          "admissionStatus": { "const": "consented-development-unreviewed" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "captureMode": { "const": "synthetic" } },
+        "required": ["captureMode"]
+      },
+      "then": {
+        "required": ["admissionStatus"],
+        "properties": {
+          "consentVersion": { "const": "SYNTHETIC-NO-USER-DATA" },
+          "admissionStatus": { "const": "synthetic-not-real-world-evaluation" }
+        }
+      }
+    }
+  ]
 }

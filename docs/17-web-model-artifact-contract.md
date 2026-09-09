@@ -14,7 +14,16 @@ decoder, and production-package verifier are respectively
 [`verify-model-artifact.ts`](../apps/web/scripts/verify-model-artifact.ts).
 
 The checked-in public manifest is intentionally an `unavailable` schema-v2 sentinel. It contains no runnable
-model, and its existence must never be described as camera scoring readiness.
+production-contract model, and its existence must never be described as production camera-scoring readiness.
+
+## Scope boundary: separate editable five-point development package
+
+This document remains binding for `darts180-board-tip-v1`; it is **not** relaxed or widened to accept
+raw DeepDarts-style YOLO detections. An isolated schema-v1 `darts180-deepdarts-yolo-dev-v1` package can
+be installed separately for engineering/tester use. It requires a real same-origin hashed ONNX artifact,
+immutable five-class roles, raw YOLO decoder, and deterministic four-anchor geometry, but no synthetic
+nine-landmark/quality output. Its only score disposition is editable `review`; it never reaches this
+contract's auto-record path. See [`18-development-five-point-scorer.md`](18-development-five-point-scorer.md).
 
 ## 1. Immutable package layout
 
@@ -90,7 +99,7 @@ provide separately consented and timed event evidence; they do not provide a boa
 
 ## 5. Schema-v2 calibration and decision policy
 
-`decisionPolicy` is a flat, model-release-owned object; it is never a hidden Camera Play UI threshold. The parser
+`decisionPolicy` is a flat, model-release-owned object; it is never a hidden Live Scoring UI threshold. The parser
 validates every finite range and requires `minReviewProbability ≤ minAutoScoreProbability`.
 
 | Policy fields                                                                                                                                     | Runtime use                                                                                                                                 |
@@ -113,12 +122,12 @@ and release review. They may not be tuned using a frozen holdout set after promo
 
 ## 6. Manifest stages and evidence
 
-| Stage         | Permitted behavior                                                                     |
-| ------------- | -------------------------------------------------------------------------------------- |
-| `unavailable` | No artifact path/hash. Camera preview may run, but inference and scoring cannot.       |
-| `development` | Runnable only for engineering. Every proposal is review-only.                          |
-| `evaluation`  | Runnable for governed field evaluation. Every proposal is review-only.                 |
-| `production`  | May set `autoRecordEnabled` only when all release evidence and parser invariants pass. |
+| Stage         | Permitted behavior                                                                                                                                                |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unavailable` | No artifact path/hash. Camera preview may run, but inference and scoring cannot.                                                                                  |
+| `development` | Schema-v2 ABI runnable only for engineering. Every proposal is review-only. The separate five-point package is also review-only but governed by its own document. |
+| `evaluation`  | Runnable for governed field evaluation. Every proposal is review-only.                                                                                            |
+| `production`  | May set `autoRecordEnabled` only when all release evidence and parser invariants pass.                                                                            |
 
 A runnable manifest requires a versioned artifact path/checksum, input/output contract, calibration, pose,
 quality policy, and provenance object. A production manifest also requires non-null:
@@ -147,7 +156,7 @@ Before adding a runnable artifact:
 - lock promotion thresholds from held-out data with confidence intervals, prioritizing unsafe auto-score rate over
   coverage.
 
-Normal Camera Play discards camera frames after local inference. Research-media upload, retention, deletion,
+Normal Live Scoring discards camera frames after local inference. Research-media upload, retention, deletion,
 access, and participant withdrawal require separately implemented consent and governance controls.
 
 The browser build must retain `connect-src 'self'`, `worker-src 'self' blob:`, and

@@ -183,5 +183,5 @@ fallback, session outcome, and app/device performance. Do not log raw score vide
 The native `apps/mobile` scaffold remains a focused end-to-end interaction demo: simulated camera
 candidates, editable DartCards, X01 scoring, camera permission/preview, and clear text saying that
 native frame scoring is not wired yet. The separate browser prototype now implements the automatic-board-find
-Camera Play field-test interaction, but it is still a testing tool—not a deceptive claim of model
+Live Scoring field-test interaction, but it is still a testing tool—not a deceptive claim of model
 accuracy.

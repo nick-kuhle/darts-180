@@ -1,11 +1,11 @@
-# Browser Camera Play — real-device field-test guide
+# Browser Live Scoring — real-device field-test guide
 
 **Status:** web-first learned-runtime test protocol; **not currently executable for scoring** because the
 checked-in model manifest is deliberately unavailable.
 **Date:** 2026-09-08 (America/Los_Angeles)
 **Audience:** internal testers after a reviewed model artifact is installed through the release gate.
 
-This replaces the former color/frame-difference Camera Play guide. The old workflow was a historical
+This replaces the former color/frame-difference camera guide. The old workflow was a historical
 heuristic baseline and failed a direct post-PR #11 dart-recognition retest; it is not an alternative test
 path. See [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md) for that record.
 
@@ -21,7 +21,7 @@ Do not begin a score-accuracy test until all of these are true:
 - the tester has consented to the specific data collection plan if any diagnostic data beyond local derived
   metrics will leave the device.
 
-The current unavailable manifest is a **passing safety result**: Camera Play may show a preview but must say
+The current unavailable manifest is a **passing safety result**: Live Scoring may show a preview but must say
 that no verified model package is installed and must not score a dart.
 
 ## Normal player flow after an approved model release
@@ -35,7 +35,7 @@ No manual board calibration is part of this flow.
 2. **Start Camera.** Open the direct HTTPS Darts 180 URL and tap **START CAMERA**. Allow camera permission.
    Camera pixels stay in browser-local volatile memory and are transferred only to the same-origin local
    Worker.
-3. **Wait for automatic pose.** Camera Play looks for semantic bull and named D20/D6/D3/D11 landmarks, derives
+3. **Wait for automatic pose.** Live Scoring looks for semantic bull and named D20/D6/D3/D11 landmarks, derives
    complete standard-board geometry and orientation, and shows a non-editable overlay. It may request a simple
    move, more light, focus, or less glare. It must never ask for guide handles, point clicks, a level-20-up
    assumption, or a manual calibration photograph.
@@ -49,7 +49,7 @@ No manual board calibration is part of this flow.
    overlapping, low-quality, occluded, unapproved, or otherwise ambiguous point is routed to **REVIEW** or
    **NO SCORE RECORDED**. Use the ordinary DartCard/manual board correction path. Do not invent a visible-tip
    click workflow in normal play.
-7. **Next visit.** Confirm the visit, remove darts, and let Camera Play recognize the cleared board before
+7. **Next visit.** Confirm the visit, remove darts, and let Live Scoring recognize the cleared board before
    arming the next visit. If the mount/scene moves materially, it re-reads the board geometry before accepting
    another score.
 
@@ -60,7 +60,7 @@ internally, but point type is not a setup question.
 
 The requirement is broad automatic adaptation across practical phone distance, angle, orientation, focus,
 brightness, white balance, glare, board condition, and lighting—not a promise that a single camera can see
-through physics. Camera Play should adapt crop/resolution/timing and give one simple instruction only when
+through physics. Live Scoring should adapt crop/resolution/timing and give one simple instruction only when
 necessary. It must decline automatic scoring when:
 
 - the full board or number ring is materially out of frame;

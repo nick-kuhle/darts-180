@@ -1,7 +1,7 @@
 /**
  * Browser camera permissions behave differently in a sandboxed preview, an iframe, a WebView, and
- * a top-level HTTPS page. Keep this diagnostic separate from scoring so both Camera Play and
- * Capture Lab give an actionable explanation instead of a generic NotAllowedError.
+ * a top-level HTTPS page. Keep this diagnostic separate from scoring so both Live Scoring and
+ * Data Lab give an actionable explanation instead of a generic NotAllowedError.
  */
 export interface CameraAccessEnvironment {
   isBrowser: boolean;

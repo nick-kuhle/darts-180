@@ -73,7 +73,9 @@ def detect_board_circle(image_bgr: np.ndarray) -> BoardCircle | None:
     candidates: list[BoardCircle] = []
     for center_x, center_y, radius in circles[0]:
         center = np.array([center_x, center_y])
-        centrality = max(0.0, 1.0 - float(np.linalg.norm(center - image_center)) / (shortest_side * 0.6))
+        centrality = max(
+            0.0, 1.0 - float(np.linalg.norm(center - image_center)) / (shortest_side * 0.6)
+        )
         scale = min(1.0, float(radius) / (shortest_side * 0.35))
         edge_support = _edge_support(gray, float(center_x), float(center_y), float(radius))
         confidence = 0.35 * centrality + 0.25 * scale + 0.40 * edge_support
@@ -122,7 +124,7 @@ def assess_quality(
 
     height, width = image_bgr.shape[:2]
     gray = _to_gray(image_bgr)
-    diameter = int(round(circle.radius_px * 2))
+    diameter = round(circle.radius_px * 2)
     board_coverage = min(1.0, diameter / min(height, width))
     sharpness_raw = float(cv2.Laplacian(gray, cv2.CV_64F).var())
     # This is a monotonic display normalization—not a device-independent physical metric.
@@ -161,7 +163,9 @@ def assess_quality(
     )
 
 
-def draw_debug(image_bgr: np.ndarray, circle: BoardCircle | None, quality: PoseQuality) -> np.ndarray:
+def draw_debug(
+    image_bgr: np.ndarray, circle: BoardCircle | None, quality: PoseQuality
+) -> np.ndarray:
     """Return a copy with baseline diagnostics; do not use this output as a training label."""
     annotated = image_bgr.copy()
     if circle is not None:
@@ -217,7 +221,9 @@ def _cli() -> None:
     parser = argparse.ArgumentParser(description="Run Darts 180's inspectable board-pose baseline.")
     parser.add_argument("image", type=Path, help="Path to a board image (not uploaded anywhere).")
     parser.add_argument("--debug-output", type=Path, help="Optional annotated local image path.")
-    parser.add_argument("--off-axis-degrees", type=float, default=0.0, help="Optional known pose for quality test.")
+    parser.add_argument(
+        "--off-axis-degrees", type=float, default=0.0, help="Optional known pose for quality test."
+    )
     args = parser.parse_args()
 
     image = cv2.imread(str(args.image), cv2.IMREAD_COLOR)
@@ -225,7 +231,10 @@ def _cli() -> None:
         raise SystemExit(f"Could not read image: {args.image}")
     circle = detect_board_circle(image)
     quality = assess_quality(image, circle, off_axis_degrees=args.off_axis_degrees)
-    payload: dict[str, Any] = {"circle": asdict(circle) if circle else None, "quality": asdict(quality)}
+    payload: dict[str, Any] = {
+        "circle": asdict(circle) if circle else None,
+        "quality": asdict(quality),
+    }
     print(json.dumps(payload, indent=2))
     if args.debug_output is not None:
         args.debug_output.parent.mkdir(parents=True, exist_ok=True)

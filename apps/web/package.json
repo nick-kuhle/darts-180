@@ -15,6 +15,7 @@
     "@darts-180/contracts": "file:../../packages/contracts",
     "@darts-180/rules": "file:../../packages/rules",
     "@darts-180/vision-session": "file:../../packages/vision-session",
+    "@vercel/blob": "^2.8.0",
     "onnxruntime-web": "^1.29.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
