@@ -9,12 +9,12 @@
 import {
   DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
   DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
-} from '../lib/captureConsent';
+} from '../lib/captureConsent.js';
 import {
   MAX_CAPTURE_IMAGE_BYTES,
   MAX_CAPTURE_JSON_BYTES,
   type CaptureVaultAssetKind,
-} from '../lib/captureVault';
+} from '../lib/captureVault.js';
 
 /** New records use a separate immutable prefix from the earlier owner-only collector. */
 export const CAPTURE_BLOB_PREFIX = 'darts180/capture-lab/v2';

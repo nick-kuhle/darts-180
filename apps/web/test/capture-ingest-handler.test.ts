@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import captureIngestFunction, {
@@ -60,6 +61,17 @@ function privateHeaders(kind: 'image' | 'manifest' | 'annotations', contentType:
 function request(method: string, headers: Record<string, string> = {}, body?: BodyInit): Request {
   return new Request(`${SAME_ORIGIN}/api/capture-ingest`, { method, headers, body });
 }
+
+test('Vercel Node runtime imports retain explicit JavaScript extensions after TypeScript transpilation', async () => {
+  const [handlerSource, policySource] = await Promise.all([
+    readFile(new URL('../api/capture-ingest.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/server/captureIngestPolicy.ts', import.meta.url), 'utf8'),
+  ]);
+  assert.match(handlerSource, /from '..\/src\/server\/captureIngestPolicy\.js';/);
+  assert.match(handlerSource, /from '..\/src\/lib\/captureVault\.js';/);
+  assert.match(policySource, /from '..\/lib\/captureConsent\.js';/);
+  assert.match(policySource, /from '..\/lib\/captureVault\.js';/);
+});
 
 test('default API export uses Vercel’s Web Fetch Function contract and reports unconfigured storage without a crash', async () => {
   assert.equal(typeof captureIngestFunction.fetch, 'function');

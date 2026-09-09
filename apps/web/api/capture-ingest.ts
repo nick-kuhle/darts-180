@@ -8,8 +8,8 @@ import {
   isCaptureVaultAssetKind,
   resolveCaptureIngestAccessMode,
   validateCaptureIngestAsset,
-} from '../src/server/captureIngestPolicy';
-import { MAX_CAPTURE_IMAGE_BYTES, MAX_CAPTURE_JSON_BYTES } from '../src/lib/captureVault';
+} from '../src/server/captureIngestPolicy.js';
+import { MAX_CAPTURE_IMAGE_BYTES, MAX_CAPTURE_JSON_BYTES } from '../src/lib/captureVault.js';
 
 interface PrivateBlobWriteOptions {
   access: 'private';
