@@ -5,7 +5,11 @@ from pathlib import Path
 
 import cv2
 
-from darts180_vision.data_contract import validate_capture_manifest, validate_capture_sidecar, validate_dart_label
+from darts180_vision.data_contract import (
+    validate_capture_manifest,
+    validate_capture_sidecar,
+    validate_dart_label,
+)
 from darts180_vision.synthetic import generate_synthetic_dataset
 
 
@@ -42,7 +46,9 @@ class DataContractTests(unittest.TestCase):
             "containsFaces": True,
             "createdAt": "now",
         }
-        self.assertTrue(any(issue.path == "containsFaces" for issue in validate_capture_manifest(manifest)))
+        self.assertTrue(
+            any(issue.path == "containsFaces" for issue in validate_capture_manifest(manifest))
+        )
 
     def test_rejects_dart_label_that_disagrees_with_canonical_geometry(self) -> None:
         label = {

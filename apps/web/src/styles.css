@@ -504,6 +504,25 @@ h3 {
   font-style: normal;
 }
 
+.confirm-dart {
+  width: calc(100% - 30px);
+  min-height: 29px;
+  margin: -4px 15px 12px;
+  color: #3b2506;
+  border: 1px solid #f0ba53;
+  border-radius: 7px;
+  background: #f5c26a;
+  font-size: 0.55rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.confirm-dart:hover {
+  color: #1f1506;
+  background: #ffe0a0;
+}
+
 .clear-dart {
   position: absolute;
   top: 50%;
@@ -557,6 +576,36 @@ h3 {
   color: #082016;
   border-color: #86dcb7;
   background: #86dcb7;
+}
+
+.development-evidence-review {
+  display: grid;
+  gap: 7px;
+  margin: 16px 0;
+  padding: 13px;
+  border: 1px solid #86692e;
+  border-radius: 12px;
+  background: #241f13;
+}
+
+.development-evidence-review small {
+  color: #f4c86f;
+  font-size: 0.57rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.development-evidence-review p {
+  margin: 0;
+  color: #d7caa7;
+  font-size: 0.69rem;
+  line-height: 1.44;
+}
+
+.development-evidence-review .button {
+  min-height: 39px;
+  margin: 1px 0 0;
+  font-size: 0.6rem;
 }
 
 .notice {
@@ -2969,6 +3018,82 @@ h3 {
   margin-bottom: 54px;
 }
 
+/* A conspicuous boundary for the isolated five-point development scorer. */
+.development-score-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin: -8px 0 17px;
+  padding: 12px 14px;
+  color: #ffe3a8;
+  border: 1px solid #9a6c2a;
+  border-radius: 12px;
+  background: linear-gradient(100deg, rgba(89, 57, 13, 0.82), rgba(44, 33, 12, 0.88));
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.development-score-banner strong {
+  color: #ffd179;
+  font-size: 0.59rem;
+  font-weight: 950;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+}
+
+.development-camera-play .camera-play-privacy-card {
+  border-color: #806432;
+  background: #211c11;
+}
+
+.development-camera-play .camera-play-privacy-card span {
+  color: #f5c26a;
+}
+
+.development-model-state {
+  background: #17251c;
+}
+
+.development-evidence-toggle {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 11px 12px;
+  color: #c9d8d0;
+  border: 1px solid #4e5139;
+  border-radius: 10px;
+  background: #1c2116;
+  cursor: pointer;
+}
+
+.development-evidence-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: #f5c26a;
+}
+
+.development-evidence-toggle span,
+.development-evidence-toggle strong,
+.development-evidence-toggle small {
+  display: block;
+}
+
+.development-evidence-toggle strong {
+  color: #f0e1b8;
+  font-size: 0.65rem;
+  letter-spacing: 0.035em;
+}
+
+.development-evidence-toggle small {
+  margin-top: 3px;
+  color: #adad92;
+  font-size: 0.6rem;
+  line-height: 1.38;
+}
+
 .learned-camera-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.36fr) minmax(310px, 0.64fr);
@@ -3324,6 +3449,11 @@ h3 {
 }
 
 @media (max-width: 600px) {
+  .development-score-banner {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
   .learned-camera-grid {
     border-radius: 16px;
   }

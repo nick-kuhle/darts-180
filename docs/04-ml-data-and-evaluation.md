@@ -30,13 +30,18 @@ but it never replaces Darts 180's consented field data or sacred evaluation set.
 version, licence, derivative transformations, file hashes, class map, attribution, raw-data storage
 location, and split lineage before training. Keep raw external media and weights out of Git.
 
-The currently reviewed external lead is **DeepDarts YOLOv8 v2**. It is conditionally admitted only
-for research intake: its official source dataset metadata identifies CC BY 4.0, while its Roboflow
-export preserves only five numeric labels and uses 640×640 stretch/augmentation. One reviewed image/label
-pair confirms the roles of one dart point and four calibration anchors, but not export-wide lineage or
-performance. The candidate has no approved browser artifact and does not satisfy the current nine-landmark
-contract. See the [dated candidate review](research/2026-09-deepdarts-yolov8-candidate.md) and run the
-local aggregate-only audit before any experiment.
+The currently reviewed external lead is **DeepDarts YOLOv8 v2**. Official source metadata identifies
+CC BY 4.0; the candidate export preserves only five numeric labels and uses 640×640 stretch/augmentation.
+One reviewed image/label pair confirms the roles of one dart point and four calibration anchors, but not
+export-wide lineage or performance. It still does **not** satisfy the current nine-landmark production
+contract and cannot be treated as a production model.
+
+The product may now use a lawfully acquired, audit-clean local version of that candidate for the isolated
+five-point **development** scorer: real detector output may create only editable review cards, with no
+automatic recording or production deployment claim. This is not a permission to use hosted Roboflow
+inference, credentials, unreviewed weights, or to import the candidate through the schema-v2 production
+manifest. See the [dated candidate review](research/2026-09-deepdarts-yolov8-candidate.md), the local
+aggregate audit, and [`18-development-five-point-scorer.md`](18-development-five-point-scorer.md).
 
 ## 3. Capture matrix
 
@@ -73,10 +78,14 @@ accuracy for the matrix slices.
 
 Raw board captures should be collected in a controlled workstream, not committed to Git. The
 static web Capture Lab can create a local JPEG + starter manifest without uploading it; its paired
-Annotation Lab creates a local four-anchor sidecar for clearly visible static tips. The Python
-`data_contract.py` validator and synthetic generator exercise the same metadata/geometry path. See
-`ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md), and the
-[local annotation runbook](runbooks/local-annotation.md).
+Annotation Lab creates a local four-anchor sidecar for clearly visible static tips. In the separate
+five-point development Camera Play path, a tester may opt in to hold a bounded local JPEG plus actual
+detector record in page memory, then explicitly download it only after confirming/correcting the
+DartCard. That export is a convenient intake bundle—not automatically consented, independently labeled,
+or ready to train. The Python `data_contract.py` validator and synthetic generator exercise the same
+metadata/geometry path. See `ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md),
+the [local annotation runbook](runbooks/local-annotation.md), and the
+[development scorer contract](18-development-five-point-scorer.md).
 
 ## 5. Label contract
 
@@ -156,6 +165,16 @@ on a mixed set cannot mask a poor result for a supported device or angle band.
 
 ## 9. Active-learning flywheel
 
+The development scorer creates a useful **local collection loop** before any governed upload loop:
+
+1. A tester opts in to retain a local JPEG/detector record for a detected dart; default is no retained media.
+2. The tester explicitly confirms the suggestion or corrects the DartCard, then downloads the paired local
+   JPEG + JSON bundle. The app does not upload, persist, or silently reuse this media.
+3. A data operator obtains/records consent, removes faces/background identifiers, validates geometry and
+   metadata, and independently reviews a sample before admitting it to a controlled dataset.
+
+Only after that intake boundary does the governed active-learning program begin:
+
 1. On-device model predicts candidates and quality; player confirms/corrects.
 2. The app asks separately whether the de-identified board crop/short failure clip may improve the
    model. Default is no.
@@ -178,7 +197,8 @@ Every candidate model must register:
 - dataset manifest/version and split hash;
 - training config, seed, hardware/runtime;
 - exact ONNX Runtime Web artifact checksum plus future Core ML/TFLite export targets;
-- schema-v2 manifest/attestation hashes and an exact policy-binding record;
+- the applicable versioned manifest hash: schema-v2 manifest/attestation/policy binding for production,
+  or the separately reviewed schema-v1 five-point development manifest for editable experiments;
 - full metrics + stratified reports + confidence calibration;
 - evaluation approval, security/privacy review, rollout cohort, rollback owner.
 

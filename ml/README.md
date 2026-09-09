@@ -1,8 +1,8 @@
 # Darts 180 ML workspace
 
 This directory is for **training, evaluation, model conversion, and reproducible experiment
-metadata**. It is not deployed to the phone. The mobile runtime contract is in
-`native/vision-core/` and `apps/mobile/src/vision/`.
+metadata**. It is not deployed to the phone. The browser is the first runtime target; native
+contracts remain in `native/vision-core/` and `apps/mobile/src/vision/` for later reuse.
 
 ## Bootstrap
 
@@ -94,6 +94,31 @@ This is a research intake tool, not an approval gate. Read
 [`docs/research/2026-09-deepdarts-yolov8-candidate.md`](../docs/research/2026-09-deepdarts-yolov8-candidate.md)
 before using the candidate. Do not add the ZIP, raw images, labels, weights, an API token, or the
 report's local paths to Git.
+
+## Editable five-point development training/export
+
+Once a **lawfully acquired local** DeepDarts-style export and a **local** YOLOv8-compatible base
+checkpoint are available, `darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX
+baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
+issues, or no dart-plus-four-anchor frame. It does not download data/weights, call Roboflow or another
+hosted inference service, copy output into `apps/web/public`, deploy, or make a production claim.
+
+```bash
+PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
+  /secure/path/to/extracted-deepdarts-export \
+  --base-model /secure/path/to/yolov8n.pt \
+  --output-directory /secure/path/to/darts180-five-point-run \
+  --model-version deepdarts-local-dev-YYYY-MM-DD \
+  --training-data-id deepdarts-local-audit-YYYY-MM-DD \
+  --license-review-id deepdarts-ccby-review-YYYY-MM-DD \
+  --hash-images
+```
+
+The output contains an ONNX file, its SHA-256, a raw-five-class **development-only** manifest, dataset
+audit, and summary. Review and browser-test those output files before intentionally installing them as the
+optional Camera Play development package. The resulting app path emits editable review cards only. Read
+[`docs/18-development-five-point-scorer.md`](../docs/18-development-five-point-scorer.md) for the exact
+browser contract and local correction-evidence workflow.
 
 ## Data boundaries
 

@@ -1,9 +1,4 @@
-import type {
-  DartZone,
-  ModelQualityObservation,
-  ScoringProposal,
-  VisionModelArtifactManifest,
-} from '@darts-180/contracts';
+import type { DartZone } from '@darts-180/contracts';
 import { BOARD_RADII_MM, formatZone } from '@darts-180/rules';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -11,31 +6,52 @@ import { mapBoardPointToImage, type Homography } from '../lib/annotationGeometry
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 import type { CameraTurnProposal } from '../lib/cameraProposal';
 import {
+  DeepDartsDevelopmentEngine,
+  type DevelopmentVisionFrame,
+} from '../lib/developmentVision/engine';
+import { captureLocalDevelopmentEvidence } from '../lib/developmentVision/localEvidence';
+import type {
+  DeepDartsDevelopmentModelManifest,
+  DevelopmentScoreSuggestion,
+} from '../lib/developmentVision/types';
+import {
+  DevelopmentWebInferenceClient,
+  getDevelopmentBrowserVisionSupport,
+} from '../lib/developmentVision/webInferenceClient';
+import {
   captureLumaCue,
   captureModelFrame,
   capturePostImpactFrames,
   waitForCameraArmHandoff,
 } from '../lib/learnedVision/cameraCapture';
 import { CaptureEventGate } from '../lib/learnedVision/eventGate';
-import {
-  LearnedVisionEngine,
-  type LearnedVisionFrame,
-} from '../lib/learnedVision/learnedVisionEngine';
-import {
-  isRunnableModelManifest,
-  loadModelManifest,
-  UNAVAILABLE_MODEL_MANIFEST,
-} from '../lib/learnedVision/modelManifest';
-import { modelQualityBlockers } from '../lib/learnedVision/qualityPolicy';
-import {
-  getBrowserVisionSupport,
-  WebInferenceClient,
-} from '../lib/learnedVision/webInferenceClient';
 
-type LearnedCameraPhase =
+export interface DevelopmentCameraPlayDraft {
+  slot: 1 | 2 | 3;
+  zone: DartZone;
+  source: 'auto' | 'manual' | 'corrected';
+  confidence: number;
+  wireMarginMm: number;
+  requiresReview?: boolean;
+  developmentSuggestion?: boolean;
+  filled: boolean;
+}
+
+export interface DeepDartsDevelopmentCameraPlayProps {
+  activePlayerName: string;
+  availableSlots: number;
+  gameComplete: boolean;
+  turnDarts: readonly DevelopmentCameraPlayDraft[];
+  model: DeepDartsDevelopmentModelManifest;
+  onAddProposal: (proposal: CameraTurnProposal) => number | null;
+  onConfirmVisit: () => boolean;
+  onOpenReview: () => void;
+  onOpenAdvanced: () => void;
+}
+
+type DevelopmentCameraPhase =
   | 'idle'
   | 'starting-camera'
-  | 'model-unavailable'
   | 'loading-model'
   | 'finding-board'
   | 'ready-to-play'
@@ -46,95 +62,54 @@ type LearnedCameraPhase =
   | 'camera-disturbed'
   | 'error';
 
-export interface LearnedCameraPlayDraft {
-  slot: 1 | 2 | 3;
-  zone: DartZone;
-  source: 'auto' | 'manual' | 'corrected';
-  confidence: number;
-  wireMarginMm: number;
-  requiresReview?: boolean;
-  filled: boolean;
-}
-
-export interface LearnedCameraPlayProps {
-  activePlayerName: string;
-  availableSlots: number;
-  gameComplete: boolean;
-  turnDarts: readonly LearnedCameraPlayDraft[];
-  onAddProposal: (proposal: CameraTurnProposal) => number | null;
-  onConfirmVisit: () => boolean;
-  onOpenReview: () => void;
-  onOpenAdvanced: () => void;
-}
-
 const PREVIEW_EDGE = 1280;
 const BOARD_REFRESH_MS = 1_100;
 const WATCH_SENTINEL_MS = 900;
 const LUMA_SAMPLE_MS = 90;
 
 /**
- * The normal Camera Play path. It never asks a player to fit guides, click a board point, capture
- * an empty reference, or upload an image: a verified model provides semantic board landmarks and
- * dart-tip observations, while the Worker owns image preprocessing and ONNX execution.
+ * An intentionally isolated development camera path for the real five-class DeepDarts-style
+ * detector. It uses no manual calibration, no server inference, and no image upload. In contrast
+ * to the production ABI, every deterministic result is an editable review proposal.
  */
-export function LearnedCameraPlay({
+export function DeepDartsDevelopmentCameraPlay({
   activePlayerName,
   availableSlots,
   gameComplete,
   turnDarts,
+  model,
   onAddProposal,
   onConfirmVisit,
   onOpenReview,
   onOpenAdvanced,
-}: LearnedCameraPlayProps) {
+}: DeepDartsDevelopmentCameraPlayProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const lumaCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const clientRef = useRef<WebInferenceClient | null>(null);
-  const engineRef = useRef<LearnedVisionEngine | null>(null);
+  const clientRef = useRef<DevelopmentWebInferenceClient | null>(null);
+  const engineRef = useRef<DeepDartsDevelopmentEngine | null>(null);
   const eventGateRef = useRef(new CaptureEventGate());
   const animationFrameRef = useRef<number | null>(null);
   const runGenerationRef = useRef(0);
   const inferenceInFlightRef = useRef(false);
   const runtimeFailedRef = useRef(false);
   const lastSentinelAtRef = useRef(0);
-  const latestFrameRef = useRef<LearnedVisionFrame | null>(null);
+  const latestFrameRef = useRef<DevelopmentVisionFrame | null>(null);
 
-  const [phase, setPhase] = useState<LearnedCameraPhase>('idle');
+  const [phase, setPhase] = useState<DevelopmentCameraPhase>('idle');
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [model, setModel] = useState<VisionModelArtifactManifest>(UNAVAILABLE_MODEL_MANIFEST);
-  const [modelMessage, setModelMessage] = useState<string | null>('Checking local model package…');
-  const [manifestLoading, setManifestLoading] = useState(true);
   const [runtimeBackend, setRuntimeBackend] = useState<'webgpu' | 'wasm' | null>(null);
-  const [latestFrame, setLatestFrame] = useState<LearnedVisionFrame | null>(null);
+  const [latestFrame, setLatestFrame] = useState<DevelopmentVisionFrame | null>(null);
   const [status, setStatus] = useState(
-    'Start the rear camera. Darts 180 will find the full standard board automatically.',
+    'Start the rear camera. Darts 180 will detect the standard board automatically.',
   );
-  const [lastProposal, setLastProposal] = useState<ScoringProposal | null>(null);
+  const [lastSuggestion, setLastSuggestion] = useState<DevelopmentScoreSuggestion | null>(null);
+  const [collectLocalEvidence, setCollectLocalEvidence] = useState(false);
 
-  const runnableModel = isRunnableModelManifest(model);
-  const browserSupport = useMemo(() => getBrowserVisionSupport(), []);
-  const quality = latestFrame?.observation.quality ?? null;
+  const browserSupport = useMemo(() => getDevelopmentBrowserVisionSupport(), []);
   const poseReady = latestFrame?.pose !== null && latestFrame?.pose !== undefined;
-  const qualityReasons = useMemo(
-    () => (quality === null ? [] : modelQualityBlockers(model, quality)),
-    [model, quality],
-  );
-
-  useEffect(() => {
-    let current = true;
-    void loadModelManifest().then((loaded) => {
-      if (!current) return;
-      setModel(loaded.manifest);
-      setModelMessage(loaded.message);
-      setManifestLoading(false);
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   const stopCamera = useCallback(() => {
     runGenerationRef.current += 1;
@@ -144,8 +119,7 @@ export function LearnedCameraPlay({
       window.cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    const stream = streamRef.current;
-    if (stream !== null) stream.getTracks().forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current !== null) videoRef.current.srcObject = null;
     const client = clientRef.current;
@@ -156,7 +130,7 @@ export function LearnedCameraPlay({
     setCameraActive(false);
     setRuntimeBackend(null);
     setLatestFrame(null);
-    setLastProposal(null);
+    setLastSuggestion(null);
     setPhase('idle');
     setStatus('Camera stopped. No camera image was uploaded or retained.');
     if (client !== null) void client.dispose();
@@ -182,9 +156,12 @@ export function LearnedCameraPlay({
     context.save();
     context.scale(previewScale, previewScale);
     const frame = latestFrameRef.current;
-    if (frame?.pose !== null && frame?.pose !== undefined) {
-      drawGeometryOverlay(context, frame.pose.boardToImageHomography);
-      drawTrackedTips(context, frame);
+    if (frame !== null) {
+      drawDetectionMarkers(context, frame);
+      if (frame.pose !== null) {
+        drawGeometryOverlay(context, frame.pose.boardToImageHomography);
+        drawTrackedTips(context, frame);
+      }
     }
     context.restore();
     animationFrameRef.current = window.requestAnimationFrame(drawPreview);
@@ -196,7 +173,7 @@ export function LearnedCameraPlay({
   }, [drawPreview]);
 
   const runInference = useCallback(
-    async (generation: number): Promise<LearnedVisionFrame | null> => {
+    async (generation: number): Promise<DevelopmentVisionFrame | null> => {
       const video = videoRef.current;
       const client = clientRef.current;
       const engine = engineRef.current;
@@ -228,52 +205,36 @@ export function LearnedCameraPlay({
           runtimeFailedRef.current = true;
           setCameraError(safeVisionError(error));
           setPhase('error');
-          setStatus('Camera inference stopped safely. No score was recorded.');
+          setStatus('Experimental camera inference stopped. No score was recorded.');
         }
         return null;
       } finally {
-        // A stopped/restarted camera may already have a new inference in flight. An obsolete
-        // generation must not clear that new run's serialization guard.
         if (generation === runGenerationRef.current) inferenceInFlightRef.current = false;
       }
     },
     [model],
   );
 
-  const admitBoard = useCallback(
-    (frame: LearnedVisionFrame | null): boolean => {
-      if (runtimeFailedRef.current) return false;
-      if (frame === null || frame.pose === null) {
-        setPhase('finding-board');
-        setStatus('Looking for the full standard board and its orientation…');
-        return false;
-      }
-      const blockers = modelQualityBlockers(model, frame.observation.quality);
-      if (blockers.length > 0) {
-        setPhase('finding-board');
-        setStatus(blockers[0] ?? 'Looking for a camera view safe enough to score.');
-        return false;
-      }
-      setPhase('ready-to-play');
-      setStatus(
-        'Board geometry is ready. With the board clear, tap Arm Camera to start the visit.',
-      );
-      return true;
-    },
-    [model],
-  );
+  const admitBoard = useCallback((frame: DevelopmentVisionFrame | null): boolean => {
+    if (runtimeFailedRef.current) return false;
+    if (frame === null || frame.pose === null) {
+      setPhase('finding-board');
+      setStatus('Looking for four learned board anchors and their orientation…');
+      return false;
+    }
+    setPhase('ready-to-play');
+    setStatus('Board geometry is ready. With the board clear, tap Arm Camera to start the visit.');
+    return true;
+  }, []);
 
   const initializeCamera = useCallback(async () => {
-    if (manifestLoading) return;
     const preflight = getCameraAccessPreflightMessage();
     if (preflight !== null) {
       setCameraError(preflight);
       setPhase('error');
       return;
     }
-    // An unavailable manifest may still offer a privacy-safe camera preview. A runnable model,
-    // however, must fail closed when this browser cannot start its local inference boundary.
-    if (runnableModel && !browserSupport.supported) {
+    if (!browserSupport.supported) {
       setCameraError(browserSupport.reasons.join(' '));
       setPhase('error');
       return;
@@ -290,8 +251,6 @@ export function LearnedCameraPlay({
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
-          // 1080p is enough for a 1024px learned input while avoiding avoidable 4K bitmap transfer
-          // pressure on mid-range phones. Browsers may still choose a higher supported mode.
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
@@ -312,28 +271,19 @@ export function LearnedCameraPlay({
       setCameraActive(true);
       beginPreview();
 
-      if (!runnableModel) {
-        setPhase('model-unavailable');
-        setStatus(
-          modelMessage ??
-            'The verified local learned model package is not installed. The live preview cannot guess a dart score.',
-        );
-        return;
-      }
-
       setPhase('loading-model');
-      setStatus('Verifying the local model package and starting on-device inference…');
-      const client = new WebInferenceClient();
+      setStatus('Verifying the local experimental model and starting on-device inference…');
+      const client = new DevelopmentWebInferenceClient();
       clientRef.current = client;
       const loadedBackend = await client.initialize(model);
       if (generation !== runGenerationRef.current) {
         await client.dispose();
         return;
       }
-      engineRef.current = new LearnedVisionEngine();
+      engineRef.current = new DeepDartsDevelopmentEngine();
       setRuntimeBackend(loadedBackend);
       setPhase('finding-board');
-      setStatus('Looking for the full standard board and its orientation…');
+      setStatus('Looking for four learned board anchors and their orientation…');
       const frame = await runInference(generation);
       admitBoard(frame);
     } catch (error) {
@@ -358,46 +308,34 @@ export function LearnedCameraPlay({
       setPhase('error');
       setStatus(
         openedCamera
-          ? 'The learned runtime could not start safely. No score was recorded.'
+          ? 'The experimental learned runtime could not start. No score was recorded.'
           : 'The camera could not start. No camera image was uploaded or retained.',
       );
     }
-  }, [
-    admitBoard,
-    beginPreview,
-    browserSupport,
-    manifestLoading,
-    model,
-    modelMessage,
-    runInference,
-    runnableModel,
-  ]);
+  }, [admitBoard, beginPreview, browserSupport, model, runInference]);
 
   const armCamera = useCallback(async () => {
     if (phase !== 'ready-to-play' || inferenceInFlightRef.current) return;
     if (gameComplete || availableSlots <= 0) {
       setPhase('visit-complete');
       setStatus(
-        'This visit already has three darts. Review or confirm it before scanning another dart.',
+        'This visit already has three darts. Edit or confirm it before scanning another dart.',
       );
       return;
     }
     const generation = runGenerationRef.current;
     const engine = engineRef.current;
-    if (engine === null || !runnableModel) return;
+    if (engine === null) return;
     engine.resetVisit();
-    setLastProposal(null);
-    setStatus(
-      'Letting the rear camera settle, then checking that the board is clear automatically…',
-    );
+    setLastSuggestion(null);
+    setStatus('Checking automatically that the board is clear…');
     await waitForCameraArmHandoff();
     if (generation !== runGenerationRef.current) return;
     const frame = await runInference(generation);
-    if (generation !== runGenerationRef.current || frame === null) return;
-    if (!admitBoard(frame)) return;
-    if (frame.tracks.length > 0 || frame.blockedTipCount > 0) {
+    if (generation !== runGenerationRef.current || frame === null || !admitBoard(frame)) return;
+    if (frame.tracks.length > 0 || frame.blockedDartCount > 0) {
       setStatus(
-        'Darts are visible or too obscured to verify a clear board. Remove them, then Darts 180 will check automatically.',
+        'Darts are visible or a dart point cannot be mapped. Remove them, then Darts 180 will check again automatically.',
       );
       return;
     }
@@ -405,42 +343,41 @@ export function LearnedCameraPlay({
     lastSentinelAtRef.current = performance.now();
     setPhase('watching');
     setStatus(
-      'Camera armed. Throw normally; Darts 180 watches for a settled dart and checks the physical tip locally.',
+      'Camera armed. Throw normally; the detected score will open as an editable suggestion.',
     );
-  }, [admitBoard, availableSlots, gameComplete, phase, runInference, runnableModel]);
+  }, [admitBoard, availableSlots, gameComplete, phase, runInference]);
 
-  const handleProposal = useCallback(
-    (proposal: ScoringProposal): boolean => {
-      setLastProposal(proposal);
-      if (proposal.disposition === 'abstain') {
-        setStatus(proposal.reasons[0] ?? 'No score was recorded because the dart was ambiguous.');
-        return false;
-      }
-      const candidate = proposal.candidates[0];
-      if (candidate === undefined) {
-        setStatus('No score was recorded because no deterministic board zone was available.');
-        return false;
-      }
+  const handleSuggestion = useCallback(
+    (suggestion: DevelopmentScoreSuggestion): boolean => {
+      setLastSuggestion(suggestion);
+      const frame = latestFrameRef.current;
+      const video = videoRef.current;
+      const developmentEvidence =
+        collectLocalEvidence && frame !== null && video !== null
+          ? captureLocalDevelopmentEvidence(video, model, suggestion, frame)
+          : undefined;
       const slot = onAddProposal({
-        zone: candidate.zone,
-        confidence: proposal.confidence,
-        wireMarginMm: candidate.wireMarginMm,
+        zone: suggestion.zone,
+        confidence: suggestion.detectorConfidence,
+        wireMarginMm: suggestion.wireMarginMm,
         source: 'auto',
-        disposition: proposal.disposition,
+        disposition: 'review',
+        developmentSuggestion: true,
+        ...(developmentEvidence === null || developmentEvidence === undefined
+          ? {}
+          : { developmentEvidence }),
       });
       if (slot === null) {
         setPhase('visit-complete');
-        setStatus('The visit already has three darts. Review or confirm the existing DartCards.');
+        setStatus('The visit already has three darts. Edit or confirm the existing DartCards.');
         return false;
       }
       setStatus(
-        proposal.disposition === 'auto-score'
-          ? `Dart ${slot}: ${formatZone(candidate.zone)} proposed from the learned physical-tip estimate.`
-          : `Dart ${slot}: ${formatZone(candidate.zone)} needs review before the visit is confirmed.`,
+        `Dart ${slot}: ${formatZone(suggestion.zone)} is an editable development suggestion. Review it before confirming the visit.`,
       );
       return true;
     },
-    [onAddProposal],
+    [collectLocalEvidence, model, onAddProposal],
   );
 
   const analysePostImpact = useCallback(async () => {
@@ -452,9 +389,9 @@ export function LearnedCameraPlay({
       return;
     inferenceInFlightRef.current = true;
     setPhase('analysing-impact');
-    setStatus('Dart motion settled. Checking a short high-resolution local burst…');
+    setStatus('Dart motion settled. Checking a short local model burst…');
     try {
-      let proposal: ScoringProposal | null = null;
+      let suggestion: DevelopmentScoreSuggestion | null = null;
       for await (const captured of capturePostImpactFrames(video)) {
         const result = await client.infer(
           captured.bitmap,
@@ -466,55 +403,55 @@ export function LearnedCameraPlay({
         const frame = engine.process(result, model);
         latestFrameRef.current = frame;
         setLatestFrame(frame);
-        if (frame.proposal !== null) proposal = frame.proposal;
+        if (frame.suggestion !== null) suggestion = frame.suggestion;
       }
       if (generation !== runGenerationRef.current) return;
-      if (proposal !== null) handleProposal(proposal);
-      else
+      if (suggestion !== null) handleSuggestion(suggestion);
+      else {
         setStatus(
-          'No safe settled physical-tip score was available. If a dart is embedded, use Correct a Score before continuing.',
+          'No settled detected dart point was available. Use Correct a Score if a dart is embedded, then continue testing.',
         );
+      }
       if (availableSlots <= 1) setPhase('visit-complete');
       else setPhase('watching');
     } catch (error) {
       if (generation === runGenerationRef.current) {
         setCameraError(safeVisionError(error));
         setPhase('error');
-        setStatus('The post-impact inference burst failed safely. No score was recorded.');
+        setStatus('The local post-impact model burst failed. No score was recorded.');
       }
     } finally {
-      // Do not let a cancelled post-impact burst unlock a newer camera generation.
       if (generation === runGenerationRef.current) inferenceInFlightRef.current = false;
     }
-  }, [availableSlots, handleProposal, model]);
+  }, [availableSlots, handleSuggestion, model]);
 
   const runWatchSentinel = useCallback(async () => {
     const generation = runGenerationRef.current;
     const frame = await runInference(generation);
     if (generation !== runGenerationRef.current || frame === null) return;
-    if (frame.pose === null || modelQualityBlockers(model, frame.observation.quality).length > 0) {
+    if (frame.pose === null) {
       setPhase('finding-board');
       setStatus(
-        'Camera conditions changed. Re-reading the board automatically before another score.',
+        'Board anchors were lost. Re-reading the board automatically before another score.',
       );
       return;
     }
-    if (frame.proposal !== null) {
-      handleProposal(frame.proposal);
+    if (frame.suggestion !== null) {
+      handleSuggestion(frame.suggestion);
       if (availableSlots <= 1) setPhase('visit-complete');
     }
-  }, [availableSlots, handleProposal, model, runInference]);
+  }, [availableSlots, handleSuggestion, runInference]);
 
   useEffect(() => {
-    if (!cameraActive || !runnableModel || phase !== 'finding-board') return;
+    if (!cameraActive || phase !== 'finding-board') return;
     const interval = window.setInterval(() => {
       void runInference(runGenerationRef.current).then((frame) => admitBoard(frame));
     }, BOARD_REFRESH_MS);
     return () => window.clearInterval(interval);
-  }, [admitBoard, cameraActive, phase, runInference, runnableModel]);
+  }, [admitBoard, cameraActive, phase, runInference]);
 
   useEffect(() => {
-    if (!cameraActive || !runnableModel || phase !== 'watching') return;
+    if (!cameraActive || phase !== 'watching') return;
     const interval = window.setInterval(() => {
       const video = videoRef.current;
       const canvas = lumaCanvasRef.current;
@@ -525,7 +462,7 @@ export function LearnedCameraPlay({
       if (event === 'camera-disturbed') {
         setPhase('camera-disturbed');
         setStatus(
-          'The camera or scene moved too much. Re-reading board geometry automatically; no score was recorded.',
+          'The camera or scene moved. Re-reading board geometry automatically; no score was recorded.',
         );
         eventGateRef.current.reset();
         return;
@@ -541,43 +478,51 @@ export function LearnedCameraPlay({
       }
     }, LUMA_SAMPLE_MS);
     return () => window.clearInterval(interval);
-  }, [analysePostImpact, cameraActive, phase, runWatchSentinel, runnableModel]);
+  }, [analysePostImpact, cameraActive, phase, runWatchSentinel]);
 
   useEffect(() => {
-    if (!cameraActive || !runnableModel || phase !== 'camera-disturbed') return;
+    if (!cameraActive || phase !== 'camera-disturbed') return;
     const timer = window.setTimeout(() => {
       setPhase('finding-board');
-      setStatus('Looking for the full standard board again after camera movement…');
+      setStatus('Looking for the four learned board anchors again after camera movement…');
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [cameraActive, phase, runnableModel]);
+  }, [cameraActive, phase]);
 
   useEffect(() => {
     if (phase !== 'watching' || availableSlots > 0) return;
     setPhase('visit-complete');
     setStatus(
-      'All three DartCards are filled. Review or confirm the visit before scanning another dart.',
+      'All three DartCards are filled. Edit or confirm the visit before scanning another dart.',
     );
   }, [availableSlots, phase]);
 
   const confirmVisit = useCallback(() => {
+    if (
+      turnDarts.some((dart) => dart.filled && dart.developmentSuggestion && dart.requiresReview)
+    ) {
+      setStatus(
+        'Open Edit Scores to confirm as shown or correct every development DartCard first.',
+      );
+      onOpenReview();
+      return;
+    }
     if (!onConfirmVisit()) return;
-    const engine = engineRef.current;
-    engine?.resetVisit();
+    engineRef.current?.resetVisit();
     eventGateRef.current.reset();
-    setLastProposal(null);
+    setLastSuggestion(null);
     setPhase('awaiting-clear');
     setStatus(
       'Visit confirmed. Remove the darts; Darts 180 will recognize the clear board before the next visit.',
     );
-  }, [onConfirmVisit]);
+  }, [onConfirmVisit, onOpenReview, turnDarts]);
 
   useEffect(() => {
-    if (!cameraActive || !runnableModel || phase !== 'awaiting-clear') return;
+    if (!cameraActive || phase !== 'awaiting-clear') return;
     const interval = window.setInterval(() => {
       void runInference(runGenerationRef.current).then((frame) => {
         if (frame === null || frame.pose === null) return;
-        if (frame.tracks.length > 0 || frame.blockedTipCount > 0) return;
+        if (frame.tracks.length > 0 || frame.blockedDartCount > 0) return;
         engineRef.current?.resetVisit();
         eventGateRef.current.reset();
         setPhase('ready-to-play');
@@ -585,39 +530,47 @@ export function LearnedCameraPlay({
       });
     }, BOARD_REFRESH_MS);
     return () => window.clearInterval(interval);
-  }, [cameraActive, phase, runInference, runnableModel]);
+  }, [cameraActive, phase, runInference]);
 
-  const stageCaption = phaseCaption(phase, model, runtimeBackend);
+  const stageCaption = phaseCaption(phase, runtimeBackend);
   const primaryAction = !cameraActive ? 'START CAMERA' : 'STOP CAMERA';
-  const canArm = cameraActive && runnableModel && poseReady && qualityReasons.length === 0;
+  const canArm = cameraActive && poseReady;
 
   return (
-    <section className="shell learned-camera-play">
+    <section className="shell learned-camera-play development-camera-play">
       <div className="camera-play-intro">
         <div>
-          <p className="eyebrow">CAMERA PLAY · LEARNED VISION</p>
-          <h1>Point it. Let Darts 180 read the board.</h1>
+          <p className="eyebrow">CAMERA PLAY · EXPERIMENTAL LEARNED VISION</p>
+          <h1>Point it. Get an editable model suggestion.</h1>
           <p>
-            The normal path uses the mounted phone’s rear camera to find the complete standard
-            board, orientation, and a settled dart-tip entry point locally. There are no guide
-            handles, calibration taps, reference photos, or uploads.
+            This development path finds a standard board and dart-entry point from the mounted rear
+            camera. It needs no calibration taps, reference photos, uploads, or analysis button.
           </p>
         </div>
         <aside className="camera-play-privacy-card">
-          <span>ON-DEVICE BY DESIGN</span>
-          <strong>Camera pixels stay in this tab.</strong>
+          <span>LOCAL TESTING ONLY</span>
+          <strong>Every model score stays editable.</strong>
           <p>
-            A Worker verifies and runs the same-origin model locally. Camera images are not sent to
-            the Darts 180 API.
+            The five-class model runs in a Worker on this device. Camera images are not sent to the
+            Darts 180 API, and a result is never auto-recorded.
           </p>
         </aside>
       </div>
 
+      <div className="development-score-banner" role="note">
+        <strong>DEVELOPMENT MODE</strong>
+        <span>
+          A learned dart/board detection becomes a deterministic score suggestion. Check or edit
+          every DartCard before confirming the visit; corrections are the test evidence that
+          improves this model.
+        </span>
+      </div>
+
       <div className="learned-camera-grid">
-        <section className="learned-camera-stage" aria-label="Camera board detection">
+        <section className="learned-camera-stage" aria-label="Experimental camera board detection">
           <div className="camera-play-stage-head">
             <div>
-              <p className="eyebrow">REAR CAMERA · AUTOMATIC BOARD POSE</p>
+              <p className="eyebrow">REAR CAMERA · FOUR-ANCHOR BOARD POSE</p>
               <h2>{stageCaption}</h2>
             </div>
             <span className={`learned-status-pill phase-${phase}`}>{phaseLabel(phase)}</span>
@@ -628,23 +581,15 @@ export function LearnedCameraPlay({
             <canvas
               ref={previewCanvasRef}
               className="learned-camera-canvas"
-              aria-label="Live rear camera preview with automatic board geometry overlay"
+              aria-label="Live rear camera preview with learned development board geometry"
             />
             {!cameraActive && (
               <div className="camera-play-empty">
                 <span>◉</span>
                 <strong>REAR CAMERA READY</strong>
                 <p>
-                  Mount close to the board centreline where practical, keep the full number ring
+                  Mount close to the board centreline where practical and keep the full number ring
                   visible, then start.
-                </p>
-              </div>
-            )}
-            {cameraActive && phase === 'model-unavailable' && (
-              <div className="learned-camera-notice warning">
-                <strong>VERIFIED MODEL NOT INSTALLED</strong>
-                <p>
-                  {modelMessage ?? 'Camera preview is available, but no score will be guessed.'}
                 </p>
               </div>
             )}
@@ -654,7 +599,7 @@ export function LearnedCameraPlay({
                 <p>{cameraError}</p>
               </div>
             )}
-            {cameraActive && phase !== 'model-unavailable' && cameraError === null && (
+            {cameraActive && cameraError === null && (
               <div className="learned-camera-chip">{status}</div>
             )}
           </div>
@@ -667,11 +612,10 @@ export function LearnedCameraPlay({
                 if (cameraActive) stopCamera();
                 else void initializeCamera();
               }}
-              disabled={!cameraActive && manifestLoading}
             >
               {primaryAction}
             </button>
-            {cameraActive && runnableModel && phase === 'ready-to-play' && (
+            {cameraActive && phase === 'ready-to-play' && (
               <button
                 className="button secondary"
                 onClick={() => void armCamera()}
@@ -685,73 +629,69 @@ export function LearnedCameraPlay({
             </button>
           </div>
           <p className="learned-camera-footnote">
-            The small luma cue only associates broad timing. The Worker’s learned landmark and
-            dart-tip outputs—not frame subtraction—supply every scoring coordinate.
+            The small motion cue only decides when to inspect a frame. All board anchors and dart
+            points come from the local learned detector, then standard dart rules calculate the
+            suggestion.
           </p>
         </section>
 
         <aside className="learned-camera-panel">
           <div className="camera-play-turn-head">
             <div>
-              <p className="eyebrow">LIVE VISIT · {activePlayerName.toUpperCase()}</p>
-              <h2>Review stays available.</h2>
+              <p className="eyebrow">DEVELOPMENT VISIT · {activePlayerName.toUpperCase()}</p>
+              <h2>Edit every detected dart.</h2>
             </div>
             <button className="text-button" onClick={onOpenReview}>
               EDIT SCORES
             </button>
           </div>
 
-          <ModelState model={model} modelMessage={modelMessage} backend={runtimeBackend} />
-          <QualityState quality={quality} poseReady={poseReady} blockers={qualityReasons} />
+          <DevelopmentModelState model={model} backend={runtimeBackend} />
+          <label className="development-evidence-toggle">
+            <input
+              type="checkbox"
+              checked={collectLocalEvidence}
+              onChange={(event) => setCollectLocalEvidence(event.target.checked)}
+            />
+            <span>
+              <strong>Save local test evidence</strong>
+              <small>
+                Keep a JPEG and detector record in this page only; after you confirm or correct it,
+                export it manually from Score Review. Nothing uploads automatically.
+              </small>
+            </span>
+          </label>
+          <DevelopmentBoardState frame={latestFrame} />
 
           <div className="learned-dart-cards">
-            {turnDarts.map((dart) => {
-              // The proposal's reviewed manifest policy determines review status. Do not add a
-              // second UI-only confidence or wire threshold that could drift from the artifact.
-              const needsReview = dart.requiresReview === true;
-              return (
-                <article
-                  key={dart.slot}
-                  className={`learned-dart-card ${dart.filled ? '' : 'is-empty'} ${needsReview ? 'needs-review' : ''}`}
-                >
-                  <span>DART {dart.slot}</span>
-                  <strong>{dart.filled ? formatZone(dart.zone) : '—'}</strong>
-                  <b>
-                    {!dart.filled
-                      ? 'WAITING'
-                      : needsReview
-                        ? 'REVIEW'
-                        : dart.source === 'auto'
-                          ? 'PROPOSED'
-                          : 'CONFIRMED'}
-                  </b>
-                  {dart.filled && dart.source === 'auto' && (
-                    <small>
-                      {Math.round(dart.confidence * 100)}% · {dart.wireMarginMm.toFixed(1)} mm wire
-                      margin
-                    </small>
-                  )}
-                </article>
-              );
-            })}
+            {turnDarts.map((dart) => (
+              <article
+                key={dart.slot}
+                className={`learned-dart-card ${dart.filled ? '' : 'is-empty'} ${dart.requiresReview === true ? 'needs-review' : ''}`}
+              >
+                <span>DART {dart.slot}</span>
+                <strong>{dart.filled ? formatZone(dart.zone) : '—'}</strong>
+                <b>
+                  {!dart.filled ? 'WAITING' : dart.requiresReview === true ? 'EDIT' : 'CONFIRMED'}
+                </b>
+                {dart.filled && dart.source === 'auto' && (
+                  <small>
+                    {Math.round(dart.confidence * 100)}% detector evidence ·{' '}
+                    {dart.wireMarginMm.toFixed(1)} mm wire margin
+                  </small>
+                )}
+              </article>
+            ))}
           </div>
 
           <div className="learned-proposal-summary" aria-live="polite">
-            <small>LAST LOCAL DECISION</small>
-            {lastProposal === null ? (
-              <p>No dart-tip decision yet.</p>
+            <small>LAST LOCAL DEVELOPMENT SUGGESTION</small>
+            {lastSuggestion === null ? (
+              <p>No settled detected dart point yet.</p>
             ) : (
               <>
-                <strong>
-                  {lastProposal.disposition === 'abstain'
-                    ? 'NO SCORE RECORDED'
-                    : lastProposal.disposition === 'review'
-                      ? 'REVIEW REQUESTED'
-                      : 'PROPOSAL READY'}
-                </strong>
-                <p>
-                  {lastProposal.reasons[0] ?? 'Deterministic board geometry supplied the score.'}
-                </p>
+                <strong>{formatZone(lastSuggestion.zone)} · EDITABLE</strong>
+                <p>{lastSuggestion.reasons[0]}</p>
               </>
             )}
           </div>
@@ -774,91 +714,65 @@ export function LearnedCameraPlay({
   );
 }
 
-function ModelState({
+function DevelopmentModelState({
   model,
-  modelMessage,
   backend,
 }: {
-  model: VisionModelArtifactManifest;
-  modelMessage: string | null;
+  model: DeepDartsDevelopmentModelManifest;
   backend: 'webgpu' | 'wasm' | null;
 }) {
-  const runnable = isRunnableModelManifest(model);
   return (
-    <section className={`learned-model-state ${runnable ? 'is-runnable' : 'is-unavailable'}`}>
-      <small>LOCAL MODEL PACKAGE</small>
-      <strong>{runnable ? model.modelVersion : 'UNAVAILABLE'}</strong>
+    <section className="learned-model-state is-runnable development-model-state">
+      <small>LOCAL DEVELOPMENT MODEL</small>
+      <strong>{model.modelVersion}</strong>
       <span>
-        {runnable
-          ? `${model.releaseStage.toUpperCase()} · ${backend === null ? 'WAITING FOR RUNTIME' : backend.toUpperCase()}`
-          : (modelMessage ?? 'No verified model package is installed.')}
+        EDITABLE ONLY · {backend === null ? 'WAITING FOR RUNTIME' : backend.toUpperCase()}
       </span>
     </section>
   );
 }
 
-function QualityState({
-  quality,
-  poseReady,
-  blockers,
-}: {
-  quality: ModelQualityObservation | null;
-  poseReady: boolean;
-  blockers: readonly string[];
-}) {
-  if (quality === null) {
+function DevelopmentBoardState({ frame }: { frame: DevelopmentVisionFrame | null }) {
+  if (frame === null || frame.pose === null) {
     return (
       <section className="learned-quality-state">
-        <small>BOARD OBSERVABILITY</small>
-        <strong>WAITING FOR A FRAME</strong>
-        <p>
-          The full number ring, bull, and named orientation anchors must be visible before scoring
-          starts.
-        </p>
+        <small>LEARNED BOARD GEOMETRY</small>
+        <strong>WAITING FOR FOUR ANCHORS</strong>
+        <p>cal1–cal4 must be detected before any dart point can be scored.</p>
       </section>
     );
   }
   return (
-    <section
-      className={`learned-quality-state ${poseReady && blockers.length === 0 ? 'is-ready' : ''}`}
-    >
+    <section className="learned-quality-state is-ready">
       <div>
-        <small>BOARD OBSERVABILITY</small>
-        <strong>
-          {poseReady && blockers.length === 0 ? 'READY TO SCORE' : 'NOT YET SAFE TO SCORE'}
-        </strong>
+        <small>LEARNED BOARD GEOMETRY</small>
+        <strong>ORIENTED BOARD READY</strong>
       </div>
       <dl>
         <div>
           <dt>BOARD</dt>
-          <dd>{Math.round(quality.boardDiameterPixels)} px</dd>
+          <dd>{Math.round(frame.pose.boardDiameterPixels)} px</dd>
         </div>
         <div>
-          <dt>AXIS</dt>
-          <dd>{Math.round(quality.offAxisDegrees)}°</dd>
+          <dt>ANCHOR</dt>
+          <dd>{Math.round(frame.pose.minimumAnchorConfidence * 100)}%</dd>
         </div>
         <div>
-          <dt>QUALITY</dt>
-          <dd>{Math.round(quality.overall * 100)}%</dd>
+          <dt>DARTS</dt>
+          <dd>{frame.tracks.length}</dd>
         </div>
       </dl>
-      {blockers.length > 0 ? (
-        <p>{blockers[0]}</p>
-      ) : (
-        <p>Complete geometry and orientation were found automatically.</p>
-      )}
+      <p>Four learned anchors set orientation automatically. Every score remains review-only.</p>
     </section>
   );
 }
 
-function phaseLabel(phase: LearnedCameraPhase): string {
+function phaseLabel(phase: DevelopmentCameraPhase): string {
   switch (phase) {
     case 'idle':
       return 'IDLE';
     case 'starting-camera':
       return 'OPENING';
-    case 'model-unavailable':
-      return 'MODEL NEEDED';
     case 'loading-model':
       return 'VERIFYING';
     case 'finding-board':
@@ -880,21 +794,42 @@ function phaseLabel(phase: LearnedCameraPhase): string {
   }
 }
 
-function phaseCaption(
-  phase: LearnedCameraPhase,
-  model: VisionModelArtifactManifest,
-  backend: 'webgpu' | 'wasm' | null,
-): string {
-  if (phase === 'model-unavailable' || !isRunnableModelManifest(model))
-    return 'Verified model package required';
-  if (phase === 'watching')
+function phaseCaption(phase: DevelopmentCameraPhase, backend: 'webgpu' | 'wasm' | null): string {
+  if (phase === 'watching') {
     return `Watching locally${backend === null ? '' : ` · ${backend.toUpperCase()}`}`;
+  }
   if (phase === 'analysing-impact') return 'Checking the physical tip entry';
-  if (phase === 'ready-to-play') return 'Complete board geometry found';
+  if (phase === 'ready-to-play') return 'Automatic board geometry found';
   if (phase === 'awaiting-clear') return 'Waiting for darts to be removed';
   if (phase === 'camera-disturbed') return 'Re-reading board geometry';
   if (phase === 'error') return 'Camera paused safely';
   return 'Automatic board pose';
+}
+
+function drawDetectionMarkers(
+  context: CanvasRenderingContext2D,
+  frame: DevelopmentVisionFrame,
+): void {
+  for (const detection of frame.detections) {
+    const isDart = detection.classId === 0;
+    context.save();
+    context.strokeStyle = isDart ? '#ffffff' : '#f7c96f';
+    context.fillStyle = isDart ? 'rgba(255, 255, 255, 0.13)' : 'rgba(247, 201, 111, 0.16)';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(detection.center.xPx, detection.center.yPx, isDart ? 6 : 7, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.fillStyle = '#ffffff';
+    context.font = '800 12px ui-sans-serif, system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(
+      isDart ? 'DART' : `CAL ${detection.classId}`,
+      detection.center.xPx,
+      detection.center.yPx - 10,
+    );
+    context.restore();
+  }
 }
 
 function drawGeometryOverlay(context: CanvasRenderingContext2D, homography: Homography): void {
@@ -966,7 +901,7 @@ function drawMappedCircle(
   context.stroke();
 }
 
-function drawTrackedTips(context: CanvasRenderingContext2D, frame: LearnedVisionFrame): void {
+function drawTrackedTips(context: CanvasRenderingContext2D, frame: DevelopmentVisionFrame): void {
   if (frame.pose === null) return;
   for (const track of frame.tracks) {
     const point = mapBoardPointToImage(track.boardPointMm, frame.pose.boardToImageHomography);
@@ -1005,5 +940,5 @@ function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
 
 function safeVisionError(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) return error.message;
-  return 'Local learned camera inference could not complete. No score was recorded.';
+  return 'Experimental local camera inference could not complete. No score was recorded.';
 }

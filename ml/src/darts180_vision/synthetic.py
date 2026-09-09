@@ -18,7 +18,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .geometry import BoardPointMm, DartZone, SEGMENT_ORDER, decode_board_point
+from .geometry import SEGMENT_ORDER, BoardPointMm, decode_board_point
 
 _CANVAS_SIZE = 640
 _CENTER = _CANVAS_SIZE / 2
@@ -26,7 +26,9 @@ _BOARD_SCALE = 1.55  # pixels / canonical mm
 _BOARD_RADIUS_MM = 170
 
 
-def generate_synthetic_dataset(output_directory: Path, *, count: int, seed: int = 20260906) -> list[Path]:
+def generate_synthetic_dataset(
+    output_directory: Path, *, count: int, seed: int = 20260906
+) -> list[Path]:
     """Create JPEG + JSON sidecars. Returns label paths, suitable for tests and local experiments."""
     if count < 1:
         raise ValueError("count must be at least one.")
@@ -64,7 +66,9 @@ def generate_synthetic_scene(rng: Random, index: int) -> tuple[np.ndarray, dict[
     canonical_to_image = cv2.getPerspectiveTransform(source_corners, destination_corners)
     warped = cv2.warpPerspective(board, canonical_to_image, (output_width, output_height))
     board_mask = np.zeros((_CANVAS_SIZE, _CANVAS_SIZE), dtype=np.uint8)
-    cv2.circle(board_mask, (int(_CENTER), int(_CENTER)), int(_BOARD_RADIUS_MM * _BOARD_SCALE + 5), 255, -1)
+    cv2.circle(
+        board_mask, (int(_CENTER), int(_CENTER)), int(_BOARD_RADIUS_MM * _BOARD_SCALE + 5), 255, -1
+    )
     mask = cv2.warpPerspective(board_mask, canonical_to_image, (output_width, output_height))
     scene = np.where(mask[..., None] > 0, warped, background)
 
@@ -101,9 +105,17 @@ def generate_synthetic_scene(rng: Random, index: int) -> tuple[np.ndarray, dict[
         },
         "image": {"file": None, "width": output_width, "height": output_height},
         "board": {
-            "canonicalCanvas": {"sizePx": _CANVAS_SIZE, "centerPx": [_CENTER, _CENTER], "scalePxPerMm": _BOARD_SCALE},
-            "canonicalToImageHomography": [round(float(item), 8) for item in canonical_to_image.flatten()],
-            "outerBoardQuadPx": [[round(float(x), 2), round(float(y), 2)] for x, y in destination_corners],
+            "canonicalCanvas": {
+                "sizePx": _CANVAS_SIZE,
+                "centerPx": [_CENTER, _CENTER],
+                "scalePxPerMm": _BOARD_SCALE,
+            },
+            "canonicalToImageHomography": [
+                round(float(item), 8) for item in canonical_to_image.flatten()
+            ],
+            "outerBoardQuadPx": [
+                [round(float(x), 2), round(float(y), 2)] for x, y in destination_corners
+            ],
         },
         "darts": image_darts,
     }
@@ -113,7 +125,9 @@ def generate_synthetic_scene(rng: Random, index: int) -> tuple[np.ndarray, dict[
 def _render_canonical_board() -> np.ndarray:
     image = np.full((_CANVAS_SIZE, _CANVAS_SIZE, 3), (23, 30, 27), dtype=np.uint8)
     # Board face; colors are BGR because OpenCV is BGR.
-    cv2.circle(image, (int(_CENTER), int(_CENTER)), int(_BOARD_RADIUS_MM * _BOARD_SCALE), (40, 47, 44), -1)
+    cv2.circle(
+        image, (int(_CENTER), int(_CENTER)), int(_BOARD_RADIUS_MM * _BOARD_SCALE), (40, 47, 44), -1
+    )
     for index, _segment in enumerate(SEGMENT_ORDER):
         primary = index % 2 == 0
         single = (194, 208, 213) if primary else (38, 44, 42)
@@ -130,7 +144,14 @@ def _render_canonical_board() -> np.ndarray:
     return image
 
 
-def _fill_sector(image: np.ndarray, start_degrees: float, end_degrees: float, inner_mm: float, outer_mm: float, color: tuple[int, int, int]) -> None:
+def _fill_sector(
+    image: np.ndarray,
+    start_degrees: float,
+    end_degrees: float,
+    inner_mm: float,
+    outer_mm: float,
+    color: tuple[int, int, int],
+) -> None:
     angles = np.linspace(start_degrees, end_degrees, 18)
     outer = [_canonical_pixel(outer_mm, float(angle)) for angle in angles]
     inner = [_canonical_pixel(inner_mm, float(angle)) for angle in angles[::-1]]
@@ -153,7 +174,11 @@ def _sample_non_overlapping_darts(rng: Random, dart_count: int) -> list[dict[str
             candidate = _sample_dart(rng, dart_index)
             point = candidate["point"]
             if all(
-                ((point.x_mm - existing["point"].x_mm) ** 2 + (point.y_mm - existing["point"].y_mm) ** 2) ** 0.5
+                (
+                    (point.x_mm - existing["point"].x_mm) ** 2
+                    + (point.y_mm - existing["point"].y_mm) ** 2
+                )
+                ** 0.5
                 > 14
                 for existing in darts
             ):
@@ -166,7 +191,9 @@ def _sample_non_overlapping_darts(rng: Random, dart_count: int) -> list[dict[str
 
 
 def _sample_dart(rng: Random, dart_index: int) -> dict[str, Any]:
-    ring = rng.choices(["S-inner", "T", "S-outer", "D", "IB", "OB", "MISS"], [26, 17, 22, 16, 5, 7, 7])[0]
+    ring = rng.choices(
+        ["S-inner", "T", "S-outer", "D", "IB", "OB", "MISS"], [26, 17, 22, 16, 5, 7, 7]
+    )[0]
     if ring == "IB":
         radius = rng.uniform(0, 6.1)
         angle = rng.uniform(0, 360)
@@ -198,8 +225,8 @@ def _sample_dart(rng: Random, dart_index: int) -> dict[str, Any]:
 
 
 def _draw_dart(image: np.ndarray, point: BoardPointMm, rng: Random) -> None:
-    tip_x = int(round(_CENTER + point.x_mm * _BOARD_SCALE))
-    tip_y = int(round(_CENTER + point.y_mm * _BOARD_SCALE))
+    tip_x = round(_CENTER + point.x_mm * _BOARD_SCALE)
+    tip_y = round(_CENTER + point.y_mm * _BOARD_SCALE)
     # Draw an intentionally varied shaft/flight vector; it is not a photorealistic dart renderer.
     angle = np.arctan2(point.y_mm, point.x_mm) + rng.uniform(-0.85, 0.85)
     length = int(rng.uniform(55, 115))
@@ -260,8 +287,15 @@ def _wire_margin(point: BoardPointMm) -> float:
 
 
 def _cli() -> None:
-    parser = argparse.ArgumentParser(description="Generate local, synthetic Darts 180 dartboard scenes.")
-    parser.add_argument("--output", type=Path, required=True, help="Output directory (never commit generated media).")
+    parser = argparse.ArgumentParser(
+        description="Generate local, synthetic Darts 180 dartboard scenes."
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Output directory (never commit generated media).",
+    )
     parser.add_argument("--count", type=int, default=20)
     parser.add_argument("--seed", type=int, default=20260906)
     args = parser.parse_args()

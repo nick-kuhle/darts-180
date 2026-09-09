@@ -4,6 +4,10 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  isRunnableDevelopmentModelManifest,
+  parseDevelopmentModelManifest,
+} from '../src/lib/developmentVision/modelManifest.js';
+import {
   isRunnableModelManifest,
   parseModelManifest,
 } from '../src/lib/learnedVision/modelManifest.js';
@@ -18,6 +22,8 @@ const defaultManifestPath = resolve(publicRoot, 'models/darts180-board-tip-v1.js
 
 export interface VerifyModelArtifactOptions {
   manifestPath?: string;
+  /** Optional override for tests or a reviewed development package. */
+  developmentManifestPath?: string;
   publicDirectory?: string;
   write?: (line: string) => void;
 }
@@ -29,6 +35,7 @@ export interface VerifyModelArtifactOptions {
  */
 export async function verifyWebModelArtifact({
   manifestPath = defaultManifestPath,
+  developmentManifestPath,
   publicDirectory = publicRoot,
   write = console.log,
 }: VerifyModelArtifactOptions = {}): Promise<void> {
@@ -38,29 +45,66 @@ export async function verifyWebModelArtifact({
       throw new Error('Only the explicit unavailable manifest may omit a runnable artifact.');
     }
     write(
-      'Model artifact verification passed: explicit unavailable manifest; no model bytes expected.',
+      'Model artifact verification passed: explicit unavailable production manifest; no production model bytes expected.',
     );
+  } else {
+    const modelPath = await resolvePublicAsset(publicDirectory, manifest.assetPath);
+    await assertFileHash(modelPath, manifest.sha256, 'ONNX artifact');
+
+    if (manifest.releaseStage === 'production') {
+      const attestationPath = manifest.releaseEvidence.attestationPath;
+      const attestationHash = manifest.releaseEvidence.attestationSha256;
+      if (attestationPath === null || attestationHash === null) {
+        throw new Error('Production model manifest is missing its hash-bound release attestation.');
+      }
+      const resolvedAttestationPath = await resolvePublicAsset(publicDirectory, attestationPath);
+      await assertFileHash(resolvedAttestationPath, attestationHash, 'release attestation');
+      const attestation = parsePublicModelReleaseAttestation(
+        await readJson(resolvedAttestationPath),
+      );
+      assertAttestationMatchesManifest(attestation, manifest);
+    }
+
+    write(
+      `Model artifact verification passed: ${manifest.modelId}@${manifest.modelVersion} (${manifest.releaseStage}).`,
+    );
+  }
+
+  const optionalDevelopmentManifest =
+    developmentManifestPath ??
+    resolve(publicDirectory, 'models/darts180-deepdarts-yolo-dev-v1.json');
+  if (!(await fileSystemEntryExists(optionalDevelopmentManifest))) {
+    write('No optional five-point development model package is installed.');
     return;
   }
 
-  const modelPath = await resolvePublicAsset(publicDirectory, manifest.assetPath);
-  await assertFileHash(modelPath, manifest.sha256, 'ONNX artifact');
-
-  if (manifest.releaseStage === 'production') {
-    const attestationPath = manifest.releaseEvidence.attestationPath;
-    const attestationHash = manifest.releaseEvidence.attestationSha256;
-    if (attestationPath === null || attestationHash === null) {
-      throw new Error('Production model manifest is missing its hash-bound release attestation.');
-    }
-    const resolvedAttestationPath = await resolvePublicAsset(publicDirectory, attestationPath);
-    await assertFileHash(resolvedAttestationPath, attestationHash, 'release attestation');
-    const attestation = parsePublicModelReleaseAttestation(await readJson(resolvedAttestationPath));
-    assertAttestationMatchesManifest(attestation, manifest);
-  }
-
-  write(
-    `Model artifact verification passed: ${manifest.modelId}@${manifest.modelVersion} (${manifest.releaseStage}).`,
+  const developmentManifest = parseDevelopmentModelManifest(
+    await readJson(optionalDevelopmentManifest),
   );
+  if (!isRunnableDevelopmentModelManifest(developmentManifest)) {
+    throw new Error('Development model manifest must name a runnable local ONNX artifact.');
+  }
+  const developmentModelPath = await resolvePublicAsset(
+    publicDirectory,
+    developmentManifest.assetPath,
+  );
+  await assertFileHash(
+    developmentModelPath,
+    developmentManifest.sha256,
+    'development ONNX artifact',
+  );
+  write(
+    `Development model artifact verification passed: ${developmentManifest.modelId}@${developmentManifest.modelVersion} (review-only).`,
+  );
+}
+
+async function fileSystemEntryExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readJson(path: string): Promise<unknown> {

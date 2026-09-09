@@ -66,7 +66,6 @@ def detect_new_dart_tip(
     after = _to_gray(after_bgr)
     difference = cv2.absdiff(after, before)
     _, binary = cv2.threshold(difference, difference_threshold, 255, cv2.THRESH_BINARY)
-    board_mask = _board_mask(binary.shape, board_center_px, board_radius_px)
     # Allow a shaft just outside double ring while rejecting unrelated room movement.
     expanded_mask = _board_mask(binary.shape, board_center_px, board_radius_px * 1.22)
     binary = cv2.bitwise_and(binary, expanded_mask)
@@ -103,8 +102,16 @@ def detect_new_dart_tip(
             continue
         inside_support = _line_support(binary, tip_px, shaft_px)
         tip_distance = float(np.linalg.norm(tip_px - center))
-        radial_plausibility = 1.0 if float(np.linalg.norm(shaft_px - center)) > tip_distance else 0.65
-        confidence = min(0.95, 0.35 + min(0.35, length / (board_radius_px * 1.2)) + 0.2 * inside_support + 0.1 * radial_plausibility)
+        radial_plausibility = (
+            1.0 if float(np.linalg.norm(shaft_px - center)) > tip_distance else 0.65
+        )
+        confidence = min(
+            0.95,
+            0.35
+            + min(0.35, length / (board_radius_px * 1.2))
+            + 0.2 * inside_support
+            + 0.1 * radial_plausibility,
+        )
         candidates.append(
             TemporalDartCandidate(
                 tip=ImagePoint(float(tip_px[0]), float(tip_px[1])),
@@ -130,7 +137,9 @@ def score_candidate(
     source = np.array([[[candidate.tip.x_px, candidate.tip.y_px]]], dtype=np.float32)
     transformed = cv2.perspectiveTransform(source, matrix.astype(np.float32))[0, 0]
     board_point = BoardPointMm(x_mm=float(transformed[0]), y_mm=float(transformed[1]))
-    return ScoredTemporalCandidate(candidate=candidate, board_point=board_point, zone=decode_board_point(board_point))
+    return ScoredTemporalCandidate(
+        candidate=candidate, board_point=board_point, zone=decode_board_point(board_point)
+    )
 
 
 def candidate_as_json(candidate: TemporalDartCandidate | None) -> dict[str, Any] | None:
@@ -181,12 +190,16 @@ def _debug_image(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Propose one newly arrived dart from settled before/after frames.")
+    parser = argparse.ArgumentParser(
+        description="Propose one newly arrived dart from settled before/after frames."
+    )
     parser.add_argument("before", type=Path)
     parser.add_argument("after", type=Path)
     parser.add_argument("--center", type=float, nargs=2, required=True, metavar=("X", "Y"))
     parser.add_argument("--radius", type=float, required=True, help="Board-face radius in pixels.")
-    parser.add_argument("--homography-json", type=Path, help="Optional image-to-board 3x3 JSON matrix.")
+    parser.add_argument(
+        "--homography-json", type=Path, help="Optional image-to-board 3x3 JSON matrix."
+    )
     parser.add_argument("--debug-output", type=Path, help="Optional annotated output image path.")
     args = parser.parse_args()
 
@@ -195,14 +208,20 @@ def main() -> None:
     if before is None or after is None:
         raise SystemExit("Could not read both input images.")
     center = (args.center[0], args.center[1])
-    candidate = detect_new_dart_tip(before, after, board_center_px=center, board_radius_px=args.radius)
+    candidate = detect_new_dart_tip(
+        before, after, board_center_px=center, board_radius_px=args.radius
+    )
     payload: dict[str, Any] = {"candidate": candidate_as_json(candidate)}
     if candidate is not None and args.homography_json is not None:
-        matrix = np.asarray(json.loads(args.homography_json.read_text(encoding="utf-8")), dtype=np.float64)
+        matrix = np.asarray(
+            json.loads(args.homography_json.read_text(encoding="utf-8")), dtype=np.float64
+        )
         payload["scoredCandidate"] = asdict(score_candidate(candidate, matrix))
     if args.debug_output is not None:
         args.debug_output.parent.mkdir(parents=True, exist_ok=True)
-        if not cv2.imwrite(str(args.debug_output), _debug_image(after, center, args.radius, candidate)):
+        if not cv2.imwrite(
+            str(args.debug_output), _debug_image(after, center, args.radius, candidate)
+        ):
             raise SystemExit(f"Could not write debug image: {args.debug_output}")
     print(json.dumps(payload, indent=2, sort_keys=True))
 

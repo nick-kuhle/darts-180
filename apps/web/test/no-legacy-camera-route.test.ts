@@ -6,11 +6,18 @@ function source(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
 
-test('normal Camera Play imports only the learned vision path, never the retired color/difference scorer', () => {
+test('normal Camera Play selects only learned runtime paths, never the retired color/difference scorer', () => {
   const app = source('../src/App.tsx');
-  const camera = source('../src/components/LearnedCameraPlay.tsx');
+  const router = source('../src/components/CameraPlayRouter.tsx');
+  const productionCamera = source('../src/components/LearnedCameraPlay.tsx');
+  const developmentCamera = source('../src/components/DeepDartsDevelopmentCameraPlay.tsx');
 
-  assert.match(app, /LearnedCameraPlay/);
+  assert.match(app, /CameraPlayRouter/);
+  assert.match(router, /LearnedCameraPlay/);
+  assert.match(router, /DeepDartsDevelopmentCameraPlay/);
   assert.doesNotMatch(app, /SimpleCameraPlay|CameraScoringLab/);
-  assert.doesNotMatch(camera, /cameraScoring|autoBoardFit|boardFit|startPlayReferenceCapture/);
+  assert.doesNotMatch(
+    `${productionCamera}\n${developmentCamera}`,
+    /cameraScoring|autoBoardFit|boardFit|startPlayReferenceCapture/,
+  );
 });

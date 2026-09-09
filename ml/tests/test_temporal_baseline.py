@@ -33,7 +33,11 @@ class TemporalBaselineTests(unittest.TestCase):
 
         pixels_per_mm = 1.5
         image_to_board = np.array(
-            [[1 / pixels_per_mm, 0, -300 / pixels_per_mm], [0, 1 / pixels_per_mm, -300 / pixels_per_mm], [0, 0, 1]],
+            [
+                [1 / pixels_per_mm, 0, -300 / pixels_per_mm],
+                [0, 1 / pixels_per_mm, -300 / pixels_per_mm],
+                [0, 0, 1],
+            ],
             dtype=np.float32,
         )
         scored = score_candidate(candidate, image_to_board)

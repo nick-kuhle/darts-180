@@ -1,109 +1,112 @@
 # Darts 180 — current implementation status
 
-**Snapshot date:** 2026-09-08 (America/Los_Angeles)
-**Product name:** Darts 180 — working name; trademark and commercial legal clearance remain required
-**Repository:** `https://github.com/nick-kuhle/darts-180.git` (private)
-**Reported product base:** `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6` (PR #11 merge); this
-workspace currently has no configured `origin`, so retained remote refs are not treated as fresh verification
-**Active product-delivery branch:** `feat/web-first-learned-autoscoring`
-**Delivery PR:** [#12 — ready for review](https://github.com/nick-kuhle/darts-180/pull/12)
-**Active research branch:** `research/deepdarts-yolov8-evaluation` (local, non-production, not deployed)
-**Delivery order:** web app first; native mobile reuse follows only after web evidence
+**Snapshot date:** 2026-09-08 (America/Los_Angeles)<br />
+**Product name:** Darts 180 — working name; trademark and commercial legal clearance remain required<br />
+**Repository:** `https://github.com/nick-kuhle/darts-180.git` (private)<br />
+**Reported product base:** `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6` (PR #11 merge)<br />
+**Current local branch:** `feat/development-editable-autoscoring`<br />
+**Earlier delivery PR:** [#12 — learned camera release-boundary hardening](https://github.com/nick-kuhle/darts-180/pull/12)<br />
+**Current delivery state:** local implementation only; no new remote push, PR, Vercel deployment, or model activation<br />
+**Delivery order:** web app first; native reuse follows only after validated web contracts/data/geometry
 
-This document separates code that exists, code that is safe to deploy, and claims that evidence does **not**
-support. It is not a marketing status page.
+This document separates implemented code, an artifact-ready camera path, and claims that evidence does
+**not** support. It is not a marketing status page.
 
 ## Current decision
 
-The direct post-PR #11 iPhone retest found that the old browser color/frame-difference path could reach
-watching state but failed to record a visibly embedded dart. The private screens did not provide ground truth,
-training consent, or an accuracy benchmark and were deleted. The correct conclusion is that the old perception
-method is unsuitable—not that the rules engine, correction UX, local-first privacy design, or product shell
-should be discarded.
+The previous browser color/frame-difference path failed to record a visibly embedded dart and remains
+retired. It must not be revived to make the app appear to score. The replacement strict browser
+production path remains a learned semantic model boundary and intentionally has an unavailable manifest
+until an attested release artifact exists.
 
-The production route has therefore been replaced architecturally with a **web-first learned semantic pipeline**.
-The retired color/connected-component scorer, its Camera Play components, and its scoring modules have been
-removed from the web application. Its history remains documented only as a failure record; it must never be
-reintroduced to make live scoring appear to work.
+The product requirement now also permits a useful **development-stage** path before release-grade
+accuracy: a real local learned detector may automatically find the board and a dart-entry point, calculate
+a deterministic standard-board score, and fill an editable DartCard. The result must never auto-record or
+pretend to be a calibrated production score. A player must explicitly confirm it as shown or correct it
+before a development visit can be recorded.
 
-A DeepDarts YOLOv8 v2 public-data lead is now conditionally admitted for isolated research intake. Its official
-source dataset metadata identifies CC BY 4.0, and one reviewed image/label pair confirms the five-class roles
-of one dart point plus four ordered board-calibration anchors. It remains a data-only candidate: export-wide class
-lineage and split quality still need audit, no weights or browser artifact have been acquired, its four-anchor
-output cannot be silently substituted for the nine-landmark production contract, and no live behavior changes. See
-[`research/2026-09-deepdarts-yolov8-candidate.md`](research/2026-09-deepdarts-yolov8-candidate.md).
+The reviewed DeepDarts-style five-class data shape supports that specific development route: class 0 is a
+dart point and classes 1–4 are ordered board anchors. It cannot be silently squeezed into the existing
+nine-landmark/quality production ABI. The implementation therefore adds a separate versioned five-point
+contract rather than weakening production gates.
 
-## Delivered in the active branch, not yet merged/deployed
+Read [`18-development-five-point-scorer.md`](18-development-five-point-scorer.md) for the exact boundary
+and tester workflow.
 
-| Area                   | Implemented now                                                                                                                                                                                                                                                                                                                                                                      | Boundary / evidence still missing                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared contracts       | `@darts-180/contracts` now defines all nine named full-board landmarks, source-frame dart-tip uncertainty/occlusion, learned quality, schema-v2 model metadata, release evidence, and explainable `auto-score` / `review` / `abstain` proposals.                                                                                                                                     | Contract tests demonstrate types/semantics, not a trained model. Native adapters must preserve the semantic boundary and cannot add a competing score decoder.                                |
-| Manifest/release gate  | The browser accepts only same-origin non-traversing paths, verified lowercase SHA-256 values, complete calibrated pose/quality/decision policy, and production provenance/evaluation/release evidence. CI verifies exact ONNX and public-attestation hashes plus their identity and complete decision-policy binding.                                                                | The checked-in manifest is deliberately `unavailable`; no ONNX artifact, approved provenance, held-out evaluation, attestation, or auto-record release exists.                                |
-| Browser Worker runtime | `vision.worker.ts` owns ONNX Runtime Web initialization, manifest re-validation across the Worker boundary, ONNX and production-attestation SHA-256 verification/binding, exact RGB letterbox preprocessing, WebGPU-first/WASM fallback, strict tensor decoding, serialized requests, bitmap/session cleanup, and bounded user-safe errors.                                          | A built Worker is not proof that a production model runs successfully on Safari/Chrome hardware. Model compatibility, CSP, latency, memory, heat, and behavior still require device evidence. |
-| Learned geometry       | Four learned named doubles solve the oriented homography; the bull and four outer cardinal landmarks independently validate it. Learned tip uncertainty maps into canonical millimetres; deterministic `@darts-180/rules` alone maps that point to ring/segment/score.                                                                                                               | No trained landmark or tip predictor exists. Geometry tests use synthetic values only.                                                                                                        |
-| Decision safety        | Proposal code models deterministic quadrature alternatives, preserves wire uncertainty, applies manifest-calibrated pose/quality/occlusion/posterior/**temporal** gates, clears temporal tracks on lost admission, sends unapproved models to review, and never auto-records a predicted `MISS`.                                                                                     | Calibration values are intentionally safe placeholders until fit and approved on a locked field evaluation set.                                                                               |
-| Camera Play UX         | The new normal web route uses `getUserMedia`, automatic full-board checks, a non-interactive geometry overlay, low-res timing-only event association, high-res post-impact Worker bursts, auto-clear checks, DartCard review, and ordinary manual correction. It exposes no normal-flow guide fitting, named-point clicks, reference capture, analysis button, upload, or tip click. | With the unavailable manifest, it truthfully opens a camera preview and records **no** score. It is not yet a functional trained scorer.                                                      |
-| Deployment/CSP         | Root and app-root Vercel config preserve the existing project shape and add narrowly scoped Worker/WASM CSP directives verified by tests. The follow-up is published as draft PR #12.                                                                                                                                                                                                | Vercel deployment/header status remains unverified; this draft deliberately must not promote the unavailable model to production.                                                             |
+## Delivered locally in this branch
 
-## Previously merged foundation
+| Area                     | Implemented now                                                                                                                                                                                                                                                                 | Boundary / evidence still missing                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production ABI           | The existing schema-v2 `darts180-board-tip-v1` parser, Worker, attestation verifier, quality/uncertainty logic, and production-only auto-record gate remain intact.                                                                                                             | The checked-in production manifest remains unavailable; no production ONNX, attestation, evaluation, or auto-record release exists.                                                                                              |
+| Development manifest     | `developmentVision/modelManifest.ts` accepts only `darts180-deepdarts-yolo`, schema 1, `releaseStage: development`, same-origin hashed ONNX, raw five-class output, immutable class IDs, declared stretch preprocessing, and bounded NMS/tracker policy.                        | No actual manifest/ONNX bytes are checked in. A malformed/remote/changed-class package cannot run.                                                                                                                               |
+| Local YOLO Worker        | An isolated Worker verifies the development ONNX SHA-256, tries WebGPU then local WASM, stretches RGB camera frames exactly as declared, accepts only raw YOLOv8 `[1,9,N]`/`[1,N,9]`-style output, and runs class-aware NMS locally.                                            | A real export must still prove it initializes on target Safari/Chrome devices and returns the declared raw output. No hosted inference is used.                                                                                  |
+| Automatic geometry       | Four learned semantic anchors solve a projective map; class-0 learned dart centers map through it; `@darts-180/rules` calculates ring/sector/score. The source-to-standard `−9°` adapter has synthetic arithmetic fixtures.                                                     | The adapter needs independent real-throw validation across board/camera variation. Four anchors do not provide production's redundant learned quality/landmark validation.                                                       |
+| Camera Play UX           | `CameraPlayRouter` selects the five-point path only when the production artifact is unavailable and a valid development package is installed. The path has no normal-flow manual calibration, reference capture, upload, or tip click. It opens every model result as `review`. | Until a real artifact is installed, public Camera Play correctly stays on the unavailable production path. No live score claim is justified yet.                                                                                 |
+| Human correction         | Score Review now has **Confirm as shown** in addition to board correction. Development proposals block visit confirmation until the player explicitly confirms/corrects every one.                                                                                              | This is a tester safeguard, not independent ground truth. Player corrections need consent, QA, and independent labeling before model training/evaluation.                                                                        |
+| Local evidence           | A tester may opt in per Camera Play session to retain a bounded JPEG plus actual detector record in page memory. After human review, the browser can download JPEGs and a paired manifest; it never uploads or stores them automatically.                                       | Exported media may contain room/background information and must pass consent/redaction/validation before controlled data intake. It is a near-settled frame, not falsely presented as byte-identical to the model `ImageBitmap`. |
+| Training handoff         | `deepdarts_yolo_train.py` audits a supplied local export, requires the reviewed five-class mapping/integrity, trains from a supplied local YOLO checkpoint, exports raw ONNX, hashes it, and writes a development-only manifest.                                                | It has not run because no full lawful local data corpus or base checkpoint is present. It deliberately cannot download data/weights, install a model into the web app, or deploy.                                                |
+| CI artifact verification | `verify:model-artifact` continues to verify production packages and now also hashes a present optional five-point development ONNX/manifest without weakening production checks.                                                                                                | Hash integrity says nothing about accuracy, provenance approval, real-device compatibility, or production readiness.                                                                                                             |
 
-`main` contains the playable 501/Cricket product shell, deterministic standard-board/X01/Cricket rules,
-manual correction, local Capture/Annotation tools, a development Fastify API, native/Rust/Python seeds,
-Vercel configuration, and historical PR #1–#11 work. The user reports PR #11 merged and closed; the merge base
-was verified by authenticated Git fetch. GitHub Actions/check-run reads and Vercel production status have not
-been verified from this environment.
+## Current artifact and deployment status
 
-## Validation status
+- **No browser ONNX model is installed.** The supplied representative DeepDarts image/label pair remains
+  a reviewed sample, not a trainable corpus or functioning detector.
+- **No Roboflow hosted inference, tokenized URL, API key, or credential is used.** Camera frames remain
+  local to the browser Worker.
+- **No public Vercel redeployment has been made.** The existing production URL stays unchanged and still
+  correctly reports that a verified strict model package is unavailable.
+- **No production behavior was relaxed.** A future development package is review-only and only wins the
+  router when production has no runnable artifact.
 
-The current schema-v2 release-hardening revision passed its final local pre-commit gate: `npm ci`, Prettier,
-documentation links, all workspace TypeScript checks, explicit unavailable-manifest verification, 28 web tests,
-25 rules tests, six vision-session tests, two API tests, and a production web build (including same-origin Worker
-and WASM assets). It also passed the 12-test Python ML/data/geometry suite, Rust `cargo fmt --check` plus six
-Rust unit tests, and `git diff --check`. The production dependency audit passes the configured high/critical
-threshold but still reports 10 moderate Expo-tooling transitive findings; its force fix proposes a breaking Expo
-downgrade and has not been applied. Passing build/unit tests mean only that the implementation is internally
-consistent; they do not demonstrate a dart score from a real phone.
+## Validation status for this local change
 
-Run from repository root:
+The local change has passed the following as of this snapshot:
 
-```bash
-npm run format:check
-npm run docs:check
-git diff --check
-npm run verify:model-artifact --workspace=@darts-180/web
+```text
+npm ci
 npm run verify
-cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v
-cd .. && cargo fmt --manifest-path native/vision-core/Cargo.toml -- --check
-cargo test --manifest-path native/vision-core/Cargo.toml
+# Prettier + docs links + all TypeScript workspaces + model verifier +
+# web (33), rules (25), vision-session (6), and API (2) tests + Vite production build
+# model verifier result: production sentinel valid; optional five-point package absent (informational)
+
+cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v   # 21 tests
+cd ml && python3 -m ruff check src tests && python3 -m ruff format --check src tests
 ```
+
+The added browser tests cover development-manifest rejection, raw YOLO layout decoding/stretch-coordinate
+restoration/class-aware NMS, four-anchor geometry/orientation arithmetic, real-detector-only suggestion
+requirements, mandatory `review` disposition, and optional development-package hash verification.
+The added Python tests cover development manifest generation and audit gates without requiring GPU libraries.
+Existing ML lint/format findings were also resolved under the project `ruff>=0.9` quality extra. Rust/native
+code is unchanged; Cargo is not available in this environment for an additional native check.
 
 ## Explicit non-claims
 
 - Darts 180 does **not** currently have a lawful trained production dartboard/dart-tip model.
-- The checked-in web release does **not** claim that it scores a physical dart; the unavailable manifest blocks it
-  from guessing a score.
-- Browser unit tests, synthetic geometry, model-free Worker builds, Vercel config checks, and vendor marketing
-  are not direct-device accuracy evidence.
-- A single camera cannot observe a fully hidden tip or recover information outside its frame; quality admission,
-  reposition/second-view guidance, review, and abstention are required behavior, not defects to suppress.
-- Radar, room audio, piezo, and IMU may help order/timestamp an event but cannot localize its planar score.
-- No raw camera image is uploaded by normal Camera Play. Any research capture requires separate consent,
-  retention, deletion, access, and provenance controls.
-- The current Fastify API and working product name are not production-cleared infrastructure or branding.
+- Darts 180 does **not** currently have a local development ONNX artifact, so no deployed camera currently
+  proposes a real score from this new path.
+- A static score, one-image model, frame-difference detector, raw color threshold, or manually injected
+  label is not a substitute for the required learned dart/anchor detections.
+- The `−9°` source-frame adapter is a documented development hypothesis with fixture coverage, not a
+  released geometry invariant or performance claim.
+- Browser unit tests/builds and synthetic geometry do not demonstrate real phone accuracy, latency, battery,
+  thermal behavior, soft-tip coverage, or robustness to all angles/light/boards.
+- Corrected local evidence exports are not automatically valid training labels, consent records, or sacred
+  evaluation data.
 
 ## Next gates, in order
 
-1. **Data/legal gate:** approve consented capture protocol, data registry, independent ground truth, retention,
-   licence/provenance review, and jurisdiction-specific IP/FTO review.
-2. **Model gate:** train/export a legal browser-compatible named-landmark/tip/quality model; supply exact output
-   contract, SHA-256, model card, calibration, and a non-production evaluation manifest first.
-3. **Evaluation gate:** lock a leakage-resistant real-device holdout partitioned by site, board, device, lighting,
-   camera pose, point type, dart count, wire distance, and occlusion. Measure per-dart recall, exact score,
-   unsafe false-auto rate, review/abstain rate, latency, memory, battery, and thermal behavior.
-4. **Release gate:** promote only when the model's documented held-out results support the manifest decision
-   policy; then deploy through the existing Vercel project/URL and retest on direct HTTPS Safari/Chrome tabs.
-5. **Native second:** reuse the locked contracts, data program, geometry, model outputs, and decision policy in
-   native capture runtimes. Add fixed multi-camera hardware only after formal FTO and safety design review.
-
-See [`16-camera-autoscoring-reset.md`](16-camera-autoscoring-reset.md) for the research rationale and
-[`12-web-demo-and-vercel.md`](12-web-demo-and-vercel.md) for deployment requirements.
+1. **Obtain an actual lawful local training/export input.** Provide an extracted data set plus a local
+   base checkpoint, or a reviewed locally runnable ONNX and its provenance/manifest details. Do not provide
+   credentials or a token-bearing download link.
+2. **Train/export and inspect the development artifact.** Run the local audit/training recipe, inspect the
+   ONNX's input/output names/shapes, SHA-256, model size, and actual device initialization.
+3. **Install and test only the development package.** Copy the reviewed ONNX + schema-1 manifest to the
+   optional static model paths, run full verification, then use the existing Vercel project only for an
+   explicitly labeled development deployment/retest decision.
+4. **Run corrected real-throw collection.** Use a balanced protocol rather than 1,000 nearly identical
+   throws; periodically export reviewed local bundles, ingest them with consent/redaction, and analyze
+   exact-score/correction/false-trigger/latency slices.
+5. **Promote only through the separate production gates.** Add real redundant quality/uncertainty evidence,
+   locked independent evaluation, a reviewed ABI/artifact/attestation, and browser field proof before any
+   production auto-recording claim. Native delivery remains after those web contracts are validated.

@@ -1,0 +1,367 @@
+"""Deliberate local training/export path for Darts 180's editable five-point development scorer.
+
+This command never downloads data, calls hosted inference, copies an artifact into the web app, or
+marks a model production-ready. It trains only from a caller-provided, lawfully acquired local
+DeepDarts-style YOLOv8 export after the repository's structural audit succeeds. Its output is an
+ONNX file plus a development-only manifest that can be consciously reviewed and installed later.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from darts180_vision.deepdarts_yolo_audit import DatasetAuditError, audit_deepdarts_yolov8_export
+
+_MANIFEST_SCHEMA_VERSION = 1
+_REQUIRED_NUMERIC_NAMES = ["0", "1", "2", "3", "4"]
+_DEFAULT_PUBLIC_ASSET_PATH = "/models/darts180-deepdarts-yolo-dev-v1.onnx"
+
+
+class DevelopmentTrainingError(ValueError):
+    """Raised before training when a local candidate is not safe enough for a dev experiment."""
+
+
+def validate_audit_for_development_training(report: dict[str, Any]) -> None:
+    """Require intact five-class local data, while deliberately not confusing it with release proof."""
+
+    metadata = report.get("metadata")
+    candidate = report.get("deepDartsCandidate")
+    aggregate = report.get("aggregate")
+    integrity = report.get("labelIntegrity")
+    if not isinstance(metadata, dict) or not isinstance(candidate, dict):
+        raise DevelopmentTrainingError(
+            "The local dataset audit did not return its required metadata."
+        )
+    data_yaml = metadata.get("dataYaml")
+    if not isinstance(data_yaml, dict) or data_yaml.get("names") != _REQUIRED_NUMERIC_NAMES:
+        raise DevelopmentTrainingError(
+            "The local data.yaml must preserve the reviewed numeric DeepDarts class order 0 through 4."
+        )
+    if candidate.get("numericExportShapeMatchesExpected") is not True:
+        raise DevelopmentTrainingError(
+            "The local export does not match the reviewed five-class candidate shape."
+        )
+    if not isinstance(integrity, dict) or integrity.get("count") != 0:
+        raise DevelopmentTrainingError(
+            "Resolve local label-integrity issues before training a development model."
+        )
+    if (
+        not isinstance(aggregate, dict)
+        or aggregate.get("framesWithDartAndAllFourCalibrationAnchors", 0) < 1
+    ):
+        raise DevelopmentTrainingError(
+            "The local export needs at least one frame with class-0 dart and all four calibration anchors."
+        )
+
+
+def build_development_manifest(
+    *,
+    model_version: str,
+    model_sha256: str,
+    output_tensor_name: str,
+    public_asset_path: str,
+    training_data_id: str,
+    license_review_id: str,
+    trained_at: str,
+    image_size: int,
+) -> dict[str, Any]:
+    """Create the browser's isolated review-only manifest; this is never a production artifact."""
+
+    if not model_version.strip():
+        raise DevelopmentTrainingError("model_version cannot be empty.")
+    if len(model_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in model_sha256
+    ):
+        raise DevelopmentTrainingError("model_sha256 must be lowercase SHA-256 hex.")
+    if not output_tensor_name.replace("_", "a").isalnum() or output_tensor_name[0].isdigit():
+        raise DevelopmentTrainingError(
+            "The ONNX output tensor name is not safe for the browser manifest."
+        )
+    allowed_path = public_asset_path.startswith("/") and all(
+        part and part.replace("_", "a").replace("-", "a").replace(".", "a").isalnum()
+        for part in public_asset_path.removeprefix("/").split("/")
+    )
+    if not allowed_path or ".." in public_asset_path or not public_asset_path.endswith(".onnx"):
+        raise DevelopmentTrainingError(
+            "public_asset_path must be a root-relative .onnx path with safe segments and no traversal."
+        )
+    if image_size < 256 or image_size > 2048:
+        raise DevelopmentTrainingError("image_size must be between 256 and 2048.")
+    if not training_data_id.strip() or not license_review_id.strip():
+        raise DevelopmentTrainingError("training_data_id and license_review_id are required.")
+
+    return {
+        "schemaVersion": _MANIFEST_SCHEMA_VERSION,
+        "modelId": "darts180-deepdarts-yolo",
+        "modelVersion": model_version,
+        "releaseStage": "development",
+        "assetPath": public_asset_path,
+        "sha256": model_sha256,
+        "runtime": "onnxruntime-web",
+        "input": {
+            "width": image_size,
+            "height": image_size,
+            "colorOrder": "rgb",
+            "normalization": "zero-to-one",
+            "resizeMode": "stretch",
+        },
+        "output": {
+            "detections": output_tensor_name,
+            "layout": "yolov8-raw-cxcywh-class-scores",
+            "classCount": 5,
+        },
+        "classMap": {
+            "dartEntryPoint": 0,
+            "calibration1": 1,
+            "calibration2": 2,
+            "calibration3": 3,
+            "calibration4": 4,
+        },
+        "policy": {
+            # Low detector floors deliberately permit early test evidence; they are detector filters,
+            # not a score-accuracy claim. Every proposal remains an editable review card.
+            "minDetectionConfidence": 0.10,
+            "minDartConfidence": 0.10,
+            "minCalibrationConfidence": 0.10,
+            "nmsIouThreshold": 0.45,
+            "maxDetections": 32,
+            "tipTrackMatchDistanceMm": 12,
+            "tipTrackSettleMs": 250,
+            "tipTrackStaleAfterMs": 1200,
+            "maxTipTrackSpreadMm": 6,
+        },
+        "provenance": {
+            "trainingDataId": training_data_id,
+            "licenseReviewId": license_review_id,
+            "trainedAt": trained_at,
+        },
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def onnx_output_name(path: Path) -> str:
+    try:
+        import onnx
+    except ImportError as error:  # pragma: no cover - depends on optional runtime installation.
+        raise DevelopmentTrainingError(
+            "Install the ML export extra (including onnx) before exporting a browser artifact."
+        ) from error
+
+    graph = onnx.load(str(path)).graph
+    if len(graph.output) != 1:
+        raise DevelopmentTrainingError(
+            "The browser development contract accepts exactly one raw YOLO detection output."
+        )
+    output_name = graph.output[0].name
+    if not output_name:
+        raise DevelopmentTrainingError("The exported ONNX graph has no named detection output.")
+    return output_name
+
+
+def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
+    root = args.dataset_root.expanduser().resolve()
+    output_directory = args.output_directory.expanduser().resolve()
+    base_model = args.base_model.expanduser().resolve()
+    if not root.is_dir() or not (root / "data.yaml").is_file():
+        raise DevelopmentTrainingError(
+            "dataset_root must be an extracted local export containing data.yaml."
+        )
+    if (
+        output_directory == root
+        or output_directory.is_relative_to(root)
+        or root.is_relative_to(output_directory)
+    ):
+        raise DevelopmentTrainingError(
+            "output_directory must not overlap dataset_root; this protects local source media from --overwrite."
+        )
+    if not base_model.is_file():
+        raise DevelopmentTrainingError(
+            "base_model must name a local Ultralytics-compatible checkpoint; this command does not download weights."
+        )
+    if base_model.is_relative_to(output_directory):
+        raise DevelopmentTrainingError(
+            "output_directory must not contain base_model; this protects the local checkpoint from --overwrite."
+        )
+    if output_directory.exists() and any(output_directory.iterdir()) and not args.overwrite:
+        raise DevelopmentTrainingError(
+            "output_directory is non-empty; choose a new location or pass --overwrite deliberately."
+        )
+    if output_directory.exists() and args.overwrite:
+        shutil.rmtree(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+
+    audit = audit_deepdarts_yolov8_export(root, hash_images=args.hash_images)
+    validate_audit_for_development_training(audit)
+    audit_path = output_directory / "dataset-audit.json"
+    audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    try:
+        from ultralytics import YOLO
+    except ImportError as error:  # pragma: no cover - depends on optional runtime installation.
+        raise DevelopmentTrainingError(
+            "Install the ML train extra (Ultralytics, Torch, and image dependencies) before training."
+        ) from error
+
+    run_directory = output_directory / "ultralytics-run"
+    model = YOLO(str(base_model))
+    results = model.train(
+        data=str(root / "data.yaml"),
+        imgsz=args.image_size,
+        epochs=args.epochs,
+        batch=args.batch,
+        workers=args.workers,
+        device=args.device,
+        seed=args.seed,
+        patience=args.patience,
+        project=str(run_directory.parent),
+        name=run_directory.name,
+        exist_ok=True,
+        pretrained=True,
+        verbose=True,
+    )
+    save_directory = Path(results.save_dir)
+    best_checkpoint = save_directory / "weights" / "best.pt"
+    if not best_checkpoint.is_file():
+        raise DevelopmentTrainingError(
+            "Ultralytics did not produce weights/best.pt for this local run."
+        )
+
+    best_model = YOLO(str(best_checkpoint))
+    exported_path = Path(
+        best_model.export(
+            format="onnx",
+            imgsz=args.image_size,
+            dynamic=False,
+            simplify=False,
+            opset=17,
+            nms=False,
+        )
+    )
+    if not exported_path.is_file():
+        raise DevelopmentTrainingError("Ultralytics did not produce a local ONNX file.")
+    artifact_directory = output_directory / "artifact"
+    artifact_directory.mkdir(exist_ok=True)
+    artifact_path = artifact_directory / Path(args.public_asset_path).name
+    shutil.copy2(exported_path, artifact_path)
+    model_sha256 = sha256_file(artifact_path)
+    trained_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    manifest = build_development_manifest(
+        model_version=args.model_version,
+        model_sha256=model_sha256,
+        output_tensor_name=onnx_output_name(artifact_path),
+        public_asset_path=args.public_asset_path,
+        training_data_id=args.training_data_id,
+        license_review_id=args.license_review_id,
+        trained_at=trained_at,
+        image_size=args.image_size,
+    )
+    manifest_path = artifact_directory / "darts180-deepdarts-yolo-dev-v1.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    summary = {
+        "scope": "development-only editable score suggestions; not production approval",
+        "datasetAuditPath": audit_path.name,
+        "datasetAuditSha256": sha256_file(audit_path),
+        "baseModelSha256": sha256_file(base_model),
+        "bestCheckpointPath": str(best_checkpoint),
+        "onnxPath": str(artifact_path),
+        "onnxSha256": model_sha256,
+        "manifestPath": str(manifest_path),
+        "modelVersion": args.model_version,
+        "trainedAt": trained_at,
+        "nextRequiredSteps": [
+            "Run the browser contract tests and inspect ONNX Runtime initialization on target phones.",
+            "Install only the reviewed ONNX plus manifest into the web public models directory.",
+            "Validate the four-anchor orientation transform on held-out real throws before relying on results.",
+            "Keep every development suggestion editable; do not turn this output into production auto-recording.",
+        ],
+    }
+    summary_path = output_directory / "training-summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Train and export an editable, local-only DeepDarts five-point development model; never deploys it."
+        )
+    )
+    parser.add_argument(
+        "dataset_root", type=Path, help="Lawfully acquired local YOLO export containing data.yaml."
+    )
+    parser.add_argument(
+        "--base-model",
+        required=True,
+        type=Path,
+        help="Local YOLOv8 checkpoint; no automatic download.",
+    )
+    parser.add_argument(
+        "--output-directory",
+        required=True,
+        type=Path,
+        help="New local experiment output directory.",
+    )
+    parser.add_argument(
+        "--model-version", required=True, help="Immutable human-readable development model version."
+    )
+    parser.add_argument(
+        "--training-data-id", required=True, help="Reviewed local data/provenance identifier."
+    )
+    parser.add_argument(
+        "--license-review-id", required=True, help="Licence/IP review record identifier."
+    )
+    parser.add_argument(
+        "--public-asset-path",
+        default=_DEFAULT_PUBLIC_ASSET_PATH,
+        help="Future same-origin ONNX path written into the review-only manifest.",
+    )
+    parser.add_argument("--image-size", type=int, default=640)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--device", default="", help="Ultralytics device selector, e.g. 0 or cpu.")
+    parser.add_argument("--seed", type=int, default=180)
+    parser.add_argument("--patience", type=int, default=30)
+    parser.add_argument(
+        "--hash-images",
+        action="store_true",
+        help="Also hash local images during audit to reveal exact cross-split duplicates before training.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Delete a non-empty output directory deliberately before beginning the local training run.",
+    )
+    args = parser.parse_args()
+
+    if args.image_size < 256 or args.image_size > 2048:
+        raise SystemExit("image-size must be between 256 and 2048.")
+    if args.epochs < 1 or args.batch < 1 or args.workers < 0 or args.patience < 0:
+        raise SystemExit(
+            "epochs and batch must be positive; workers and patience cannot be negative."
+        )
+    try:
+        summary = train_and_export(args)
+    except (DatasetAuditError, DevelopmentTrainingError) as error:
+        raise SystemExit(f"Development training did not start or complete: {error}") from error
+    print(json.dumps(summary, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

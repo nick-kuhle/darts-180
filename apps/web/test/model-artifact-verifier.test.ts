@@ -94,6 +94,61 @@ async function createProductionPackage() {
   return { directory, manifestPath, publicDirectory, modelBytes, manifest, decisionPolicy };
 }
 
+async function createDevelopmentPackage(publicDirectory: string) {
+  const modelsDirectory = join(publicDirectory, 'models');
+  const modelBytes = 'tiny development model bytes';
+  const manifest = {
+    schemaVersion: 1,
+    modelId: 'darts180-deepdarts-yolo',
+    modelVersion: 'test-five-point-dev-v1',
+    releaseStage: 'development',
+    assetPath: '/models/darts180-deepdarts-yolo-dev-v1.onnx',
+    sha256: sha256(modelBytes),
+    runtime: 'onnxruntime-web',
+    input: {
+      width: 640,
+      height: 640,
+      colorOrder: 'rgb',
+      normalization: 'zero-to-one',
+      resizeMode: 'stretch',
+    },
+    output: {
+      detections: 'output0',
+      layout: 'yolov8-raw-cxcywh-class-scores',
+      classCount: 5,
+    },
+    classMap: {
+      dartEntryPoint: 0,
+      calibration1: 1,
+      calibration2: 2,
+      calibration3: 3,
+      calibration4: 4,
+    },
+    policy: {
+      minDetectionConfidence: 0.1,
+      minDartConfidence: 0.1,
+      minCalibrationConfidence: 0.1,
+      nmsIouThreshold: 0.45,
+      maxDetections: 32,
+      tipTrackMatchDistanceMm: 12,
+      tipTrackSettleMs: 250,
+      tipTrackStaleAfterMs: 1200,
+      maxTipTrackSpreadMm: 6,
+    },
+    provenance: {
+      trainingDataId: 'test-data',
+      licenseReviewId: 'test-license',
+      trainedAt: null,
+    },
+  };
+  const manifestPath = join(modelsDirectory, 'darts180-deepdarts-yolo-dev-v1.json');
+  await Promise.all([
+    writeFile(join(modelsDirectory, 'darts180-deepdarts-yolo-dev-v1.onnx'), modelBytes),
+    writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`),
+  ]);
+  return { manifestPath, modelBytes };
+}
+
 test('model artifact verifier requires exact model and attestation bytes for a production manifest', async () => {
   const fixture = await createProductionPackage();
   try {
@@ -105,6 +160,7 @@ test('model artifact verifier requires exact model and attestation bytes for a p
     });
     assert.deepEqual(messages, [
       'Model artifact verification passed: darts180-board-tip@test-production-v2 (production).',
+      'No optional five-point development model package is installed.',
     ]);
 
     await writeFile(join(fixture.publicDirectory, 'models/test-production-v2.onnx'), 'tampered');
@@ -137,6 +193,31 @@ test('model artifact verifier requires exact model and attestation bytes for a p
         publicDirectory: fixture.publicDirectory,
       }),
       /attestation decision policy does not match/,
+    );
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('model artifact verifier hashes an optional five-point development package without weakening production gates', async () => {
+  const fixture = await createProductionPackage();
+  try {
+    const development = await createDevelopmentPackage(fixture.publicDirectory);
+    const messages: string[] = [];
+    await verifyWebModelArtifact({
+      manifestPath: fixture.manifestPath,
+      publicDirectory: fixture.publicDirectory,
+      write: (line) => messages.push(line),
+    });
+    assert.ok(messages.some((message) => message.includes('test-five-point-dev-v1 (review-only)')));
+
+    await writeFile(development.manifestPath, '{"schemaVersion":1}\n');
+    await assert.rejects(
+      verifyWebModelArtifact({
+        manifestPath: fixture.manifestPath,
+        publicDirectory: fixture.publicDirectory,
+      }),
+      /Unexpected development model identifier/,
     );
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });

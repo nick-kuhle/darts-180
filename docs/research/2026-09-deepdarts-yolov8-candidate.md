@@ -1,26 +1,29 @@
-# DeepDarts YOLOv8 v2 candidate intake — research only
+# DeepDarts YOLOv8 v2 candidate intake — development-only integration candidate
 
 **Snapshot date:** 2026-09-08 (America/Los_Angeles)
-**Status:** conditionally admitted for isolated research intake; **not** an approved Darts 180 model or deployment
+**Status:** conditionally admitted for controlled local development experimentation; **not** an approved Darts 180 production model or deployment
 **Owner:** ML/Data + Vision Runtime + Privacy/Release review
 
 ## 1. Decision and non-negotiable boundary
 
 A public Roboflow export titled **DeepDarts YOLOv8 v2** is a plausible source of training/evaluation
 research because it represents the published DeepDarts dart-entry-point plus board-calibration approach.
-It is not a drop-in Darts 180 browser model.
+It is not a drop-in `darts180-board-tip-v1` browser model.
 
-This decision authorizes only the following:
+The development policy now authorizes the following **only after lawful local acquisition and a clean
+aggregate audit**:
 
-- local, aggregate-only inspection of a lawfully obtained copy;
-- clean-room experiments and reproducible evaluation planning on an isolated research branch;
-- preservation of attribution and provenance records; and
-- comparison against Darts 180's separately held-out, consented field data.
+- local inspection, clean-room training, and reproducible experimentation on an isolated branch;
+- an explicit, separate five-point browser ONNX contract that uses genuine learned detections;
+- local on-device, editable `review` suggestions for tester data collection; and
+- preservation of attribution/provenance records and comparison against separate field data.
 
-It does **not** authorize a live deployment, a Vercel manifest change, an ONNX package, a production
-accuracy claim, use of Roboflow's hosted inference API, upload of Camera Play frames to a third party,
-or copying the upstream DeepDarts source code. Darts 180 remains intentionally unavailable until a
-separate release clears the model, data, browser, field-evaluation, and approval gates.
+It does **not** authorize production deployment, production auto-recording, a schema-v2 production
+manifest change, a production accuracy claim, Roboflow hosted inference, upload of Camera Play frames
+to a third party, token-bearing downloads, or copying the upstream DeepDarts source code. The existing
+public production route remains unavailable until a separate release clears model, data, browser,
+field-evaluation, and approval gates. See
+[`18-development-five-point-scorer.md`](../18-development-five-point-scorer.md).
 
 ## 2. Intake evidence reviewed
 
@@ -140,9 +143,10 @@ held-out evaluation. Do not silently relabel the numeric classes in a production
    landmarks or wired to the current manifest.
 2. **No production model.** The supplied material is a YOLO-format dataset. It is not weights, ONNX,
    output ABI, calibrated policy, model card, or a hash-bound release attestation.
-3. **Image preprocessing risk.** The export's 640×640 **stretch** resize changes image aspect ratio. A
-   camera scorer must use its contract's exact letterbox preprocessing and restore coordinates correctly;
-   it must not adopt stretch because an external export used it.
+3. **Image preprocessing risk.** The export's 640×640 **stretch** resize changes image aspect ratio. The
+   production ABI remains letterboxed; the isolated development contract must declare stretch explicitly,
+   invert its X/Y scales back to source camera pixels, and be browser-tested rather than silently borrowing
+   preprocessing from the external export.
 4. **Split/leakage uncertainty.** Three generated variants per source image mean 1,397 files are not
    proof of 1,397 independent real captures. The export does not yet prove that related source frames or
    augmentations are separated by session/board/device across train, validation, and test.
@@ -171,22 +175,29 @@ labels, ZIP files, weights, and model artifacts remain excluded from Git by `.gi
 
 ## 7. Required experiment gates
 
-| Gate                     | Required evidence                                                                                                                   | Outcome if not satisfied                              |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Class-order confirmation | One safe representative image and its paired YOLO label file, ideally containing IDs 0–4                                            | Do not assign semantic meanings to numeric IDs        |
-| Structural intake        | Clean audit report; explain every orphan, malformed row, duplicate, and split collision                                             | Do not train from the export                          |
-| Lineage/split review     | Source/derivative version, hashes, augmentation lineage, and group-aware split plan                                                 | Do not report held-out accuracy                       |
-| Model design decision    | Written choice: use only as pretraining, relabel/retrain to nine landmarks, or define an experimentally reviewed successor contract | Do not adapt it silently to `darts180-board-tip-v1`   |
-| Browser feasibility      | A new local-only ONNX candidate with strict output decoder, WebGPU/WASM tests, latency/memory/thermal evidence                      | Do not place an artifact in `apps/web/public/models/` |
-| Field evaluation         | Locked, separately consented, human-adjudicated device/board/lighting/angle/point-type holdout                                      | Do not enable auto-record or advertise scoring        |
-| Release approval         | Full schema-v2 manifest, artifact and attestation hashes, provenance/evaluation/approval IDs, rollback owner                        | Keep the public manifest `unavailable`                |
+| Gate                     | Required evidence                                                                                                                          | Outcome if not satisfied                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| Class-order confirmation | One safe representative image and its paired YOLO label file, ideally containing IDs 0–4                                                   | Do not assign semantic meanings to numeric IDs      |
+| Structural intake        | Clean audit report; explain every orphan, malformed row, duplicate, and split collision                                                    | Do not train from the export                        |
+| Lineage/split review     | Source/derivative version, hashes, augmentation lineage, and group-aware split plan                                                        | Do not report held-out accuracy                     |
+| Model design decision    | Written choice: use only as pretraining, relabel/retrain to nine landmarks, or use the separately reviewed five-point development contract | Do not adapt it silently to `darts180-board-tip-v1` |
+| Browser feasibility      | A real local-only ONNX candidate with strict five-point output decoder, WebGPU/WASM tests, and initial device behavior evidence            | Do not install the optional development package     |
+| Field evaluation         | Locked, separately consented, human-adjudicated device/board/lighting/angle/point-type holdout                                             | Do not enable auto-record or advertise scoring      |
+| Release approval         | Full schema-v2 manifest, artifact and attestation hashes, provenance/evaluation/approval IDs, rollback owner                               | Keep the public manifest `unavailable`              |
 
 ## 8. Next smallest safe handoff
 
-The first representative v2 image/label review is complete. The next useful evidence is the aggregate
-report from the local audit above—especially split counts, class counts, orphan/malformed-row findings,
-relative-name collisions, exact byte-duplicate findings, and the listed representative pairs. If a later
-sample conflicts with the confirmed roles, pause the candidate and investigate the derivative version.
+The first representative v2 image/label review is complete and the development browser/training contract
+is now implemented. The next useful input is one of the following:
+
+1. an actual locally acquired extracted export plus a local YOLO-compatible base checkpoint, so the
+   documented audit/train/export command can produce a review-only ONNX artifact; or
+2. a reviewed locally runnable ONNX plus its exact training/provenance/manifest details, so it can be
+   inspected, hash-bound, and tested through the isolated development package.
+
+For either route, validate the source-frame orientation transform with independently scored real throws
+before relying on the suggestions. If a later sample conflicts with the confirmed class roles, pause the
+candidate and investigate the derivative version.
 
 Do not send an API key, password, token-bearing download link, full dataset archive, or third-party
-hosted-inference credential. No deployed camera frame should leave the device for this research path.
+hosted-inference credential. No camera frame should leave the device for this development path.

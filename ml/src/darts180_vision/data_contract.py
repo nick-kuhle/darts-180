@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import datetime
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from .geometry import BoardPointMm, DartZone, decode_board_point
 
@@ -47,7 +48,12 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
 
     capture_id = value.get("captureId")
     if not isinstance(capture_id, str) or not _CAPTURE_ID_PATTERN.fullmatch(capture_id):
-        issues.append(ValidationIssue("captureId", "Must be an 8–128 character pseudonymous ID using letters, numbers, _ or -."))
+        issues.append(
+            ValidationIssue(
+                "captureId",
+                "Must be an 8–128 character pseudonymous ID using letters, numbers, _ or -.",
+            )
+        )
     for field in ("consentVersion", "boardModel", "deviceModel", "createdAt"):
         if field in value and not _is_non_empty_string(value.get(field)):
             issues.append(ValidationIssue(field, "Must be a non-empty string."))
@@ -56,11 +62,18 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
     if value.get("captureMode") not in _CAPTURE_MODES:
         issues.append(ValidationIssue("captureMode", f"Must be one of {sorted(_CAPTURE_MODES)}."))
     if "captureIntent" in value and value["captureIntent"] not in _CAPTURE_INTENTS:
-        issues.append(ValidationIssue("captureIntent", f"Must be one of {sorted(_CAPTURE_INTENTS)}."))
+        issues.append(
+            ValidationIssue("captureIntent", f"Must be one of {sorted(_CAPTURE_INTENTS)}.")
+        )
     if "imageFile" in value and (
-        not isinstance(value["imageFile"], str) or not _IMAGE_FILE_PATTERN.fullmatch(value["imageFile"])
+        not isinstance(value["imageFile"], str)
+        or not _IMAGE_FILE_PATTERN.fullmatch(value["imageFile"])
     ):
-        issues.append(ValidationIssue("imageFile", "Must be a plain .jpg/.jpeg filename without path separators."))
+        issues.append(
+            ValidationIssue(
+                "imageFile", "Must be a plain .jpg/.jpeg filename without path separators."
+            )
+        )
     if "imageMime" in value and value["imageMime"] != "image/jpeg":
         issues.append(ValidationIssue("imageMime", "Must be image/jpeg when supplied."))
     if value.get("lightingBand") not in _LIGHTING_BANDS:
@@ -68,13 +81,17 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
     if "split" in value and value["split"] not in _SPLITS:
         issues.append(ValidationIssue("split", f"Must be one of {sorted(_SPLITS)}."))
     if value.get("containsFaces") is not False:
-        issues.append(ValidationIssue("containsFaces", "Must be explicitly false for accepted capture."))
+        issues.append(
+            ValidationIssue("containsFaces", "Must be explicitly false for accepted capture.")
+        )
     _validate_number(value, "offAxisDegrees", 0, 90, issues)
     _validate_number(value, "distanceMm", 200, 5000, issues)
     return tuple(issues)
 
 
-def validate_dart_label(value: Mapping[str, Any], *, tolerance_mm: float = 0.05) -> tuple[ValidationIssue, ...]:
+def validate_dart_label(
+    value: Mapping[str, Any], *, tolerance_mm: float = 0.05
+) -> tuple[ValidationIssue, ...]:
     """Ensure label point and label zone agree with the canonical board decoder.
 
     This catches a common training-data failure: a human writes T20 while coordinates actually land
@@ -106,8 +123,14 @@ def validate_dart_label(value: Mapping[str, Any], *, tolerance_mm: float = 0.05)
         )
     if "wireMarginMm" in value:
         margin = value["wireMarginMm"]
-        if not isinstance(margin, (int, float)) or isinstance(margin, bool) or margin < -tolerance_mm:
-            issues.append(ValidationIssue("wireMarginMm", "Must be a non-negative numeric wire margin."))
+        if (
+            not isinstance(margin, (int, float))
+            or isinstance(margin, bool)
+            or margin < -tolerance_mm
+        ):
+            issues.append(
+                ValidationIssue("wireMarginMm", "Must be a non-negative numeric wire margin.")
+            )
     return tuple(issues)
 
 
@@ -154,7 +177,7 @@ def _is_iso_datetime(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return False
     return parsed.tzinfo is not None
@@ -170,7 +193,9 @@ def _is_numeric_pair(value: Any) -> bool:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Validate a Darts 180 capture manifest or labeled sidecar.")
+    parser = argparse.ArgumentParser(
+        description="Validate a Darts 180 capture manifest or labeled sidecar."
+    )
     parser.add_argument("path", type=Path, help="JSON manifest or labeled sidecar path.")
     args = parser.parse_args()
     try:
@@ -180,7 +205,16 @@ def main() -> None:
     if not isinstance(value, Mapping):
         raise SystemExit("Expected a top-level JSON object.")
     issues = validate_capture_sidecar(value)
-    print(json.dumps({"path": str(args.path), "valid": not issues, "issues": [asdict(issue) for issue in issues]}, indent=2))
+    print(
+        json.dumps(
+            {
+                "path": str(args.path),
+                "valid": not issues,
+                "issues": [asdict(issue) for issue in issues],
+            },
+            indent=2,
+        )
+    )
     if issues:
         raise SystemExit(1)
 
