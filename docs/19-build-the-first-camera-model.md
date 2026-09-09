@@ -75,10 +75,11 @@ adjudication queue. Do not make up a precise label just to increase the count.
    or a guessed hidden point. The shown deterministic score is a check on your manual point, not a
    camera prediction. A **Blank board** intentionally stops after the four board points; do not add
    an invented dart label.
-7. Recheck the label statement, choose **Review save**, then choose either **Download local backup**
-   or **Save to private storage**. The private option is available only after the existing Vercel
-   project has the private Blob/collection-key setup in
-   [`20-private-capture-lab.md`](20-private-capture-lab.md).
+7. Recheck the label statement and choose **Complete review · Auto-save**. On the existing
+   Deployment-Protected owner deployment, that acknowledgement automatically saves the matched trio
+   to private Blob. The Lab keeps its camera disabled until the exact owner-mode/private-store setup
+   in [`20-private-capture-lab.md`](20-private-capture-lab.md) is ready; it has no download,
+   collection-key, or manual per-record Save workflow.
 
 The unusual four points are deliberate. They use the same five-point coordinate convention as the
 isolated development Live Scoring engine, so a model trained from your pictures can use real
@@ -86,14 +87,14 @@ detections without an invented landmark map.
 
 ### 2. Store and screen the pairs safely
 
-A local backup downloads three matched files: JPEG, capture manifest, and annotations JSON. Private
-Data Lab storage holds the same three files under a random private record folder; it produces no
-public image URL. In either case, keep each `JPEG + annotations JSON` pair together in an approved
-folder **outside the Git repository**. Do not put images, labels, ZIP archives, weights, or
-credentials in the repository or chat.
+Data Lab automatically stores the matched JPEG, capture manifest, and annotations JSON under a random
+private record folder; it produces no public image URL and offers no browser download. When an
+authorized storage operator later retrieves an approved record for model building, keep each
+`JPEG + annotations JSON` pair together in a protected folder **outside the Git repository**. Do not
+put images, labels, ZIP archives, weights, or credentials in the repository or chat.
 
-Screen for people/background details and remove EXIF before an approved training handoff. Vercel
-private storage is controlled intake, not automatic dataset approval. See
+Screen retrieved records for people/background details and remove EXIF before an approved training
+handoff. Vercel private storage is controlled intake, not automatic dataset approval. See
 [`20-private-capture-lab.md`](20-private-capture-lab.md),
 [`runbooks/field-capture.md`](runbooks/field-capture.md), and
 [`runbooks/local-annotation.md`](runbooks/local-annotation.md).

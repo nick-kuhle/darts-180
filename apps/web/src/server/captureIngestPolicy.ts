@@ -12,7 +12,11 @@ import {
 } from '../lib/captureVault';
 
 export const CAPTURE_BLOB_PREFIX = 'darts180/capture-lab/v1';
-export const MIN_SERVER_COLLECTION_SECRET_LENGTH = 32;
+/**
+ * Deliberate server-side acknowledgement that this narrow write endpoint sits behind Vercel
+ * Deployment Protection for one owner. It is an access-mode flag, not a browser credential.
+ */
+export const VERCEL_PROTECTED_OWNER_ACCESS_MODE = 'vercel-protected-owner-v1';
 
 const CAPTURE_ID = /^cap_[A-Fa-f0-9]{32}$/;
 const SESSION_ID = /^session_[A-Fa-f0-9]{32}$/;
@@ -21,10 +25,8 @@ const IMAGE_FILE = /^[A-Za-z0-9_.-]+\.jpe?g$/i;
 const COMPLETED_DATA_LAB_CONSENT = 'SELF-CAPTURE-DEVELOPMENT-V1';
 
 export interface CaptureIngestEnvironment {
-  collectionSecret: string | undefined;
-  blobReadWriteToken: string | undefined;
+  ownerAccessMode: string | undefined;
   blobStoreId: string | undefined;
-  vercelOidcToken: string | undefined;
 }
 
 export interface CaptureIngestRequestMetadata {
@@ -48,14 +50,9 @@ export class CaptureIngestPolicyError extends Error {
 }
 
 export function isCaptureIngestConfigured(environment: CaptureIngestEnvironment): boolean {
-  const secret = environment.collectionSecret?.trim() ?? '';
-  const hasStaticBlobCredential = Boolean(environment.blobReadWriteToken?.trim());
-  const hasOidcBlobCredential = Boolean(
-    environment.blobStoreId?.trim() && environment.vercelOidcToken?.trim(),
-  );
   return (
-    secret.length >= MIN_SERVER_COLLECTION_SECRET_LENGTH &&
-    (hasStaticBlobCredential || hasOidcBlobCredential)
+    environment.ownerAccessMode === VERCEL_PROTECTED_OWNER_ACCESS_MODE &&
+    Boolean(environment.blobStoreId?.trim())
   );
 }
 

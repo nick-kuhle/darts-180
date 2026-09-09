@@ -1,7 +1,7 @@
 # Data Lab manual labels: five-point bootstrap
 
-**Status:** development labeling aid  
-**Audience:** trained internal annotators and data operations  
+**Status:** owner-only development labeling aid<br />
+**Audience:** the protected Data Lab owner and authorized data operations<br />
 **Use only for:** an approved, board-focused static JPEG paired with its Data Lab manifest.
 
 The visible **DATA LAB** workspace turns manually tapped points into the source-compatible five-point
@@ -9,8 +9,10 @@ JSON sidecar needed by the first editable development scorer. It keeps the JPEG,
 manual labels in one guided flow instead of asking a collector to switch to an ordinary player screen.
 It uses a four-point projective transform and the deterministic canonical-board decoder. It does **not**
 discover dart tips, validate privacy from pixels, establish legal consent, or replace two-person
-annotation/adjudication. Its local-download option has no upload; its optional private-save option is
-covered by the guarded intake design in [`20-private-capture-lab.md`](../20-private-capture-lab.md).
+annotation/adjudication. On the Vercel Deployment-Protected owner deployment, completing the label review
+automatically saves the matched record to private Blob; the Lab has no local-download, collection-key, or
+manual Save option. That narrow intake design is covered by
+[`20-private-capture-lab.md`](../20-private-capture-lab.md).
 
 Follow the [Data Lab capture and private intake runbook](capture-lab.md) and the
 [controlled field-capture runbook](field-capture.md) first.
@@ -21,7 +23,9 @@ Use an image only when all conditions hold:
 
 - It has a matching Data Lab manifest with `containsFaces: false`, `imageMime: image/jpeg`, and
   `imageFile` exactly equal to the selected JPEG name.
-- The image is board-focused, privacy reviewed, and locally stored on a trusted device.
+- The image is board-focused and privacy reviewed. In Data Lab it is held only in the current tab until
+  the completed review; after automatic save, only an authorized operator may retrieve it into a protected
+  local workspace.
 - The full double ring is visible enough to click deliberately. The selected profile's four named
   points must be visible; see the profile tables below.
 - Each dart tip to be labeled is visibly resolvable. The v0 tool labels at most three darts—the
@@ -73,8 +77,10 @@ the mapping or an expected result looks implausible.
 5. Review every label. A small wire margin is a warning to recheck and, for evaluation data, obtain
    independent annotation. Remove a wrong/uncertain point or discard the photo rather than treating
    a calculated zone as truth.
-6. Complete the per-label review statement and select **Next · review save**. Download the local
-   trio or explicitly use the configured private storage option.
+6. Complete the per-label review statement and select **Complete review · Auto-save**. That final
+   acknowledgement automatically saves the matched JPEG, manifest, and annotation sidecar to the
+   protected private collection. Keep the tab open until all three assets show saved; only a failed
+   asset exposes a retry.
 
 The output records original capture metadata, image dimensions/name, the image-to-board homography,
 fixed anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire
@@ -89,14 +95,15 @@ Before any approved intake, run the dependency-light validator:
 ```bash
 cd ml
 PYTHONPATH=src python -m darts180_vision.data_contract \
-  /safe/local/path/darts-180-<captureId>-annotations.json
+  /protected/local/path/darts-180-<captureId>-annotations.json
 ```
 
 The validator checks the nested capture manifest and recomputes every dart zone from the exported
 canonical point. A green result confirms schema-like metadata and geometry coherence only; it does
 not verify the JPEG, calibration accuracy, consent, or whether a human clicked the true physical tip.
 
-Use the approved encrypted handoff gate in [Data Lab](capture-lab.md#4-approved-handoff-gate).
+Use the approved encrypted handoff gate in
+[Data Lab](capture-lab.md#4-authorized-model-building-handoff).
 A completed private Blob save is controlled storage—not training admission. Keep the record in
 `unassigned` until data operations has screened privacy, provenance, duplicate sessions, and split
 leakage. For sacred evaluation records, obtain and preserve two independent annotations plus

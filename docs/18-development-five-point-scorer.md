@@ -123,8 +123,8 @@ future model.
 
 Before there is any model to make those suggestions, bootstrap real throws through the guided **Data Lab**
 using its explicit five-point rim-junction/tip labels. That manual labeling is a controlled data-operation
-tool, not a normal Live Scoring step. It can remain a local download or use the separately configured
-private intake route; neither option trains or activates a model. See
+tool, not a normal Live Scoring step. On the separately configured Deployment-Protected owner deployment,
+the completed review automatically saves the private record; it neither trains nor activates a model. See
 [`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) and
 [`20-private-capture-lab.md`](20-private-capture-lab.md).
 

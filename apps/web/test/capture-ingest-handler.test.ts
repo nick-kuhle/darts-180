@@ -6,8 +6,8 @@ import captureIngestFunction, {
   createCaptureIngestHandler,
   type CaptureIngestHandlerDependencies,
 } from '../api/capture-ingest.js';
+import { VERCEL_PROTECTED_OWNER_ACCESS_MODE } from '../src/server/captureIngestPolicy.js';
 
-const COLLECTION_KEY = 's'.repeat(32);
 const CAPTURE_ID = 'cap_0123456789abcdef0123456789abcdef';
 const RECORD_ID = 'record_0123456789abcdef0123456789abcdef';
 
@@ -15,10 +15,8 @@ function configuredDependencies() {
   const writes: Array<{ pathname: string; body: ArrayBuffer; options: unknown }> = [];
   const dependencies: CaptureIngestHandlerDependencies = {
     getEnvironment: () => ({
-      collectionSecret: COLLECTION_KEY,
-      blobReadWriteToken: 'server-only-blob-token',
-      blobStoreId: undefined,
-      vercelOidcToken: undefined,
+      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      blobStoreId: 'store_123',
     }),
     putPrivateBlob: async (pathname, body, options) => {
       writes.push({ pathname, body, options });
@@ -44,7 +42,6 @@ function captureManifest() {
 function privateHeaders(kind: 'image' | 'manifest' | 'annotations', contentType: string) {
   return {
     'Content-Type': contentType,
-    'X-Darts180-Collection-Key': COLLECTION_KEY,
     'X-Darts180-Capture-Id': CAPTURE_ID,
     'X-Darts180-Record-Id': RECORD_ID,
     'X-Darts180-Asset-Kind': kind,
@@ -61,14 +58,12 @@ test('default API export uses Vercel’s Web Fetch Function contract', async () 
   assert.equal(response.status, 405);
 });
 
-test('intake status is fail-closed until its server-only environment is complete', async () => {
+test('intake status is fail-closed until protected owner mode and its Blob store are configured', async () => {
   let writeCount = 0;
   const handler = createCaptureIngestHandler({
     getEnvironment: () => ({
-      collectionSecret: undefined,
-      blobReadWriteToken: 'server-only-blob-token',
-      blobStoreId: undefined,
-      vercelOidcToken: undefined,
+      ownerAccessMode: undefined,
+      blobStoreId: 'store_123',
     }),
     putPrivateBlob: async () => {
       writeCount += 1;
@@ -91,7 +86,7 @@ test('intake status is fail-closed until its server-only environment is complete
   assert.equal(writeCount, 0);
 });
 
-test('intake rejects cross-site or incorrect-key writes before it reads private capture bytes', async () => {
+test('intake rejects cross-site writes before it can write private capture bytes', async () => {
   const { handler, writes } = configuredDependencies();
   const crossSite = await handler(
     request(
@@ -105,22 +100,19 @@ test('intake rejects cross-site or incorrect-key writes before it reads private 
     ),
   );
   assert.equal(crossSite.status, 403);
-
-  const wrongKey = await handler(
-    request(
-      'PUT',
-      { ...privateHeaders('image', 'image/jpeg'), 'X-Darts180-Collection-Key': 'wrong' },
-      new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
-    ),
-  );
-  assert.equal(wrongKey.status, 401);
   assert.equal(writes.length, 0);
 });
 
-test('intake writes a validated JPEG under a server-derived private path without returning a Blob URL', async () => {
+test('intake accepts a same-origin validated JPEG without a collection key and never returns a Blob URL', async () => {
   const { handler, writes } = configuredDependencies();
   const body = new Uint8Array([0xff, 0xd8, 0x00, 0x00, 0xff, 0xd9]);
-  const response = await handler(request('PUT', privateHeaders('image', 'image/jpeg'), body));
+  const response = await handler(
+    request(
+      'PUT',
+      { ...privateHeaders('image', 'image/jpeg'), Origin: 'https://darts180.example' },
+      body,
+    ),
+  );
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
@@ -181,10 +173,8 @@ test('intake validates matching JSON before a storage write and hides storage im
 
   const unavailableHandler = createCaptureIngestHandler({
     getEnvironment: () => ({
-      collectionSecret: COLLECTION_KEY,
-      blobReadWriteToken: 'server-only-blob-token',
-      blobStoreId: undefined,
-      vercelOidcToken: undefined,
+      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      blobStoreId: 'store_123',
     }),
     putPrivateBlob: async () => {
       throw new Error('BLOB_READ_WRITE_TOKEN leaked in this mock error');
@@ -201,7 +191,7 @@ test('intake validates matching JSON before a storage write and hides storage im
   const payload = (await unavailable.json()) as { error: string };
   assert.equal(
     payload.error,
-    'Private storage could not confirm this file. Keep your local backup and retry only this file.',
+    'Private storage could not confirm this file. Keep this tab open and retry only this file.',
   );
   assert.doesNotMatch(payload.error, /BLOB_READ_WRITE_TOKEN/);
 });

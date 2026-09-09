@@ -1,15 +1,14 @@
 /**
- * Browser client for the optional, private Data Lab intake route.
+ * Browser client for the protected private Data Lab intake route.
  *
- * This module intentionally knows only the same-origin route and a collection key supplied by the
- * current operator. It never contains, reads, or derives a Vercel Blob credential. The key stays in
- * React memory in Data Lab and is not written to a URL, storage, download, or analytics event.
+ * The owner-only Vercel-protected deployment authorizes the browser before this same-origin route
+ * is reached. This module never contains, reads, or derives a Vercel Blob credential, collection
+ * secret, or browser upload token.
  */
 
 export const CAPTURE_INGEST_PATH = '/api/capture-ingest';
 export const MAX_CAPTURE_IMAGE_BYTES = 3_500_000;
 export const MAX_CAPTURE_JSON_BYTES = 196_608;
-export const MIN_COLLECTION_KEY_LENGTH = 32;
 
 export type CaptureVaultAssetKind = 'image' | 'manifest' | 'annotations';
 export type CaptureVaultAvailability = 'checking' | 'ready' | 'not-configured' | 'unavailable';
@@ -21,7 +20,6 @@ export interface CaptureVaultStatus {
 }
 
 export interface UploadPrivateCaptureAssetInput {
-  collectionKey: string;
   captureId: string;
   recordId: string;
   kind: CaptureVaultAssetKind;
@@ -47,10 +45,6 @@ export class CaptureVaultError extends Error {
   }
 }
 
-export function hasUsableCollectionKey(value: string): boolean {
-  return value.trim().length >= MIN_COLLECTION_KEY_LENGTH;
-}
-
 export async function getCaptureVaultStatus(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<CaptureVaultStatus> {
@@ -67,8 +61,8 @@ export async function getCaptureVaultStatus(
   }
 
   const payload = await responseJson(response);
-  // A deployed but intentionally unconfigured Function returns its bounded status as 503. Treat
-  // that as an honest local-only state rather than pretending cloud storage is available.
+  // A deployed but intentionally unconfigured Function returns its bounded status as 503. Surface
+  // that honestly so the Lab can fail closed rather than inviting a capture it cannot save.
   if (!isCaptureVaultStatus(payload) || (!response.ok && response.status !== 503)) {
     throw new CaptureVaultError(
       messageFromPayload(
@@ -82,18 +76,12 @@ export async function getCaptureVaultStatus(
 }
 
 export async function uploadPrivateCaptureAsset({
-  collectionKey,
   captureId,
   recordId,
   kind,
   body,
   fetchImplementation = fetch,
 }: UploadPrivateCaptureAssetInput): Promise<UploadedPrivateCaptureAsset> {
-  if (!hasUsableCollectionKey(collectionKey)) {
-    throw new CaptureVaultError(
-      `Enter the ${MIN_COLLECTION_KEY_LENGTH}-character private collection key before saving.`,
-    );
-  }
   if (body.size === 0) throw new CaptureVaultError('This capture file is empty and was not sent.');
   if (kind === 'image' && body.size > MAX_CAPTURE_IMAGE_BYTES) {
     throw new CaptureVaultError(
@@ -113,7 +101,6 @@ export async function uploadPrivateCaptureAsset({
       headers: {
         Accept: 'application/json',
         'Content-Type': kind === 'image' ? 'image/jpeg' : 'application/json',
-        'X-Darts180-Collection-Key': collectionKey.trim(),
         'X-Darts180-Capture-Id': captureId,
         'X-Darts180-Record-Id': recordId,
         'X-Darts180-Asset-Kind': kind,

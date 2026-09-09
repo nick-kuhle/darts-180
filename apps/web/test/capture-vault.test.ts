@@ -5,25 +5,16 @@ import {
   CAPTURE_INGEST_PATH,
   CaptureVaultError,
   getCaptureVaultStatus,
-  hasUsableCollectionKey,
   uploadPrivateCaptureAsset,
 } from '../src/lib/captureVault.js';
 
-const COLLECTION_KEY = 'k'.repeat(32);
 const CAPTURE_ID = 'cap_0123456789abcdef0123456789abcdef';
 const RECORD_ID = 'record_0123456789abcdef0123456789abcdef';
 
-test('private capture client never treats a short collection key as usable', () => {
-  assert.equal(hasUsableCollectionKey(''), false);
-  assert.equal(hasUsableCollectionKey('k'.repeat(31)), false);
-  assert.equal(hasUsableCollectionKey(`  ${COLLECTION_KEY}  `), true);
-});
-
-test('private capture client sends a bounded same-origin JPEG request with the operator key only in a request header', async () => {
+test('private capture client sends a bounded same-origin JPEG request without a browser credential', async () => {
   let requestUrl: string | URL | Request | undefined;
   let request: RequestInit | undefined;
   const result = await uploadPrivateCaptureAsset({
-    collectionKey: COLLECTION_KEY,
     captureId: CAPTURE_ID,
     recordId: RECORD_ID,
     kind: 'image',
@@ -50,7 +41,8 @@ test('private capture client sends a bounded same-origin JPEG request with the o
   assert.equal(headers.get('x-darts180-capture-id'), CAPTURE_ID);
   assert.equal(headers.get('x-darts180-record-id'), RECORD_ID);
   assert.equal(headers.get('x-darts180-asset-kind'), 'image');
-  assert.equal(headers.get('x-darts180-collection-key'), COLLECTION_KEY);
+  assert.equal(headers.get('x-darts180-collection-key'), null);
+  assert.equal(headers.get('authorization'), null);
   assert.equal(result.kind, 'image');
 });
 
@@ -75,17 +67,19 @@ test('private capture client understands the deliberate unconfigured status and 
 
   await assert.rejects(
     uploadPrivateCaptureAsset({
-      collectionKey: COLLECTION_KEY,
       captureId: CAPTURE_ID,
       recordId: RECORD_ID,
       kind: 'manifest',
       body: new Blob(['{}'], { type: 'application/json' }),
       fetchImplementation: async () =>
-        Response.json({ error: 'Private collection key was not accepted.' }, { status: 401 }),
+        Response.json(
+          { error: 'Private capture saves must come from this Darts 180 site.' },
+          { status: 403 },
+        ),
     }),
     (error: unknown) =>
       error instanceof CaptureVaultError &&
-      error.status === 401 &&
-      error.message === 'Private collection key was not accepted.',
+      error.status === 403 &&
+      error.message === 'Private capture saves must come from this Darts 180 site.',
   );
 });

@@ -13,7 +13,6 @@ import {
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 import {
   getCaptureVaultStatus,
-  hasUsableCollectionKey,
   uploadPrivateCaptureAsset,
   type CaptureVaultAssetKind,
   type CaptureVaultAvailability,
@@ -105,12 +104,15 @@ const TARGET_JPEG_BYTES = 3_200_000;
 /**
  * The deliberately separate collection route. Normal Live Scoring never enters this component,
  * asks for anchors, or uploads media. Data Lab makes a consented first-model sample in one short
- * sequence: choose a kind, photograph it, tap its known points, then explicitly save it.
+ * sequence: choose a kind, photograph it, tap its known points, then automatically save the reviewed
+ * matched record to the protected private collection.
  */
 export function DataLab() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const automaticSaveStartedRef = useRef(false);
+  const automaticUploadAttemptedRecordRef = useRef<string | null>(null);
   const uploadInFlightRef = useRef(false);
 
   const [step, setStep] = useState<DataLabStep>('capture');
@@ -126,7 +128,6 @@ export function DataLab() {
   const [annotationReviewed, setAnnotationReviewed] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [vaultAvailability, setVaultAvailability] = useState<CaptureVaultAvailability>('checking');
-  const [collectionKey, setCollectionKey] = useState('');
   const [assetStates, setAssetStates] =
     useState<Record<CaptureVaultAssetKind, AssetSaveState>>(INITIAL_ASSET_STATES);
   const [storageRecordId, setStorageRecordId] = useState<string | null>(null);
@@ -173,6 +174,10 @@ export function DataLab() {
   }, []);
 
   const startCamera = async () => {
+    if (vaultAvailability !== 'ready') {
+      setCameraError(messageForCollectionAvailability(vaultAvailability));
+      return;
+    }
     const preflight = getCameraAccessPreflightMessage();
     if (preflight !== null) {
       setCameraError(preflight);
@@ -208,6 +213,10 @@ export function DataLab() {
   };
 
   const captureStill = async () => {
+    if (vaultAvailability !== 'ready') {
+      setCameraError(messageForCollectionAvailability(vaultAvailability));
+      return;
+    }
     if (!isValidSessionId(metadata.sessionId)) {
       setCameraError('The generated setup session ID is invalid. Start a new setup session.');
       return;
@@ -250,6 +259,8 @@ export function DataLab() {
         height: snapshot.height,
         manifest,
       });
+      automaticSaveStartedRef.current = false;
+      automaticUploadAttemptedRecordRef.current = null;
       setPrivacyConfirmed(false);
       setRightsConfirmed(false);
       setStorageRecordId(null);
@@ -278,6 +289,8 @@ export function DataLab() {
   };
 
   const retakeStill = () => {
+    automaticSaveStartedRef.current = false;
+    automaticUploadAttemptedRecordRef.current = null;
     setCaptured(null);
     setPrivacyConfirmed(false);
     setRightsConfirmed(false);
@@ -377,33 +390,12 @@ export function DataLab() {
     setAnnotationError(null);
   };
 
-  const enterSaveStep = () => {
-    if (!canFinishLabels) return;
-    setStorageRecordId(newStorageRecordId());
-    setAssetStates({ ...INITIAL_ASSET_STATES });
-    setUploadError(null);
-    setStep('save');
-  };
-
   const annotation = useMemo<AnnotationSidecar | null>(() => {
     if (captured === null || homography === null) return null;
     return createAnnotationSidecar(captured, anchors, homography, darts);
   }, [anchors, captured, darts, homography]);
 
-  const downloadLocalBackup = () => {
-    if (captured === null || annotation === null) return;
-    downloadBlob(captured.imageBlob, captured.manifest.imageFile);
-    downloadBlob(
-      new Blob([JSON.stringify(captured.manifest, null, 2)], { type: 'application/json' }),
-      `darts-180-${captured.manifest.captureId}-manifest.json`,
-    );
-    downloadBlob(
-      new Blob([JSON.stringify(annotation, null, 2)], { type: 'application/json' }),
-      `darts-180-${captured.manifest.captureId}-annotations.json`,
-    );
-  };
-
-  const uploadPrivateRecord = async () => {
+  const uploadPrivateRecord = useCallback(async () => {
     if (
       captured === null ||
       annotation === null ||
@@ -413,6 +405,7 @@ export function DataLab() {
     ) {
       return;
     }
+
     uploadInFlightRef.current = true;
     setUploadError(null);
     const assets: Array<{ kind: CaptureVaultAssetKind; body: Blob }> = [
@@ -432,7 +425,6 @@ export function DataLab() {
         if (assetStates[asset.kind] === 'saved') continue;
         setAssetStates((current) => ({ ...current, [asset.kind]: 'saving' }));
         await uploadPrivateCaptureAsset({
-          collectionKey,
           captureId: captured.manifest.captureId,
           recordId: storageRecordId,
           kind: asset.kind,
@@ -451,11 +443,42 @@ export function DataLab() {
     } finally {
       uploadInFlightRef.current = false;
     }
+  }, [annotation, assetStates, captured, storageRecordId, vaultAvailability]);
+
+  const enterSaveStep = () => {
+    if (!canFinishLabels || annotation === null || automaticSaveStartedRef.current) return;
+    automaticSaveStartedRef.current = true;
+    automaticUploadAttemptedRecordRef.current = null;
+    setStorageRecordId(newStorageRecordId());
+    setAssetStates({ ...INITIAL_ASSET_STATES });
+    setUploadError(null);
+    setStep('save');
   };
+
+  useEffect(() => {
+    if (
+      !automaticSaveStartedRef.current ||
+      step !== 'save' ||
+      captured === null ||
+      annotation === null ||
+      storageRecordId === null ||
+      vaultAvailability !== 'ready' ||
+      automaticUploadAttemptedRecordRef.current === storageRecordId
+    ) {
+      return;
+    }
+
+    // Effects can be replayed by React Strict Mode. Mark this record before starting the request so
+    // one completed review creates at most one automatic upload attempt; retry remains user-driven.
+    automaticUploadAttemptedRecordRef.current = storageRecordId;
+    void uploadPrivateRecord();
+  }, [annotation, captured, storageRecordId, step, uploadPrivateRecord, vaultAvailability]);
 
   const startAnotherSample = () => {
     const nextIntent =
       captured?.manifest.captureIntent === 'empty-board' ? 'static-dart' : metadata.captureIntent;
+    automaticSaveStartedRef.current = false;
+    automaticUploadAttemptedRecordRef.current = null;
     setMetadata((current) => ({ ...current, captureIntent: nextIntent }));
     setCaptured(null);
     setPrivacyConfirmed(false);
@@ -487,10 +510,11 @@ export function DataLab() {
         </div>
         <aside className="data-lab-privacy-card">
           <span>PRIVATE BY DEFAULT</span>
-          <strong>No audio. No automatic upload.</strong>
+          <strong>No audio. Save only after review.</strong>
           <p>
             Keep people and personal room details out of frame. A photo stays in this tab until you
-            review it and deliberately choose a save location.
+            complete the label review; then its matched record saves automatically to the protected
+            private collection.
           </p>
         </aside>
       </header>
@@ -513,8 +537,8 @@ export function DataLab() {
         <li className={step === 'save' ? 'active' : ''}>
           <span>3</span>
           <div>
-            <b>SAVE THE PAIR</b>
-            <small>Local backup or private storage</small>
+            <b>COMPLETE REVIEW</b>
+            <small>Automatic private save</small>
           </div>
         </li>
       </ol>
@@ -523,6 +547,7 @@ export function DataLab() {
         <CaptureStep
           cameraActive={cameraActive}
           cameraError={cameraError}
+          vaultAvailability={vaultAvailability}
           captured={captured}
           metadata={metadata}
           privacyConfirmed={privacyConfirmed}
@@ -539,6 +564,7 @@ export function DataLab() {
           onRightsConfirmed={setRightsConfirmed}
           onContinue={continueToLabels}
           onRetake={retakeStill}
+          onRefreshVault={() => void refreshVaultStatus()}
         />
       )}
 
@@ -577,17 +603,13 @@ export function DataLab() {
           capture={captured}
           annotation={annotation}
           vaultAvailability={vaultAvailability}
-          collectionKey={collectionKey}
           assetStates={assetStates}
           storageRecordId={storageRecordId}
           uploadError={uploadError}
           anyAssetSaving={anyAssetSaving}
           allAssetsSaved={allAssetsSaved}
-          onCollectionKey={setCollectionKey}
           onRefreshVault={() => void refreshVaultStatus()}
-          onDownload={downloadLocalBackup}
-          onUpload={() => void uploadPrivateRecord()}
-          onBack={() => setStep('label')}
+          onRetry={() => void uploadPrivateRecord()}
           onStartAnother={startAnotherSample}
         />
       )}
@@ -598,6 +620,7 @@ export function DataLab() {
 function CaptureStep({
   cameraActive,
   cameraError,
+  vaultAvailability,
   captured,
   metadata,
   privacyConfirmed,
@@ -612,9 +635,11 @@ function CaptureStep({
   onRightsConfirmed,
   onContinue,
   onRetake,
+  onRefreshVault,
 }: {
   cameraActive: boolean;
   cameraError: string | null;
+  vaultAvailability: CaptureVaultAvailability;
   captured: CapturedStill | null;
   metadata: CaptureMetadata;
   privacyConfirmed: boolean;
@@ -632,8 +657,10 @@ function CaptureStep({
   onRightsConfirmed: (checked: boolean) => void;
   onContinue: () => void;
   onRetake: () => void;
+  onRefreshVault: () => void;
 }) {
   const intentIsBlank = metadata.captureIntent === 'empty-board';
+  const collectionReady = vaultAvailability === 'ready';
   return (
     <div className="data-lab-grid">
       <section className="data-lab-camera-panel">
@@ -652,6 +679,23 @@ function CaptureStep({
           Keep the whole number ring sharp and in frame. Use a safe mount outside the throw path;
           the Lab takes a still only, never audio or video.
         </p>
+        {!collectionReady && (
+          <section className="data-lab-collection-readiness" aria-live="polite">
+            <div>
+              <p className="eyebrow">PROTECTED PRIVATE COLLECTION</p>
+              <strong>{privateStorageHeading(vaultAvailability, false)}</strong>
+              <p>{privateStorageDescription(vaultAvailability)}</p>
+            </div>
+            <button
+              className="text-button"
+              disabled={vaultAvailability === 'checking'}
+              onClick={onRefreshVault}
+              type="button"
+            >
+              CHECK AGAIN
+            </button>
+          </section>
+        )}
         <div className="camera-frame data-lab-camera-frame">
           <video ref={videoRef} autoPlay muted playsInline />
           {!cameraActive && (
@@ -677,7 +721,7 @@ function CaptureStep({
           {!cameraActive ? (
             <button
               className="button primary"
-              disabled={captured !== null}
+              disabled={captured !== null || !collectionReady}
               onClick={onStartCamera}
               type="button"
             >
@@ -685,7 +729,12 @@ function CaptureStep({
             </button>
           ) : (
             <>
-              <button className="button primary" onClick={onTakeStill} type="button">
+              <button
+                className="button primary"
+                disabled={!collectionReady}
+                onClick={onTakeStill}
+                type="button"
+              >
                 TAKE THIS PHOTO
               </button>
               <button className="button ghost compact" onClick={onStopCamera} type="button">
@@ -1043,7 +1092,7 @@ function LabelStep({
           onClick={onContinue}
           type="button"
         >
-          NEXT · REVIEW SAVE
+          COMPLETE REVIEW · AUTO-SAVE
         </button>
       </aside>
     </div>
@@ -1054,48 +1103,42 @@ function SaveStep({
   capture,
   annotation,
   vaultAvailability,
-  collectionKey,
   assetStates,
   storageRecordId,
   uploadError,
   anyAssetSaving,
   allAssetsSaved,
-  onCollectionKey,
   onRefreshVault,
-  onDownload,
-  onUpload,
-  onBack,
+  onRetry,
   onStartAnother,
 }: {
   capture: CapturedStill;
   annotation: AnnotationSidecar;
   vaultAvailability: CaptureVaultAvailability;
-  collectionKey: string;
   assetStates: Record<CaptureVaultAssetKind, AssetSaveState>;
   storageRecordId: string | null;
   uploadError: string | null;
   anyAssetSaving: boolean;
   allAssetsSaved: boolean;
-  onCollectionKey: (value: string) => void;
   onRefreshVault: () => void;
-  onDownload: () => void;
-  onUpload: () => void;
-  onBack: () => void;
+  onRetry: () => void;
   onStartAnother: () => void;
 }) {
   const isBlankBoard = capture.manifest.captureIntent === 'empty-board';
-  const cloudReady = vaultAvailability === 'ready';
+  const isConfigured = vaultAvailability === 'ready';
+  const hasFailedAsset = Object.values(assetStates).some((state) => state === 'failed');
+
   return (
     <div className="data-lab-save-layout">
       <section className="data-lab-save-summary">
-        <p className="eyebrow">STEP 3 · REVIEW THE PAIR</p>
+        <p className="eyebrow">STEP 3 · REVIEWED RECORD</p>
         <h2>
           {isBlankBoard
-            ? 'Blank board labels are ready.'
-            : `${annotation.darts.length} dart test label${annotation.darts.length === 1 ? '' : 's'} ready.`}
+            ? 'Blank board labels are reviewed.'
+            : `${annotation.darts.length} dart test label${annotation.darts.length === 1 ? '' : 's'} reviewed.`}
         </h2>
         <div className="data-lab-save-summary-card">
-          <img alt="Reviewed board still ready to save" src={capture.imageUrl} />
+          <img alt="Reviewed board still being saved privately" src={capture.imageUrl} />
           <div>
             <strong>{capture.manifest.imageFile}</strong>
             <span>Session: {capture.manifest.sessionId}</span>
@@ -1108,99 +1151,68 @@ function SaveStep({
           </div>
         </div>
         <p className="data-lab-save-summary-note">
-          The two JSON files keep the photo, consent attestation, setup session, and manual labels
-          together. Saving does not train, activate, or claim a camera model.
+          Your completed acknowledgement began a private save of the JPEG, consent-backed manifest,
+          and annotation sidecar together. This does not train, activate, or claim a camera model.
         </p>
-        <button className="text-button" onClick={onBack} type="button">
-          ← BACK TO LABELS
-        </button>
       </section>
 
       <section className="data-lab-save-options">
-        <article className="data-lab-save-option">
-          <div>
-            <p className="eyebrow">OPTION A · LOCAL BACKUP</p>
-            <h2>Download the matched trio.</h2>
-          </div>
-          <p>
-            Downloads one JPEG, one capture manifest, and one annotation sidecar. Store all three in
-            an approved folder outside Git.
-          </p>
-          <button className="button secondary" onClick={onDownload} type="button">
-            DOWNLOAD LOCAL BACKUP
-          </button>
-        </article>
-
         <article className="data-lab-save-option private">
           <div className="data-lab-save-option-head">
             <div>
-              <p className="eyebrow">OPTION B · PRIVATE VERCEL STORAGE</p>
+              <p className="eyebrow">PROTECTED PRIVATE COLLECTION</p>
               <h2>{privateStorageHeading(vaultAvailability, allAssetsSaved)}</h2>
             </div>
             <span className={`data-lab-storage-state ${vaultAvailability}`}>
               {privateStorageLabel(vaultAvailability, allAssetsSaved)}
             </span>
           </div>
+
           {allAssetsSaved ? (
             <>
               <p>
-                This record is confirmed in the private Blob store. No image URL is displayed or
-                made public by this app.
+                This reviewed record is confirmed in the private Blob store. No image URL is
+                displayed or made public by this app.
               </p>
               <AssetStatusList states={assetStates} />
               <button className="button primary" onClick={onStartAnother} type="button">
                 {isBlankBoard ? 'NEXT · ADD A DART TEST' : 'ADD ANOTHER PHOTO'}
               </button>
             </>
-          ) : (
+          ) : !isConfigured ? (
             <>
               <p>{privateStorageDescription(vaultAvailability)}</p>
-              {cloudReady && (
-                <>
-                  <label className="data-lab-key-input">
-                    PRIVATE COLLECTION KEY
-                    <input
-                      autoCapitalize="none"
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={collectionKey}
-                      minLength={32}
-                      onChange={(event) => onCollectionKey(event.target.value)}
-                      placeholder="Enter once for this browser tab"
-                      type="password"
-                    />
-                    <small>
-                      This is a high-entropy key you create in Vercel. It stays only in this tab and
-                      is never placed in the app bundle or a download.
-                    </small>
-                  </label>
-                  <AssetStatusList states={assetStates} />
-                  {uploadError !== null && (
-                    <p className="annotation-error" role="alert">
-                      {uploadError}
-                    </p>
-                  )}
-                  <button
-                    className="button primary"
-                    disabled={
-                      !hasUsableCollectionKey(collectionKey) ||
-                      anyAssetSaving ||
-                      storageRecordId === null
-                    }
-                    onClick={onUpload}
-                    type="button"
-                  >
-                    {anyAssetSaving
-                      ? 'SAVING PRIVATELY…'
-                      : Object.values(assetStates).some((state) => state === 'failed')
-                        ? 'RETRY UNSAVED FILE'
-                        : 'SAVE TO PRIVATE STORAGE'}
-                  </button>
-                </>
+              <p className="data-lab-save-summary-note">
+                This reviewed record remains only in this browser while collection setup is
+                unavailable. It has not been sent anywhere.
+              </p>
+              <button className="text-button" onClick={onRefreshVault} type="button">
+                CHECK PRIVATE COLLECTION AGAIN
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                {anyAssetSaving
+                  ? 'Saving the matched private record now. Keep this tab open until each item is confirmed.'
+                  : hasFailedAsset
+                    ? 'A private save was not confirmed. Retry only the unsaved item; already confirmed items remain immutable.'
+                    : 'Preparing the reviewed private record for automatic save.'}
+              </p>
+              <AssetStatusList states={assetStates} />
+              {uploadError !== null && (
+                <p className="annotation-error" role="alert">
+                  {uploadError}
+                </p>
               )}
-              {!cloudReady && (
-                <button className="text-button" onClick={onRefreshVault} type="button">
-                  CHECK PRIVATE STORAGE AGAIN
+              {hasFailedAsset && (
+                <button
+                  className="button primary"
+                  disabled={anyAssetSaving || storageRecordId === null}
+                  onClick={onRetry}
+                  type="button"
+                >
+                  RETRY UNSAVED FILE
                 </button>
               )}
             </>
@@ -1376,17 +1388,6 @@ function round(value: number, decimalPlaces: number): number {
   return Number(value.toFixed(decimalPlaces));
 }
 
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 function messageForSnapshotError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return 'The board still could not be taken. No photo was stored.';
@@ -1395,11 +1396,11 @@ function messageForSnapshotError(error: unknown): string {
 function messageForUploadError(error: unknown): string {
   if (error instanceof Error && error.message) {
     if (error.message.includes('already exists')) {
-      return `${error.message} Keep the local backup; do not send a different file under this record.`;
+      return `${error.message} Keep this tab open; do not send a different file under this record.`;
     }
     return error.message;
   }
-  return 'Private storage did not confirm this file. Keep a local backup and retry only the unsaved file.';
+  return 'Private storage did not confirm this file. Keep this tab open and retry only the unsaved file.';
 }
 
 function assetStateLabel(state: AssetSaveState): string {
@@ -1420,10 +1421,10 @@ function privateStorageHeading(
   allAssetsSaved: boolean,
 ): string {
   if (allAssetsSaved) return 'Saved privately.';
-  if (availability === 'ready') return 'Save this reviewed trio privately.';
-  if (availability === 'checking') return 'Checking private storage…';
-  if (availability === 'not-configured') return 'Private storage is not set up yet.';
-  return 'Private storage is unavailable here.';
+  if (availability === 'ready') return 'Saving this reviewed record privately.';
+  if (availability === 'checking') return 'Checking the protected private collection…';
+  if (availability === 'not-configured') return 'Private collection setup is incomplete.';
+  return 'The protected private collection is unavailable.';
 }
 
 function privateStorageLabel(
@@ -1434,16 +1435,28 @@ function privateStorageLabel(
   if (availability === 'ready') return 'READY';
   if (availability === 'checking') return 'CHECKING';
   if (availability === 'not-configured') return 'SETUP NEEDED';
-  return 'LOCAL MODE';
+  return 'UNAVAILABLE';
 }
 
 function privateStorageDescription(availability: CaptureVaultAvailability): string {
   if (availability === 'ready') {
     return 'The JPEG and both JSON records go through the same-origin guarded intake Function into a private Blob store. The app never exposes a Blob credential or public image link.';
   }
-  if (availability === 'checking') return 'Looking for the optional private storage service.';
-  if (availability === 'not-configured') {
-    return 'This deployment is intentionally fail-closed until a private Blob store and a strong server-only collection key are configured. Local download still works.';
+  if (availability === 'checking') {
+    return 'Checking whether this protected deployment can reach its private collection. Camera capture stays disabled until that check succeeds.';
   }
-  return 'This page cannot reach the private intake Function. Use local backup here, or open the deployed Darts 180 URL after its storage setup is complete.';
+  if (availability === 'not-configured') {
+    return 'This deployment is fail-closed until its private Blob store and protected owner-access mode are configured. Camera capture stays disabled; no record can be saved here.';
+  }
+  return 'This page cannot reach the protected private intake Function. Camera capture stays disabled until the deployment and its private collection are available.';
+}
+
+function messageForCollectionAvailability(availability: CaptureVaultAvailability): string {
+  if (availability === 'checking') {
+    return 'Checking the protected private collection. Wait for it to be ready before using the camera.';
+  }
+  if (availability === 'not-configured') {
+    return 'Private collection setup is incomplete on this protected deployment. Camera capture is disabled.';
+  }
+  return 'The protected private collection is unavailable. Camera capture is disabled until it is reachable.';
 }

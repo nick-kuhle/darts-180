@@ -3,10 +3,9 @@
 **Purpose:** deploy the web-first Darts 180 application through the existing Vercel project and URL,
 without overstating the status of its camera scorer.
 
-**Snapshot:** 2026-09-08 (America/Los_Angeles). The user reports PR #11 merged; authenticated Git fetch
-verified `origin/main` at `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6`.
-[Draft PR #12](https://github.com/nick-kuhle/darts-180/pull/12) contains the learned-runtime follow-up and
-is not deployed. GitHub Actions/checks and Vercel deployment status remain unverified from this environment.
+**Snapshot:** 2026-09-08 (America/Los_Angeles). This workspace has no configured Git remote, deployment
+credential, or Vercel project connection. No GitHub Actions result, deployed Function behavior, Deployment
+Protection configuration, Blob/OIDC behavior, or real-device camera behavior has been verified here.
 
 ## What this web branch delivers
 
@@ -26,8 +25,10 @@ is not deployed. GitHub Actions/checks and Vercel deployment status remain unver
 - an inspectable **Learned Vision Diagnostics** page, which reports runtime/model gates but is not an
   alternate score engine; and
 - a clearly separate guided **Data Lab** for separately consented blank-board and dart-test examples.
-  It can download a local JPEG/manifest/annotation trio or, only after explicit owner setup, send that
-  reviewed trio through a same-origin guarded Function to a private Vercel Blob store.
+  On the Deployment-Protected owner deployment, it gates camera capture on private-intake readiness and,
+  after completed label review, automatically sends the reviewed JPEG/manifest/annotation trio through a
+  same-origin guarded Function to a private Vercel Blob store. It has no browser collection credential,
+  local-download path, or manual per-record Save control.
 
 The retired red/green color-fit and frame-difference Live Scoring components and scoring modules are no
 longer reachable or bundled by the product route. Their historical failure record is retained in
@@ -64,14 +65,14 @@ Keep the existing Vercel project and production URL. Do **not** create a replace
 URL at a different app. The repository has equivalent root and `apps/web` Vercel configurations so the
 existing project must continue to use:
 
-| Vercel setting                       | Required value                                                                                                                                           |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Root Directory                       | `apps/web`                                                                                                                                               |
-| Include files outside Root Directory | enabled                                                                                                                                                  |
-| Install Command                      | `cd ../.. && npm ci`                                                                                                                                     |
-| Build Command                        | `cd ../.. && npm run build --workspace=@darts-180/web`                                                                                                   |
-| Output Directory                     | `dist`                                                                                                                                                   |
-| Environment variables                | For optional private Data Lab only: Vercel's server-only Blob connection variables + `DARTS180_CAPTURE_UPLOAD_SECRET`; never a `VITE_` Blob/key variable |
+| Vercel setting                       | Required value                                                                                                                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root Directory                       | `apps/web`                                                                                                                                                                            |
+| Include files outside Root Directory | enabled                                                                                                                                                                               |
+| Install Command                      | `cd ../.. && npm ci`                                                                                                                                                                  |
+| Build Command                        | `cd ../.. && npm run build --workspace=@darts-180/web`                                                                                                                                |
+| Output Directory                     | `dist`                                                                                                                                                                                |
+| Environment variables                | For owner-only Data Lab: linked private Blob store (`BLOB_STORE_ID`) + exact server-only `DARTS180_CAPTURE_ACCESS_MODE=vercel-protected-owner-v1`; never a `VITE_` Blob/auth variable |
 
 The build emits a same-origin module Worker and ONNX Runtime Web's WASM asset. Both `vercel.json` files
 therefore preserve the restrictive camera/privacy policy while explicitly permitting only what this runtime
@@ -91,17 +92,23 @@ The deployed runtime currently bundles approximately 27.8 MB of uncompressed ONN
 first-load performance, cache behavior, memory, thermal state, and CSP behavior as real-device acceptance
 criteria, not merely a Vite build success.
 
-## Optional private Data Lab storage
+## Protected owner-only Data Lab storage
 
 The app-root and repository-root configurations both include the same `api/capture-ingest` Function so the
 existing Vercel project can keep its current Root Directory configuration. It is not a public media endpoint:
-it stores only explicitly reviewed bounded JPEG/JSON assets in a **private** Blob store, accepts writes only
-with a strong server-only collection key, and exposes no browser read/list route. Until both the Blob
-connection and `DARTS180_CAPTURE_UPLOAD_SECRET` exist, it returns an honest local-only state.
+it accepts only completed-review bounded JPEG/JSON assets, writes them to a **private** Blob store, and
+exposes no browser read/list/download route. It reports ready only when the exact owner-access-mode
+acknowledgement and linked `BLOB_STORE_ID` are present; otherwise the Lab fail-closes and disables camera
+capture.
 
-Follow [`20-private-capture-lab.md`](20-private-capture-lab.md) for the exact Vercel setup, access-control
-boundary, retry behavior, storage retrieval, and limitations. Do not place `BLOB_READ_WRITE_TOKEN` or the
-collection key in a `VITE_` environment variable, repository, browser storage, or support message.
+**Vercel Deployment Protection is mandatory for this selected sole-owner collector.** Configure it to stop
+unauthenticated visitors at Vercel's edge before they can reach the page or Function. The owner-mode
+variable merely acknowledges that operating model; it is not a token or substitute for future application
+authentication. The browser sends no Blob credential, collection key, or `Authorization` header.
+
+Follow [`20-private-capture-lab.md`](20-private-capture-lab.md) for exact setup, edge-access verification,
+retry behavior, controlled retrieval, and limitations. Do not place a Blob credential, protection bypass
+secret, or any auth value in a `VITE_` variable, repository, browser storage, or support message.
 
 ## Deploying the follow-up safely
 

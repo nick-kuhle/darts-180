@@ -5,8 +5,8 @@
 uncontrolled video dataset.
 
 For a guided browser still, follow the more specific [Data Lab capture and private intake workflow](capture-lab.md).
-It does not replace this controlled, consented field protocol. Its optional private save is a guarded,
-owner-configured intake path—not an informal/public upload path.
+It does not replace this controlled, consented field protocol. Its completed-review automatic private
+save is a guarded, Deployment-Protected owner-only intake path—not an informal/public upload path.
 
 ## Stop conditions
 

@@ -16,17 +16,17 @@
 
 ## 2. Data inventory and default handling
 
-| Data category         | Examples                                   | Default            | Security / retention                                                                            |
-| --------------------- | ------------------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------- |
-| Gameplay              | scores, visits, rules, local player names  | on device          | encrypted platform storage; user export/delete                                                  |
-| Camera permission     | device-level permission state              | device OS          | do not infer consent from it                                                                    |
-| Calibration           | homography, board profile, quality stats   | device             | no image necessary; expire/recalibrate                                                          |
-| Live frames           | preview/inference buffers                  | memory only        | no network; bounded ring buffer; erase on session end                                           |
-| Replay clip           | board crop around a disputed dart          | off by default     | local short-lived; share only explicit opt-in                                                   |
-| ML contribution       | redacted crop/label/prediction/correction  | opt-in             | consent version, purpose, lifecycle, deletion path                                              |
-| Data Lab raw intake   | board-only JPEG + manifest + manual labels | explicit save only | private Vercel Blob; same-origin guarded write; no app read/list URL; operator retention review |
-| Account               | email/passkey subject/profile              | optional           | least privilege, encryption, access audit                                                       |
-| Operational telemetry | latency/error/quality aggregates           | policy controlled  | no raw frames; sampled/aggregated                                                               |
+| Data category         | Examples                                   | Default                                     | Security / retention                                                                                                                       |
+| --------------------- | ------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Gameplay              | scores, visits, rules, local player names  | on device                                   | encrypted platform storage; user export/delete                                                                                             |
+| Camera permission     | device-level permission state              | device OS                                   | do not infer consent from it                                                                                                               |
+| Calibration           | homography, board profile, quality stats   | device                                      | no image necessary; expire/recalibrate                                                                                                     |
+| Live frames           | preview/inference buffers                  | memory only                                 | no network; bounded ring buffer; erase on session end                                                                                      |
+| Replay clip           | board crop around a disputed dart          | off by default                              | local short-lived; share only explicit opt-in                                                                                              |
+| ML contribution       | redacted crop/label/prediction/correction  | opt-in                                      | consent version, purpose, lifecycle, deletion path                                                                                         |
+| Data Lab raw intake   | board-only JPEG + manifest + manual labels | automatic only after completed label review | owner-only Deployment-Protected Vercel + private Blob; same-origin guarded write; no app read/list/download URL; operator retention review |
+| Account               | email/passkey subject/profile              | optional                                    | least privilege, encryption, access audit                                                                                                  |
+| Operational telemetry | latency/error/quality aggregates           | policy controlled                           | no raw frames; sampled/aggregated                                                                                                          |
 
 Never collect audio for dart scoring. Avoid device advertising IDs. Do not attach raw room video to
 an ordinary crash report or analytics event.
@@ -74,15 +74,17 @@ remove path.
 
 ### Controlled Data Lab pilot intake
 
-The current Data Lab private-save path is a narrow single-owner development pilot, not the product's future
-multi-user media platform. It is disabled unless a private Blob store and a server-only high-entropy collection
-key are configured. The browser never receives a Blob credential or a public URL; it uploads only an explicitly
-reviewed bounded JPEG plus paired JSON to a same-origin Function. The Function permits no browser read/list
-operation. The collection key stays only in page memory and is required independently of Vercel deployment
-protection.
+The current Data Lab intake is a narrow single-owner development pilot, not the product's future multi-user
+media platform. It is disabled unless the existing deployment is protected at Vercel's edge, a private Blob
+store is linked, and exact server-only
+`DARTS180_CAPTURE_ACCESS_MODE=vercel-protected-owner-v1` is set. The browser never receives a Blob credential,
+a public URL, a collection key, or a direct-upload token. It uploads an explicitly reviewed bounded JPEG plus
+paired JSON only through the same-origin Function, automatically after the final label acknowledgement. The
+Function permits no browser read/list/download operation.
 
-Before a wider tester program, replace this shared operator key with reviewed account authorization, data-access
-audit logging, subject deletion/withdrawal operations, rate limits, retention automation, and an approved
+Vercel Deployment Protection is the selected sole-owner gate, not application authentication. Before a wider
+tester program, replace this narrow deployment assumption with reviewed account authorization, data-access audit
+logging, subject deletion/withdrawal operations, rate limits, retention automation, and an approved
 annotation/review workspace. See [`20-private-capture-lab.md`](20-private-capture-lab.md).
 
 ## 5. Security architecture controls

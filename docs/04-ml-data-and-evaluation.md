@@ -77,17 +77,19 @@ accuracy for the matrix slices.
    duplicate/perceptual-hash checks, and manifest schema validation.
 
 Raw board captures should be collected in a controlled workstream, not committed to Git. The guided
-web **Data Lab** records a pseudonymous setup/session group, takes one local JPEG, requires explicit
-self-capture/use confirmation, then guides the source-compatible five-point labels in the same
-separate development flow. A contributor can download the matched trio locally or—only after a
-private Vercel Blob store and server-only collection key are configured—explicitly save it through
-the guarded same-origin intake Function. The local compiler rejects the wrong profile, accepts
-explicit blank-board anchor-only records, requires at least one real dart label overall, and preserves
-whole setup sessions in train/validation/test. In the separate five-point development Live Scoring
-path, a tester may opt in to hold a bounded local JPEG plus actual detector record in page memory,
-then explicitly download it only after confirming/correcting the DartCard. That export is a
-convenient intake bundle—not automatically consented, independently labeled, or ready to train. The
-Python `data_contract.py` validator and synthetic generator exercise the same metadata/geometry path.
+web **Data Lab** is an owner-only workflow on a Vercel Deployment-Protected deployment. It records a
+pseudonymous setup/session group, gates camera use until the same-origin private intake is ready,
+takes one browser-held JPEG, requires explicit self-capture/use confirmation, then guides the
+source-compatible five-point labels. The final reviewed-label acknowledgement automatically saves
+its matched JPEG/manifest/sidecar trio through the guarded same-origin Function to private Blob;
+there is no Data Lab download, collection-key, or manual-save route. The local compiler rejects the
+wrong profile, accepts explicit blank-board anchor-only records, requires at least one real dart
+label overall, and preserves whole setup sessions in train/validation/test. In the separate
+five-point development Live Scoring path, a tester may opt in to hold a bounded local JPEG plus
+actual detector record in page memory, then explicitly download it only after
+confirming/correcting the DartCard. That separate export is a convenient intake bundle—not
+automatically consented, independently labeled, or ready to train. The Python `data_contract.py`
+validator and synthetic generator exercise the same metadata/geometry path.
 See `ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md), the
 [guided private Data Lab intake](20-private-capture-lab.md), the
 [development scorer contract](18-development-five-point-scorer.md), and

@@ -1,5 +1,5 @@
 import { BlobPreconditionFailedError, put } from '@vercel/blob';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import {
   CaptureIngestPolicyError,
@@ -28,11 +28,11 @@ export interface CaptureIngestHandlerDependencies {
 }
 
 /**
- * Private, opt-in intake for Data Lab's small JPEG + JSON triplets.
+ * Private owner-only intake for Data Lab's reviewed JPEG + JSON triplets.
  *
  * This is deliberately a server upload rather than a browser-to-Blob token exchange: raw capture
- * bytes are size-limited, validated, and authorized at one same-origin Function. The Blob token
- * stays in Vercel's server environment; the browser gets no Blob URL or read capability.
+ * bytes are size-limited and validated by one same-origin Function. Vercel Deployment Protection
+ * supplies the owner gate before it runs; the browser gets no Blob credential, URL, or read capability.
  */
 export function createCaptureIngestHandler({
   getEnvironment,
@@ -64,23 +64,16 @@ export function createCaptureIngestHandler({
       return json(
         {
           error:
-            'Private capture storage is not configured for this deployment. Save a local backup instead.',
+            'Private capture storage is not configured for this protected deployment. Capture remains disabled.',
         },
         503,
       );
     }
+    // Vercel Deployment Protection authenticates the sole collector before this Function is reached.
+    // The same-origin check is a second boundary against cross-site browser writes; this deliberately
+    // narrow owner mode is not a substitute for application accounts in a wider tester program.
     if (!isSameOriginBrowserRequest(request)) {
       return json({ error: 'Private capture saves must come from this Darts 180 site.' }, 403);
-    }
-    if (
-      !hasAuthorizedCollectionKey(
-        request.headers.get('X-Darts180-Collection-Key'),
-        environment.collectionSecret,
-      )
-    ) {
-      // Do not distinguish a missing versus incorrect key. Neither raw pixels nor Blob configuration
-      // leave the Function before this boundary succeeds.
-      return json({ error: 'Private collection key was not accepted.' }, 401);
     }
 
     const captureId = request.headers.get('X-Darts180-Capture-Id') ?? '';
@@ -156,7 +149,7 @@ export function createCaptureIngestHandler({
       return json(
         {
           error:
-            'Private storage could not confirm this file. Keep your local backup and retry only this file.',
+            'Private storage could not confirm this file. Keep this tab open and retry only this file.',
         },
         502,
       );
@@ -174,10 +167,10 @@ export function createCaptureIngestHandler({
 
 const captureIngest = createCaptureIngestHandler({
   getEnvironment: () => ({
-    collectionSecret: process.env.DARTS180_CAPTURE_UPLOAD_SECRET,
-    blobReadWriteToken: process.env.BLOB_READ_WRITE_TOKEN,
+    ownerAccessMode: process.env.DARTS180_CAPTURE_ACCESS_MODE,
+    // @vercel/blob resolves Vercel's rotating runtime OIDC token from the Function request context.
+    // The store ID is the deliberate configuration signal; this route never handles a Blob credential.
     blobStoreId: process.env.BLOB_STORE_ID,
-    vercelOidcToken: process.env.VERCEL_OIDC_TOKEN,
   }),
   putPrivateBlob: (pathname, body, options) => put(pathname, body, options),
 });
@@ -222,17 +215,6 @@ async function readBoundedBody(request: Request, maximumBytes: number): Promise<
     offset += chunk.byteLength;
   }
   return bytes.buffer;
-}
-
-function hasAuthorizedCollectionKey(
-  candidate: string | null,
-  expected: string | undefined,
-): boolean {
-  if (candidate === null || expected === undefined) return false;
-  // Hash both values first, so a different length does not bypass a constant-time comparison.
-  const candidateHash = createHash('sha256').update(candidate).digest();
-  const expectedHash = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(candidateHash, expectedHash);
 }
 
 function isSameOriginBrowserRequest(request: Request): boolean {

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   CAPTURE_BLOB_PREFIX,
   CaptureIngestPolicyError,
+  VERCEL_PROTECTED_OWNER_ACCESS_MODE,
   isCaptureIngestConfigured,
   normalizedContentType,
   validateCaptureIngestAsset,
@@ -37,40 +38,39 @@ function captureManifest(captureIntent: 'empty-board' | 'static-dart' = 'static-
   };
 }
 
-test('private capture storage stays disabled without both a strong collection secret and server Blob credentials', () => {
+test('private capture storage stays fail-closed unless protected owner mode and a Blob store are both configured', () => {
   assert.equal(
     isCaptureIngestConfigured({
-      collectionSecret: 'x'.repeat(31),
-      blobReadWriteToken: 'token',
-      blobStoreId: undefined,
-      vercelOidcToken: undefined,
+      ownerAccessMode: undefined,
+      blobStoreId: 'store_123',
     }),
     false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      collectionSecret: 'x'.repeat(32),
-      blobReadWriteToken: undefined,
+      ownerAccessMode: 'vercel-protected-owner-v0',
       blobStoreId: 'store_123',
-      vercelOidcToken: undefined,
     }),
     false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      collectionSecret: 'x'.repeat(32),
-      blobReadWriteToken: undefined,
-      blobStoreId: 'store_123',
-      vercelOidcToken: 'oidc',
+      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      blobStoreId: '   ',
     }),
-    true,
+    false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      collectionSecret: 'x'.repeat(32),
-      blobReadWriteToken: 'token',
-      blobStoreId: undefined,
-      vercelOidcToken: undefined,
+      ownerAccessMode: ` ${VERCEL_PROTECTED_OWNER_ACCESS_MODE} `,
+      blobStoreId: 'store_123',
+    }),
+    false,
+  );
+  assert.equal(
+    isCaptureIngestConfigured({
+      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      blobStoreId: 'store_123',
     }),
     true,
   );

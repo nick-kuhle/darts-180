@@ -3806,6 +3806,40 @@ h3 {
   line-height: 1.48;
 }
 
+.data-lab-collection-readiness {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px 13px;
+  border: 1px solid #80612c;
+  border-radius: 11px;
+  background: #211d13;
+}
+
+.data-lab-collection-readiness .eyebrow {
+  margin: 0 0 3px;
+  color: #f0ca83;
+}
+
+.data-lab-collection-readiness strong {
+  color: #f7e2b1;
+  font-size: 0.84rem;
+}
+
+.data-lab-collection-readiness p:not(.eyebrow) {
+  max-width: 510px;
+  margin: 4px 0 0;
+  color: #c4b897;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.data-lab-collection-readiness .text-button {
+  flex: 0 0 auto;
+}
+
 .data-lab-camera-frame {
   min-height: 335px;
 }
@@ -3909,7 +3943,6 @@ h3 {
 
 .data-lab-session-input,
 .data-lab-lighting-input,
-.data-lab-key-input,
 .data-lab-details label {
   display: grid;
   gap: 5px;
@@ -3921,7 +3954,6 @@ h3 {
 
 .data-lab-session-input input,
 .data-lab-lighting-input select,
-.data-lab-key-input input,
 .data-lab-details input {
   width: 100%;
   min-height: 39px;
@@ -3937,14 +3969,12 @@ h3 {
 
 .data-lab-session-input input:focus,
 .data-lab-lighting-input select:focus,
-.data-lab-key-input input:focus,
 .data-lab-details input:focus {
   border-color: #8fdcc1;
   box-shadow: 0 0 0 2px rgba(143, 220, 193, 0.18);
 }
 
-.data-lab-session-input small,
-.data-lab-key-input small {
+.data-lab-session-input small {
   color: #80998d;
   font-size: 0.63rem;
   font-weight: 650;
@@ -4224,10 +4254,6 @@ h3 {
   background: #2b2413;
 }
 
-.data-lab-key-input input {
-  letter-spacing: 0.04em;
-}
-
 .data-lab-asset-status {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -4332,6 +4358,11 @@ h3 {
 
   .data-lab-captured-card {
     grid-template-columns: 1fr;
+  }
+
+  .data-lab-collection-readiness {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .data-lab-captured-card > img {
