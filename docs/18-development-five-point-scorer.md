@@ -20,7 +20,7 @@ It does **not** permit an arbitrary guess. A suggestion exists only when one loc
 
 The timing-only luma cue can request a post-impact burst, but has no coordinate, tip, ring, sector, or
 score role. There is no color mask, frame-difference scorer, static/demo score, Roboflow hosted
-inference, remote image upload, calibration tap, or manual tip click in normal Camera Play.
+inference, remote image upload, calibration tap, or manual tip click in normal Live Scoring.
 
 Every development result is `review`. It cannot become `auto-score` through a UI setting, model policy,
 or confidence threshold. The player must explicitly **Confirm as shown** or correct each development
@@ -121,10 +121,12 @@ export is an intake aid, not sacred ground truth. A reviewer still applies conse
 redaction, independent labeling, duplicate checks, and dataset/split governance before it can train a
 future model.
 
-Before there is any model to make those suggestions, bootstrap real local throws through **Data Lab** and
-**Annotate** using the explicit **Five-point development model labels** scheme. That manual labeling is a
-controlled data-operation tool, not a normal Camera Play step. See
-[`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md).
+Before there is any model to make those suggestions, bootstrap real throws through the guided **Data Lab**
+using its explicit five-point rim-junction/tip labels. That manual labeling is a controlled data-operation
+tool, not a normal Live Scoring step. It can remain a local download or use the separately configured
+private intake route; neither option trains or activates a model. See
+[`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) and
+[`20-private-capture-lab.md`](20-private-capture-lab.md).
 
 ## 6. Local training/export handoff
 

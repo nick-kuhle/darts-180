@@ -160,7 +160,7 @@ real-world auto-scoring performance.
 
 ### 4.3.1 Implemented web-first learned runtime boundary
 
-The active web branch ships a new **Learned Camera Play** route instead of the former browser heuristic.
+The active web branch ships a new **Learned Live Scoring** route instead of the former browser heuristic.
 It starts a rear camera only after a player action, sends transferable high-resolution `ImageBitmap` frames
 to a same-origin module Worker, and never exposes calibration or tip-picking controls in normal play.
 

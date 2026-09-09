@@ -14,7 +14,7 @@ is not deployed. GitHub Actions/checks and Vercel deployment status remain unver
 
 - interactive standard-board manual input, 501, Cricket, correction-aware DartCards, checkout hints, and
   visit history;
-- **Camera Play**, the only normal camera route, built around a browser-local learned-vision pipeline:
+- **Live Scoring**, the only normal camera route, built around a browser-local learned-vision pipeline:
   `getUserMedia` → timing-only low-resolution cue → high-resolution transferable frame → Worker-owned
   ONNX Runtime → learned landmarks/tip/quality → canonical board geometry → deterministic rules →
   auto-score / review / abstain proposal;
@@ -25,9 +25,11 @@ is not deployed. GitHub Actions/checks and Vercel deployment status remain unver
   creation with single-threaded WASM fallback, serialized Worker requests, and resource cleanup;
 - an inspectable **Learned Vision Diagnostics** page, which reports runtime/model gates but is not an
   alternate score engine; and
-- local Capture and Annotation Labs for separately consented future research workflows.
+- a clearly separate guided **Data Lab** for separately consented blank-board and dart-test examples.
+  It can download a local JPEG/manifest/annotation trio or, only after explicit owner setup, send that
+  reviewed trio through a same-origin guarded Function to a private Vercel Blob store.
 
-The retired red/green color-fit and frame-difference Camera Play components and scoring modules are no
+The retired red/green color-fit and frame-difference Live Scoring components and scoring modules are no
 longer reachable or bundled by the product route. Their historical failure record is retained in
 [`15-browser-dart-field-remediation.md`](15-browser-dart-field-remediation.md); it must not be used to
 restore live scoring behavior.
@@ -36,7 +38,7 @@ restore live scoring behavior.
 
 `public/models/darts180-board-tip-v1.json` is an explicit schema-v2 unavailable placeholder. It names no ONNX
 artifact or checksum and carries an intentionally impossible, disabled policy rather than production evidence.
-Camera Play can still request a direct browser camera preview, but it displays **Verified model package required**
+Live Scoring can still request a direct browser camera preview, but it displays **Verified model package required**
 and records no score. This is intentional.
 
 A runnable artifact must be supplied only after all of the following are complete:
@@ -62,14 +64,14 @@ Keep the existing Vercel project and production URL. Do **not** create a replace
 URL at a different app. The repository has equivalent root and `apps/web` Vercel configurations so the
 existing project must continue to use:
 
-| Vercel setting                       | Required value                                         |
-| ------------------------------------ | ------------------------------------------------------ |
-| Root Directory                       | `apps/web`                                             |
-| Include files outside Root Directory | enabled                                                |
-| Install Command                      | `cd ../.. && npm ci`                                   |
-| Build Command                        | `cd ../.. && npm run build --workspace=@darts-180/web` |
-| Output Directory                     | `dist`                                                 |
-| Environment variables                | none for the static web application                    |
+| Vercel setting                       | Required value                                                                                                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root Directory                       | `apps/web`                                                                                                                                               |
+| Include files outside Root Directory | enabled                                                                                                                                                  |
+| Install Command                      | `cd ../.. && npm ci`                                                                                                                                     |
+| Build Command                        | `cd ../.. && npm run build --workspace=@darts-180/web`                                                                                                   |
+| Output Directory                     | `dist`                                                                                                                                                   |
+| Environment variables                | For optional private Data Lab only: Vercel's server-only Blob connection variables + `DARTS180_CAPTURE_UPLOAD_SECRET`; never a `VITE_` Blob/key variable |
 
 The build emits a same-origin module Worker and ONNX Runtime Web's WASM asset. Both `vercel.json` files
 therefore preserve the restrictive camera/privacy policy while explicitly permitting only what this runtime
@@ -77,7 +79,10 @@ needs:
 
 - `Permissions-Policy: camera=(self), microphone=(), geolocation=()`;
 - `media-src` for same-origin, `blob:`, and `mediastream:` browser camera presentation;
-- `connect-src 'self'` for the manifest/model/WASM fetches;
+- `connect-src 'self'` for the manifest/model/WASM fetches and the same-origin private Data Lab
+  Function (the browser does not connect directly to a Blob hostname);
+- an SPA fallback that explicitly excludes `/api/*`, so `/api/capture-ingest` remains a Vercel
+  Function rather than being rewritten to `index.html`;
 - `worker-src 'self' blob:` for the module Worker and any runtime helper worker; and
 - `script-src 'self' 'wasm-unsafe-eval'` for WebAssembly compilation. This is **not** general
   `'unsafe-eval'` and does not allow remote scripts.
@@ -85,6 +90,18 @@ needs:
 The deployed runtime currently bundles approximately 27.8 MB of uncompressed ONNX Runtime WASM. Treat
 first-load performance, cache behavior, memory, thermal state, and CSP behavior as real-device acceptance
 criteria, not merely a Vite build success.
+
+## Optional private Data Lab storage
+
+The app-root and repository-root configurations both include the same `api/capture-ingest` Function so the
+existing Vercel project can keep its current Root Directory configuration. It is not a public media endpoint:
+it stores only explicitly reviewed bounded JPEG/JSON assets in a **private** Blob store, accepts writes only
+with a strong server-only collection key, and exposes no browser read/list route. Until both the Blob
+connection and `DARTS180_CAPTURE_UPLOAD_SECRET` exist, it returns an honest local-only state.
+
+Follow [`20-private-capture-lab.md`](20-private-capture-lab.md) for the exact Vercel setup, access-control
+boundary, retry behavior, storage retrieval, and limitations. Do not place `BLOB_READ_WRITE_TOKEN` or the
+collection key in a `VITE_` environment variable, repository, browser storage, or support message.
 
 ## Deploying the follow-up safely
 
@@ -98,7 +115,7 @@ criteria, not merely a Vite build success.
    in-app browser cannot be used to validate a camera permission prompt.
 
 Until a runnable model release exists, the only expected direct-device result is: camera permission works
-when allowed, the local preview appears, and Camera Play accurately reports that it will not guess a score.
+when allowed, the local preview appears, and Live Scoring accurately reports that it will not guess a score.
 Do not turn that safety state into a fallback to the retired heuristic.
 
 ## Required verification
@@ -125,7 +142,7 @@ Worker/WASM CSP requirements. These are engineering checks, not a real-device sc
 ## Direct-device model-release test protocol
 
 After an approved model is installed, use the current flow in
-[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md): start camera, let Camera Play find
+[`14-browser-camera-field-test.md`](14-browser-camera-field-test.md): start camera, let Live Scoring find
 complete geometry automatically, arm the visit with an empty board, throw normally, and use DartCard
 correction for a review or abstention. Test every supported board/phone/environment slice against independent
 ground truth. Keep camera frames local unless a participant separately opts into the governed research

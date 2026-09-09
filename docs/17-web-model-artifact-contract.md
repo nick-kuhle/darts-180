@@ -99,7 +99,7 @@ provide separately consented and timed event evidence; they do not provide a boa
 
 ## 5. Schema-v2 calibration and decision policy
 
-`decisionPolicy` is a flat, model-release-owned object; it is never a hidden Camera Play UI threshold. The parser
+`decisionPolicy` is a flat, model-release-owned object; it is never a hidden Live Scoring UI threshold. The parser
 validates every finite range and requires `minReviewProbability ≤ minAutoScoreProbability`.
 
 | Policy fields                                                                                                                                     | Runtime use                                                                                                                                 |
@@ -156,7 +156,7 @@ Before adding a runnable artifact:
 - lock promotion thresholds from held-out data with confidence intervals, prioritizing unsafe auto-score rate over
   coverage.
 
-Normal Camera Play discards camera frames after local inference. Research-media upload, retention, deletion,
+Normal Live Scoring discards camera frames after local inference. Research-media upload, retention, deletion,
 access, and participant withdrawal require separately implemented consent and governance controls.
 
 The browser build must retain `connect-src 'self'`, `worker-src 'self' blob:`, and

@@ -25,6 +25,7 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 |  17 | [Web model artifact contract](17-web-model-artifact-contract.md)              | Binding production browser/native model boundary                      |
 |  18 | [Editable five-point development scorer](18-development-five-point-scorer.md) | Real learned editable test scoring without weakening production gates |
 |  19 | [Build the first camera model](19-build-the-first-camera-model.md)            | How real throws become the first editable development model           |
+|  20 | [Guided Data Lab / private capture intake](20-private-capture-lab.md)         | How the app collects private blank-board and dart-test examples       |
 
 ## Decision records
 
@@ -35,8 +36,8 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 ## Operating runbooks
 
 - [Controlled field capture](runbooks/field-capture.md)
-- [Capture Lab local workflow and approved handoff](runbooks/capture-lab.md)
-- [Local Annotation Lab workflow](runbooks/local-annotation.md)
+- [Guided Data Lab capture and private intake](runbooks/capture-lab.md)
+- [Data Lab manual-label workflow](runbooks/local-annotation.md)
 - [Scoring error / model-quality incident](runbooks/scoring-error-incident.md)
 - [Model release and rollback](runbooks/model-release-rollback.md)
 

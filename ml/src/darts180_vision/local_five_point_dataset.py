@@ -76,7 +76,7 @@ def compile_local_five_point_dataset(
 ) -> dict[str, Any]:
     """Create a deterministic, session-disjoint numeric five-class YOLO data set.
 
-    ``source_root`` is an approved local folder holding a JPEG beside each Annotation Lab
+    ``source_root`` is an approved local folder holding a JPEG beside each Data Lab
     ``*-annotations.json`` sidecar. It must not be the repository. ``output_directory`` must not
     overlap it; this protects source captures from the explicit ``--overwrite`` option.
     """
@@ -108,6 +108,10 @@ def compile_local_five_point_dataset(
         point_box_width_fraction=point_box_width_fraction,
         point_box_height_fraction=point_box_height_fraction,
     )
+    if not any(label.class_id == 0 for example in examples for label in example.labels):
+        raise LocalFivePointDatasetError(
+            "At least one reviewed dart label is required across the compilation; blank-board examples supplement, not replace, dart tests."
+        )
     split_by_capture = _assign_session_disjoint_splits(examples, split_seed)
 
     staging_directory = output_directory.parent / f".{output_directory.name}.staging-{uuid4().hex}"
@@ -191,7 +195,7 @@ def _load_examples(
     ]
     if not sidecars:
         raise LocalFivePointDatasetError(
-            "No Annotation Lab *-annotations.json sidecars were found under source_root."
+            "No Data Lab *-annotations.json sidecars were found under source_root."
         )
 
     examples: list[LocalFivePointExample] = []
@@ -250,8 +254,8 @@ def _load_example(
     image = _required_mapping(value.get("image"), sidecar_path, "image")
     if board.get("annotationMethod") != DEVELOPMENT_ANNOTATION_METHOD:
         raise LocalFivePointDatasetError(
-            f"{sidecar_path.name!r} was not made with the five-point development label scheme. "
-            "Choose Five-point development model labels in Annotate before exporting."
+            f"{sidecar_path.name!r} was not made with the required Five-point development model labels. "
+            "Relabel it with the Data Lab five-point workflow before exporting."
         )
     if board.get("annotationProfile") != DEVELOPMENT_ANNOTATION_PROFILE:
         raise LocalFivePointDatasetError(
@@ -300,6 +304,15 @@ def _load_example(
             f"{sidecar_path.name!r} image dimensions do not match the original annotation frame."
         )
 
+    dart_labels = _dart_labels(
+        value.get("darts"),
+        sidecar_path,
+        width=width,
+        height=height,
+        box_width=point_box_width_fraction,
+        box_height=point_box_height_fraction,
+        allow_empty=capture.get("captureIntent") == "empty-board",
+    )
     labels = [
         *_anchor_labels(
             board.get("anchors"),
@@ -309,14 +322,7 @@ def _load_example(
             box_width=point_box_width_fraction,
             box_height=point_box_height_fraction,
         ),
-        *_dart_labels(
-            value.get("darts"),
-            sidecar_path,
-            width=width,
-            height=height,
-            box_width=point_box_width_fraction,
-            box_height=point_box_height_fraction,
-        ),
+        *dart_labels,
     ]
     return LocalFivePointExample(
         capture_id=capture_id,
@@ -418,10 +424,17 @@ def _dart_labels(
     height: int,
     box_width: float,
     box_height: float,
+    allow_empty: bool,
 ) -> list[YoloPoint]:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise LocalFivePointDatasetError(f"{path.name!r} requires dart labels as an array.")
+    if not value:
+        if allow_empty:
+            # A reviewed blank-board still teaches the four semantic board anchors. It is valid only
+            # when its explicit capture intent says that no dart should be present.
+            return []
         raise LocalFivePointDatasetError(
-            f"{path.name!r} requires at least one reviewed dart label."
+            f"{path.name!r} requires at least one reviewed dart label unless it is an empty-board capture."
         )
     if len(value) > 3:
         raise LocalFivePointDatasetError(
@@ -553,6 +566,8 @@ def _write_compiled_dataset(
 
     record_rows: list[dict[str, Any]] = []
     counts = {"train": 0, "val": 0, "test": 0}
+    label_counts = {"dartEntryPoint": 0, "cal1": 0, "cal2": 0, "cal3": 0, "cal4": 0}
+    class_names = {0: "dartEntryPoint", 1: "cal1", 2: "cal2", 3: "cal3", 4: "cal4"}
     sessions_by_split: dict[str, set[str]] = {"train": set(), "val": set(), "test": set()}
     for example in sorted(examples, key=lambda item: item.capture_id):
         split = split_by_capture.get(example.capture_id)
@@ -571,6 +586,8 @@ def _write_compiled_dataset(
             encoding="utf-8",
         )
         counts[split] += 1
+        for label in example.labels:
+            label_counts[class_names[label.class_id]] += 1
         sessions_by_split[split].add(example.session_id)
         record_rows.append(
             {
@@ -636,6 +653,7 @@ def _write_compiled_dataset(
             "height": point_box_height_fraction,
         },
         "splitImageCounts": counts,
+        "labelCounts": label_counts,
         "splitSessionCounts": {
             split: len(sessions) for split, sessions in sessions_by_split.items()
         },
@@ -735,7 +753,7 @@ def _validate_point_box_fraction(value: float, name: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Compile reviewed local Annotation Lab pairs into a session-disjoint five-point YOLO data set."
+        description="Compile reviewed local Data Lab pairs into a session-disjoint five-point YOLO data set."
     )
     parser.add_argument(
         "source_root",

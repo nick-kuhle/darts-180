@@ -540,7 +540,7 @@ export function DeepDartsDevelopmentCameraPlay({
     <section className="shell learned-camera-play development-camera-play">
       <div className="camera-play-intro">
         <div>
-          <p className="eyebrow">CAMERA PLAY · EXPERIMENTAL LEARNED VISION</p>
+          <p className="eyebrow">LIVE SCORING · DEVELOPMENT LEARNED VISION</p>
           <h1>Point it. Get an editable model suggestion.</h1>
           <p>
             This development path finds a standard board and dart-entry point from the mounted rear

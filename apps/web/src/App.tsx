@@ -12,10 +12,9 @@ import {
 } from '@darts-180/rules';
 import { useMemo, useState } from 'react';
 
-import { AnnotationLab } from './components/AnnotationLab';
 import { VisionDiagnostics } from './components/VisionDiagnostics';
 import { CameraPlayRouter } from './components/CameraPlayRouter';
-import { CaptureLab } from './components/CaptureLab';
+import { DataLab } from './components/DataLab';
 import type { CameraTurnProposal } from './lib/cameraProposal';
 import {
   downloadCorrectedDevelopmentEvidence,
@@ -107,9 +106,9 @@ function newCricketGame(): CricketState {
 }
 
 export function App() {
-  const [workspace, setWorkspace] = useState<
-    'play' | 'camera' | 'camera-lab' | 'capture' | 'annotate'
-  >('camera');
+  const [workspace, setWorkspace] = useState<'play' | 'camera' | 'camera-lab' | 'capture'>(
+    'camera',
+  );
   const [mode, setMode] = useState<GameMode>('x01');
   const [x01, setX01] = useState<X01State>(newX01Game);
   const [cricket, setCricket] = useState<CricketState>(newCricketGame);
@@ -120,7 +119,7 @@ export function App() {
     CorrectedDevelopmentEvidenceSample[]
   >([]);
   const [notice, setNotice] = useState(
-    'Choose a DartCard, then tap the board. Camera Play uses a separate browser-local learned vision path when an approved model is installed.',
+    'Choose a DartCard, then tap the board. Live Scoring uses a separate browser-local learned vision path when an approved model is installed.',
   );
 
   const gameComplete = mode === 'x01' ? x01.winnerId !== undefined : cricket.winnerId !== undefined;
@@ -350,30 +349,25 @@ export function App() {
             <em>Keep the player in control.</em>
           </h1>
           <p className="lede">
-            A touch-first browser scorer: point a mounted phone, let the board find itself, then
-            review local camera suggestions only when a dart needs correction.
+            Two clear paths: <b>Live Scoring</b> is the eventual player experience; <b>Data Lab</b>
+            is the private, guided place to teach the first real camera model with your own board
+            photos.
           </p>
         </div>
         <div className="hero-side">
           <div className="hero-status" aria-label="Prototype status">
             <span className="status-dot" />
             <div>
-              <strong>LOCAL-FIRST DEMO</strong>
-              <small>Rules engine + review UX</small>
+              <strong>WEB-FIRST DEVELOPMENT</strong>
+              <small>Live scorer + guided data collection</small>
             </div>
           </div>
-          <div className="workspace-tabs" role="group" aria-label="Choose Darts 180 prototype">
+          <div className="workspace-tabs" role="group" aria-label="Choose a Darts 180 workspace">
             <button
               className={workspace === 'camera' ? 'active' : ''}
               onClick={() => setWorkspace('camera')}
             >
-              CAMERA PLAY
-            </button>
-            <button
-              className={workspace === 'play' ? 'active' : ''}
-              onClick={() => setWorkspace('play')}
-            >
-              PLAY DEMO
+              LIVE SCORING
             </button>
             <button
               className={workspace === 'capture' ? 'active' : ''}
@@ -382,10 +376,10 @@ export function App() {
               DATA LAB
             </button>
             <button
-              className={workspace === 'annotate' ? 'active' : ''}
-              onClick={() => setWorkspace('annotate')}
+              className={workspace === 'play' ? 'active' : ''}
+              onClick={() => setWorkspace('play')}
             >
-              ANNOTATE
+              SCORE REVIEW
             </button>
           </div>
         </div>
@@ -549,11 +543,11 @@ export function App() {
                     <h3>Use the learned camera path.</h3>
                   </div>
                   <p>
-                    Camera proposals are generated only in Camera Play when a verified local model
+                    Camera proposals are generated only in Live Scoring when a verified local model
                     is installed. Manual board input remains available for correction and recovery.
                   </p>
                   <button className="button secondary" onClick={() => setWorkspace('camera')}>
-                    OPEN CAMERA PLAY
+                    OPEN LIVE SCORING
                   </button>
                 </div>
 
@@ -668,23 +662,21 @@ export function App() {
         <>
           <div className="shell advanced-camera-return">
             <button className="text-button" onClick={() => setWorkspace('camera')}>
-              ← BACK TO CAMERA PLAY
+              ← BACK TO LIVE SCORING
             </button>
           </div>
           <VisionDiagnostics onReturnToCamera={() => setWorkspace('camera')} />
         </>
-      ) : workspace === 'capture' ? (
-        <CaptureLab />
       ) : (
-        <AnnotationLab />
+        <DataLab />
       )}
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> Camera Play has a browser-local learned-vision
-          runtime path with deterministic scoring. A separately installed development model can make
-          editable review suggestions; production auto-recording remains unavailable until a
-          trained, integrity-verified artifact and release evidence exist.
+          <strong>Darts 180 prototype.</strong> Live Scoring keeps camera inference in the browser
+          and requires a real verified model before it can propose a score. Data Lab is a separate,
+          guided, explicit-save workflow for creating the private blank-board and dart-test examples
+          needed to build that first model.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →

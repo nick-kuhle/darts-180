@@ -43,6 +43,82 @@ class LocalFivePointDatasetTests(unittest.TestCase):
             first_label = labels[0].read_text(encoding="utf-8").splitlines()
             self.assertEqual([line.split()[0] for line in first_label], ["1", "2", "3", "4", "0"])
 
+    def test_accepts_blank_board_anchor_examples_only_when_the_capture_intent_is_explicit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "reviewed-captures"
+            source.mkdir()
+            _write_pair(
+                source,
+                1,
+                session_id="session_a1",
+                capture_intent="empty-board",
+                include_dart=False,
+            )
+            _write_pair(source, 2, session_id="session_b2", color=60)
+            _write_pair(source, 3, session_id="session_c3", color=90)
+
+            report = compile_local_five_point_dataset(
+                source,
+                root / "compiled-yolo",
+                split_seed="darts180-blank-board-test",
+                accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+            )
+
+            self.assertEqual(report["labelCounts"]["dartEntryPoint"], 2)
+            labels = list((root / "compiled-yolo").glob("*/labels/*.txt"))
+            blank_label = next(
+                label for label in labels if len(label.read_text().splitlines()) == 4
+            )
+            self.assertEqual(
+                [line.split()[0] for line in blank_label.read_text(encoding="utf-8").splitlines()],
+                ["1", "2", "3", "4"],
+            )
+
+    def test_rejects_a_corpus_that_contains_only_blank_board_examples(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "reviewed-captures"
+            source.mkdir()
+            for index, session_id in enumerate(("session_a1", "session_b2", "session_c3"), start=1):
+                _write_pair(
+                    source,
+                    index,
+                    session_id=session_id,
+                    capture_intent="empty-board",
+                    include_dart=False,
+                    color=index * 30,
+                )
+
+            with self.assertRaisesRegex(
+                LocalFivePointDatasetError, "At least one reviewed dart label"
+            ):
+                compile_local_five_point_dataset(
+                    source,
+                    root / "compiled-yolo",
+                    split_seed="darts180-only-blank-boards",
+                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                )
+
+    def test_rejects_empty_darts_when_a_photo_claims_to_be_a_dart_test(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "reviewed-captures"
+            source.mkdir()
+            _write_pair(source, 1, session_id="session_a1", include_dart=False)
+
+            with self.assertRaisesRegex(
+                LocalFivePointDatasetError, "at least one reviewed dart label"
+            ):
+                compile_local_five_point_dataset(
+                    source,
+                    root / "compiled-yolo",
+                    split_seed="darts180-empty-dart-test",
+                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                )
+
     def test_refuses_standard_annotation_profile_for_five_point_training(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -90,9 +166,11 @@ def _write_pair(
     color: int = 30,
     annotation_method: str = DEVELOPMENT_ANNOTATION_METHOD,
     image_bytes: bytes | None = None,
+    capture_intent: str = "static-dart",
+    include_dart: bool = True,
 ) -> Path:
     capture_id = f"cap0000{index}"
-    image_name = f"darts-180-{capture_id}-static-dart.jpg"
+    image_name = f"darts-180-{capture_id}-{capture_intent}.jpg"
     image_path = root / image_name
     if image_bytes is None:
         image = np.full((480, 640, 3), color, dtype=np.uint8)
@@ -115,7 +193,7 @@ def _write_pair(
             "boardModel": "Standard board",
             "deviceModel": "Test camera",
             "captureMode": "still",
-            "captureIntent": "static-dart",
+            "captureIntent": capture_intent,
             "imageFile": image_name,
             "imageMime": "image/jpeg",
             "offAxisDegrees": 20,
@@ -136,16 +214,20 @@ def _write_pair(
                 for anchor_id, canonical, image_point in anchors
             ],
         },
-        "darts": [
-            {
-                "dartTrackId": f"manual-{capture_id}-dart-1",
-                "tipPixel": [320, 240],
-                "entryPointBoardMm": [0, 0],
-                "zone": {"ring": "IB", "segment": None, "score": 50},
-                "visibility": "clear",
-                "wireMarginMm": 6.35,
-            }
-        ],
+        "darts": (
+            [
+                {
+                    "dartTrackId": f"manual-{capture_id}-dart-1",
+                    "tipPixel": [320, 240],
+                    "entryPointBoardMm": [0, 0],
+                    "zone": {"ring": "IB", "segment": None, "score": 50},
+                    "visibility": "clear",
+                    "wireMarginMm": 6.35,
+                }
+            ]
+            if include_dart
+            else []
+        ),
     }
     (root / f"darts-180-{capture_id}-annotations.json").write_text(
         json.dumps(sidecar), encoding="utf-8"

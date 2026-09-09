@@ -14,7 +14,7 @@ interface VisionDiagnosticsProps {
 
 /**
  * A transparent status page, not an alternate scorer. The retired color/frame-difference detector
- * is deliberately absent from both this UI and the normal Camera Play route.
+ * is deliberately absent from both this UI and the normal Live Scoring route.
  */
 export function VisionDiagnostics({ onReturnToCamera }: VisionDiagnosticsProps) {
   const [model, setModel] = useState<VisionModelArtifactManifest>(UNAVAILABLE_MODEL_MANIFEST);
@@ -42,12 +42,12 @@ export function VisionDiagnostics({ onReturnToCamera }: VisionDiagnosticsProps) 
           <h1>Evidence gates, not a backup heuristic.</h1>
           <p>
             This page makes the camera program inspectable without offering an older color or
-            frame-difference scoring fallback. Normal play stays in Camera Play; ordinary score
+            frame-difference scoring fallback. Normal play stays in Live Scoring; ordinary score
             correction stays in the score review screen.
           </p>
         </div>
         <button className="button primary" onClick={onReturnToCamera}>
-          RETURN TO CAMERA PLAY
+          RETURN TO LIVE SCORING
         </button>
       </div>
 

@@ -4,9 +4,9 @@
 **Purpose:** obtain legal, useful, diverse darts examples without turning a player's home into an
 uncontrolled video dataset.
 
-For a browser-local exploratory still, follow the more specific [Capture Lab local workflow and
-approved handoff](capture-lab.md). It does not replace this controlled, consented field protocol and
-must not be used as an informal upload path.
+For a guided browser still, follow the more specific [Data Lab capture and private intake workflow](capture-lab.md).
+It does not replace this controlled, consented field protocol. Its optional private save is a guarded,
+owner-configured intake path—not an informal/public upload path.
 
 ## Stop conditions
 

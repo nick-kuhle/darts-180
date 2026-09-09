@@ -15,8 +15,8 @@ We give it that practice in three simple stages:
 
 1. **Take board pictures** after real throws. Keep people out of the picture.
 2. **Tell the computer where the dart tip and four board guide points are** in each picture. This is
-   done in the special data tools, not in normal Camera Play.
-3. **Train the model** from many of those examples. Then Camera Play can suggest scores, and you can
+   done in the special data tools, not in normal Live Scoring.
+3. **Train the model** from many of those examples. Then Live Scoring can suggest scores, and you can
    correct the suggestions to make the next model better.
 
 Normal players never have to do the clicking in step 2. It is only the temporary, honest way to teach
@@ -50,50 +50,60 @@ adjudication queue. Do not make up a precise label just to increase the count.
 
 ## Exact first-model workflow
 
-### 1. Capture a board-only still
+### 1. Use the guided Data Lab
 
-1. Open the direct HTTPS Darts 180 page in Safari/Chrome—not an embedded preview.
-2. Open **DATA LAB** and start the rear camera.
-3. Keep the full board/number ring visible. After a meaningful mount/light change, use
-   **Start a new setup session**.
-4. Place or throw one to three darts, wait until they are still, then choose **Take board still**.
-5. Download the JPEG and its local manifest together.
-6. Confirm both checkboxes only if true: no people/sensitive room detail are in frame, and you own the
-   board-focused capture or have permission to use it for Darts 180 development.
+1. Open the direct HTTPS Darts 180 page in Safari/Chrome—not an embedded preview—and choose
+   **DATA LAB**. This is separate from **LIVE SCORING**. Normal players never need the label taps.
+2. Start with **Blank board**. Keep the full board/number ring visible, use a stable safe mount, and
+   take a board-only photo. Later choose **Dart test** after one to three darts have settled.
+3. Keep the generated setup session ID while the phone, mount, board, and light stay the same. Use
+   **Start a new setup session** after a material change. Select the lighting band and optional
+   camera notes honestly.
+4. Inspect the exact still. Confirm both statements only when true: no person/sensitive room detail
+   is visible, and you own the board-focused capture or have permission to use it for Darts 180
+   development. The app writes `SELF-CAPTURE-DEVELOPMENT-V1` only after that confirmation.
+5. Tap these four **outer-double-rim junctions** in the displayed order:
 
-The browser writes `SELF-CAPTURE-DEVELOPMENT-V1` only after that explicit confirmation. It does not upload
-anything. For anyone else's capture, use an approved consent/data-operations process instead of checking
-the self-capture box.
-
-### 2. Make the special five-point labels
-
-1. Open **ANNOTATE**, choose the exact JPEG and its matching manifest.
-2. In **Label scheme**, choose **Five-point development model labels**. Do not choose the general
-   “Standard board geometry” mode for this initial model; its points have a different meaning.
-3. Click these four **outer-double-rim junctions** in the displayed order:
-
-   | Model point | Physical point to click                          |
+   | Model point | Physical point to tap                            |
    | ----------- | ------------------------------------------------ |
    | CAL 1       | the outer-double rim junction between D5 and D20 |
    | CAL 2       | the outer-double rim junction between D17 and D3 |
    | CAL 3       | the outer-double rim junction between D8 and D11 |
    | CAL 4       | the outer-double rim junction between D13 and D6 |
 
-4. Click each clearly visible **physical dart entry tip**, not the flight, shaft end, or a guessed hidden
-   point. The local tool shows the deterministic score only as a check on your clicks.
-5. Recheck the privacy/resolvability statement and download the local label sidecar.
+6. For a **Dart test**, tap each clearly visible physical dart entry tip—not the flight, shaft end,
+   or a guessed hidden point. The shown deterministic score is a check on your manual point, not a
+   camera prediction. A **Blank board** intentionally stops after the four board points; do not add
+   an invented dart label.
+7. Recheck the label statement, choose **Review save**, then choose either **Download local backup**
+   or **Save to private storage**. The private option is available only after the existing Vercel
+   project has the private Blob/collection-key setup in
+   [`20-private-capture-lab.md`](20-private-capture-lab.md).
 
-Those unusual four points are deliberate. They use the same five-point coordinate convention as the
-isolated development Camera Play engine, so a model trained from your pictures can use real detections
-without an invented landmark map.
+The unusual four points are deliberate. They use the same five-point coordinate convention as the
+isolated development Live Scoring engine, so a model trained from your pictures can use real
+detections without an invented landmark map.
 
-### 3. Store and screen the pairs safely
+### 2. Store and screen the pairs safely
 
-Keep each `JPEG + annotations JSON` pair together in an approved local folder **outside the Git
-repository**. Do not put images, labels, ZIP archives, weights, or credentials in the repository or chat.
-Screen for people/background details and remove EXIF before an approved handoff. See
-[`runbooks/field-capture.md`](runbooks/field-capture.md) and
+A local backup downloads three matched files: JPEG, capture manifest, and annotations JSON. Private
+Data Lab storage holds the same three files under a random private record folder; it produces no
+public image URL. In either case, keep each `JPEG + annotations JSON` pair together in an approved
+folder **outside the Git repository**. Do not put images, labels, ZIP archives, weights, or
+credentials in the repository or chat.
+
+Screen for people/background details and remove EXIF before an approved training handoff. Vercel
+private storage is controlled intake, not automatic dataset approval. See
+[`20-private-capture-lab.md`](20-private-capture-lab.md),
+[`runbooks/field-capture.md`](runbooks/field-capture.md), and
 [`runbooks/local-annotation.md`](runbooks/local-annotation.md).
+
+### 3. Keep blank boards useful but honest
+
+Blank-board records are useful anchor-only examples: the five-point compiler accepts their four
+CAL labels with zero dart labels. They do **not** let the model learn a dart tip by themselves.
+Collect dart tests in every important session, and do not submit a compiled data set with no real
+dart entry labels—the compiler rejects that state.
 
 ### 4. Build the local training folder
 
@@ -134,7 +144,7 @@ PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
 
 It makes a raw local ONNX model and a development-only JSON description with its SHA-256 fingerprint.
 A reviewer must inspect both, test them in actual phone browsers, and consciously install them under
-`apps/web/public/models/`. Only then does Camera Play change from “model not installed” to real **editable
+`apps/web/public/models/`. Only then does Live Scoring change from “model not installed” to real **editable
 suggestions**. It still never becomes production auto-recording from this workflow.
 
 ## What happens after the first model works

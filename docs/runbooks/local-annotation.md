@@ -1,23 +1,25 @@
-# Local Annotation Lab: four-anchor dart labels
+# Data Lab manual labels: five-point bootstrap
 
 **Status:** development labeling aid  
 **Audience:** trained internal annotators and data operations  
-**Use only for:** an approved, board-focused static JPEG paired with its Capture Lab manifest.
+**Use only for:** an approved, board-focused static JPEG paired with its Data Lab manifest.
 
-The **Annotate** workspace in the static web prototype turns manually clicked points into a local
-JSON sidecar. It offers a general standard-board profile and a separate source-compatible five-point
-profile for the first editable development scorer. Both use a four-point projective transform and the
-same deterministic canonical-board decoder. It does **not** upload images or labels, discover dart
-tips, validate privacy from pixels, establish legal consent, or replace two-person annotation/adjudication.
+The visible **DATA LAB** workspace turns manually tapped points into the source-compatible five-point
+JSON sidecar needed by the first editable development scorer. It keeps the JPEG, capture manifest, and
+manual labels in one guided flow instead of asking a collector to switch to an ordinary player screen.
+It uses a four-point projective transform and the deterministic canonical-board decoder. It does **not**
+discover dart tips, validate privacy from pixels, establish legal consent, or replace two-person
+annotation/adjudication. Its local-download option has no upload; its optional private-save option is
+covered by the guarded intake design in [`20-private-capture-lab.md`](../20-private-capture-lab.md).
 
-Follow [Capture Lab local workflow and approved handoff](capture-lab.md) and the
+Follow the [Data Lab capture and private intake runbook](capture-lab.md) and the
 [controlled field-capture runbook](field-capture.md) first.
 
 ## 1. Prerequisites and exclusions
 
 Use an image only when all conditions hold:
 
-- It has a matching Capture Lab manifest with `containsFaces: false`, `imageMime: image/jpeg`, and
+- It has a matching Data Lab manifest with `containsFaces: false`, `imageMime: image/jpeg`, and
   `imageFile` exactly equal to the selected JPEG name.
 - The image is board-focused, privacy reviewed, and locally stored on a trusted device.
 - The full double ring is visible enough to click deliberately. The selected profile's four named
@@ -33,25 +35,11 @@ a mismatched name, or a screenshot derived from a sensitive room. The filename c
 pairing guard, **not** a cryptographic proof that two files belong together; the secure intake batch
 and human review remain authoritative.
 
-## 2. Choose the correct four-anchor profile
+## 2. Use the fixed five-point profile
 
-### Standard board geometry labels
-
-Use **Standard board geometry labels** for the general annotation workflow. Click the centers of these
-named double beds, in order:
-
-| Step | Visible location  | Canonical point |
-| ---: | ----------------- | --------------- |
-|    1 | D20 at 12 o’clock | `(0, -166 mm)`  |
-|    2 | D6 at 3 o’clock   | `(166 mm, 0)`   |
-|    3 | D3 at 6 o’clock   | `(0, 166 mm)`   |
-|    4 | D11 at 9 o’clock  | `(-166 mm, 0)`  |
-
-### Five-point development model labels
-
-Use **Five-point development model labels** when building the first model from Darts 180's own
-real throws. These are intentionally **not** double-bed centers. Click the outer-double-rim junctions
-in this exact order:
+Data Lab fixes the bootstrap profile to **Five-point development model labels** when building Darts
+180's first own-throw model. These are intentionally **not** double-bed centres. Tap the outer-double-rim
+junctions in exact order:
 
 | Model class | Visible location                |
 | ----------: | ------------------------------- |
@@ -61,9 +49,8 @@ in this exact order:
 | CAL 4 / `4` | rim junction between D13 and D6 |
 
 This profile matches the isolated development model convention: class `0` is the dart entry, and
-classes `1`–`4` are these four ordered landmarks. It is not interchangeable with the standard profile,
-so do not change profiles after placing points. The local compiler rejects a standard-profile sidecar
-for five-point training.
+classes `1`–`4` are these four ordered landmarks. It is not interchangeable with general board
+geometry labels. The local compiler rejects a sidecar with a different profile for five-point training.
 
 Four non-degenerate image ↔ board correspondences solve an image-to-canonical-board homography.
 Clicking apparent ellipse extrema, an arbitrary outer edge, a number wire, or a similarly colored but
@@ -73,31 +60,27 @@ image, identify the _numbered location_, not the screen cardinal direction.
 The app rejects degenerate points but cannot measure human click error. Reposition anchors whenever
 the mapping or an expected result looks implausible.
 
-## 3. Local labeling sequence
+## 3. Guided labeling sequence
 
-1. In the web prototype select **Annotate**.
-2. Choose the exact local `.jpg` exported by Capture Lab, then its matching
-   `darts-180-<captureId>-manifest.json`. Neither file is transmitted.
-3. Confirm no mismatch alert appears. If one appears, stop and locate the correct pair.
-4. Choose the label scheme **before** placing any points. Use **Five-point development model labels**
-   for the initial own-throw model; use the standard profile only for the general workflow.
-5. Click the four anchor locations in the displayed order. The app marks them 1–4 and changes to
-   **Calibrated** only when it can solve the mapping.
-6. Click each _visible dart entry point_ once. The app derives the canonical mm coordinate, scoring
-   zone, score, and nearest-wire margin with `@darts-180/rules`.
-7. Review each label. A small wire margin is an explicit warning to zoom/recheck and, for evaluation
-   data, obtain independent annotation. Remove a wrong/uncertain label rather than treating the
-   calculated zone as truth.
-8. Recheck privacy and resolvability for the exact image, then complete the per-export attestation.
-   Any anchor or dart edit resets it.
-9. Select **Export local label sidecar**. The sidecar remains a browser download and has not entered
-   training data.
+1. In the web prototype select **DATA LAB**, not **LIVE SCORING**.
+2. Take the exact board-focused JPEG in the Data Lab and complete its per-still safety/authority
+   confirmation. The integrated flow keeps the matching manifest automatically.
+3. Select **Next · tap the board points**. Tap the four named outer-rim junctions in the displayed
+   order. The app marks them 1–4 and changes to **Board set** only when it can solve the mapping.
+4. For **Dart test**, tap each _visible physical dart entry point_ once. A **Blank board** record is
+   correct with no dart point. The app derives canonical mm coordinates, scoring zone, score, and
+   nearest-wire margin only as a check on the manual click.
+5. Review every label. A small wire margin is a warning to recheck and, for evaluation data, obtain
+   independent annotation. Remove a wrong/uncertain point or discard the photo rather than treating
+   a calculated zone as truth.
+6. Complete the per-label review statement and select **Next · review save**. Download the local
+   trio or explicitly use the configured private storage option.
 
 The output records original capture metadata, image dimensions/name, the image-to-board homography,
-selected anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire
-margins, and `manual-<captureId>-dart-N` tracking IDs. It records either
-`manual-four-double-bed-homography-v0` or `deepdarts-four-cardinal-homography-v1` as the annotation-method
-provenance string. Only the latter is accepted by the first five-point-model compiler.
+fixed anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire
+margins, and `manual-<captureId>-dart-N` tracking IDs. It records
+`deepdarts-four-cardinal-homography-v1` as annotation-method provenance. A blank-board sidecar has
+its four anchors and an empty `darts` list; a dart-test sidecar must have at least one clear tip.
 
 ## 4. Validate and hand off
 
@@ -113,10 +96,11 @@ The validator checks the nested capture manifest and recomputes every dart zone 
 canonical point. A green result confirms schema-like metadata and geometry coherence only; it does
 not verify the JPEG, calibration accuracy, consent, or whether a human clicked the true physical tip.
 
-Use the approved encrypted handoff gate in [Capture Lab](capture-lab.md#4-approved-handoff-gate).
-Keep the record in `unassigned` until data operations has screened privacy, provenance, duplicate
-sessions, and split leakage. For sacred evaluation records, obtain and preserve two independent
-annotations plus adjudication rationale.
+Use the approved encrypted handoff gate in [Data Lab](capture-lab.md#4-approved-handoff-gate).
+A completed private Blob save is controlled storage—not training admission. Keep the record in
+`unassigned` until data operations has screened privacy, provenance, duplicate sessions, and split
+leakage. For sacred evaluation records, obtain and preserve two independent annotations plus
+adjudication rationale.
 
 For the first self-capture development model, do not hand-copy YOLO labels. Keep reviewed five-point
 pairs together outside Git and use `darts180_vision.local_five_point_dataset` to check pairing, session

@@ -1,16 +1,18 @@
-# Capture Lab: local capture and approved handoff
+# Data Lab: guided capture and private intake
 
 **Status:** operational development runbook  
 **Audience:** internal contributors, consented testers, data operations  
 **Purpose:** create useful board-focused stills without silently transmitting camera media.
 
-Capture Lab is a static-browser helper in the Darts 180 web prototype. It is **not** an upload,
-annotation, consent-signature, or production auto-scoring service. It takes one JPEG locally in the
-browser and separately downloads a starter JSON manifest. No API route, account, analytics event,
-audio stream, or cloud media upload is involved in this workflow.
+Data Lab is the separate guided development workspace in the Darts 180 web prototype. It is **not**
+production auto-scoring, automated consent review, a truth machine, or a general public upload service.
+It creates one board-focused JPEG, the capture manifest, and five-point manual-label sidecar in one
+short flow. The operator chooses an explicit local download or (only after owner configuration) a
+private same-origin Vercel Blob intake save. No audio or automatic background upload is involved.
 
 Read this alongside the [field-capture protocol](field-capture.md),
-[privacy and security plan](../08-security-privacy.md), and [ML data plan](../04-ml-data-and-evaluation.md).
+[privacy and security plan](../08-security-privacy.md), [ML data plan](../04-ml-data-and-evaluation.md),
+and [guided private Data Lab intake](../20-private-capture-lab.md).
 
 ## 1. Boundary and safety rules
 
@@ -19,7 +21,7 @@ Before opening the camera:
 1. Use only a permitted location and a stable camera position outside the throw path.
 2. Frame the board only. Exclude people, faces, reflections, screens, documents, addresses, family
    photos, and other identifying room detail. Prefer a tight crop with a neutral background.
-3. Never record audio. Capture Lab requests `video` only.
+3. Never record audio. Data Lab requests `video` only.
 4. Do not represent a local export as approved training data. It starts `unlabeled-v0` and
    `unassigned`. A locally owned board-focused still receives `SELF-CAPTURE-DEVELOPMENT-V1` only
    after the contributor explicitly confirms authority to use it for development; otherwise its
@@ -30,36 +32,36 @@ Before opening the camera:
 The checkbox in the interface is an operator attestation, not automated privacy detection or a
 replacement for consent and data review.
 
-## 2. Capture a paired local artifact
+## 2. Make one guided three-file record
 
-1. Open the deployed web prototype over HTTPS and choose **DATA LAB**. Camera access will not be
-   requested until **Start device camera** is pressed.
-2. Grant the browser's camera permission only if the scene meets the rules above. Use the rear camera
-   where available; no microphone is requested.
-3. Mount/reframe until the full board, double ring, and number ring are visible and sharp. Record
-   challenging cases deliberately, but set the matching angle, distance, and lighting metadata.
-4. Choose the capture intent:
-   - **Empty board / calibration** — board geometry and setup views;
-   - **Static dart(s) in board** — later manually annotated dart entry points;
-   - **Difficult or failure case** — glare, obstruction, extreme-but-safe angle, motion evidence, or
-     another documented failure condition.
-5. Enter useful board and device notes plus estimated off-axis angle, distance, and lighting band.
-   Keep the displayed **session/setup group** ID for a continuous phone/mount/light setup. Start a
-   new session after a meaningful setup change; do not use a player's name as the ID.
-6. Select **Take board still**. The JPEG and the metadata snapshot are now paired. Editing the form
-   afterward prepares the _next_ still and does not alter this one.
-7. Inspect the local preview. If it is unsafe or unusable, discard it locally and take a new still.
-8. Confirm the no-faces/no-sensitive-details attestation for this specific still. If it is your own
-   board-focused capture, also confirm that you have authority to use it for Darts 180 development.
-   Both confirmations reset for every new still. Do **not** use the self-capture confirmation for
-   someone else's image.
-9. Download **both** files and retain their shared `captureId`:
-   - `darts-180-<captureId>-<intent>.jpg`
-   - `darts-180-<captureId>-manifest.json`
-10. Stop the camera when finished and revoke browser permission if desired.
+1. Open the deployed web prototype over HTTPS and choose **DATA LAB**. Camera access is not requested
+   until **Start rear camera** is selected. Do not use **LIVE SCORING** for collection/labels.
+2. Grant camera permission only if the scene meets the rules above. The Lab requests video only; there
+   is no microphone request.
+3. Mount/reframe until the complete board, double ring, and number ring are visible and sharp. Start
+   with **Blank board** for an anchor-only example; select **Dart test** only after one to three darts
+   have settled visibly in the board.
+4. Keep the displayed **setup session** ID for a continuous phone/mount/light setup. Choose the lighting
+   band and optional board/camera notes. Start a new session after a meaningful change; never use a
+   player name as the ID.
+5. Select **Take this photo**. The bounded JPEG and its metadata snapshot are paired in this browser tab.
+   Changing the plan afterward affects only the next photo.
+6. Inspect the still. If it is unsafe or unusable, use **Discard and retake**. Otherwise complete both
+   per-still confirmations: board-only/no sensitive detail, and authority to use the self-capture for
+   development. Both reset for a new photo.
+7. Tap the four shown outer-rim junctions in exact order: CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11,
+   CAL 4 D13/D6. For a dart test, tap only clearly visible physical dart entry tips. A blank-board
+   record intentionally has no dart tip.
+8. Recheck the label statement and choose **Review save**. You can either:
+   - download the matched trio—`darts-180-<captureId>-<intent>.jpg`, a manifest JSON, and an
+     annotations JSON—to an approved local folder; or
+   - explicitly save the three files to the configured private Blob store, after entering the
+     operator's collection key in the current tab.
+9. Stop/revoke camera permission when finished if desired.
 
-The JPEG and manifest deliberately download separately so a contributor, not a web server, controls
-whether and when a file leaves the device.
+The Data Lab sends nothing until the final explicit save. Private cloud storage is optional and
+fail-closed; it never replaces the later manual screening, consent review, de-identification, or
+training admission gate.
 
 ## 3. Local validation before transfer
 
@@ -105,17 +107,19 @@ change baselines. They are useful for testing file contracts, geometry, debug vi
 failure paths. They are **not** realistic enough to replace consented, device-diverse real capture;
 they must never form the sacred evaluation set or support public accuracy claims.
 
-Likewise, a successful Capture Lab photo, a valid manifest, or a baseline proposal does not mean the
+Likewise, a successful Data Lab photo, a valid manifest, or a baseline proposal does not mean the
 scene is auto-scorable. The runtime must still pass measured pose, framing, quality, uncertainty,
 and human-review gates described in [the detection-engine specification](../03-detection-engine.md).
 
 ## 6. Troubleshooting
 
-| Symptom                                               | Expected action                                                                                                       |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Browser says camera is unavailable                    | Use current Safari, Chrome, or Edge over HTTPS; verify browser/site permission; do not substitute an insecure upload. |
-| Preview is sideways, too dark, or blurry              | Stop, reframe/re-light/re-mount, and take a new still. Record a difficult case only if metadata says so.              |
-| Manifest download button is disabled                  | Take a still first, inspect it, then complete both privacy and self-capture-use attestations if they are true.        |
-| JSON validator rejects the manifest                   | Correct the context fields on the next still; do not edit identifiers or claim false conditions to force acceptance.  |
-| A face or sensitive detail was noticed after download | Securely delete the local pair and do not hand it off.                                                                |
-| Need a capture mode not in the form                   | Document the request with data operations; do not overload an existing category without an approved taxonomy update.  |
+| Symptom                                           | Expected action                                                                                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over HTTPS; verify browser/site permission; do not substitute an insecure upload.                                            |
+| Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, and take a new still. Do not force a low-quality label.                                                                         |
+| Next button is disabled                           | Take a still, inspect it, then complete both per-still privacy/authority confirmations only when they are true.                                                  |
+| Review save is disabled                           | Place all four named rim junctions, add a visible dart tip for a dart test, then complete the label review statement.                                            |
+| Private storage says setup needed                 | Use local backup. Configure the same existing Vercel project exactly as in [`20-private-capture-lab.md`](../20-private-capture-lab.md); do not make Blob public. |
+| Private storage save fails                        | Download/keep the local trio, correct connectivity/key, and retry only the unsaved file. Inspect private storage before duplicating a record.                    |
+| JSON validator rejects a downloaded sidecar       | Correct the context/label process on a new still; do not edit IDs or claim false conditions to force acceptance.                                                 |
+| A face or sensitive detail was noticed after save | Securely delete local copies and ask the restricted storage operator to delete the private record; do not hand it off.                                           |

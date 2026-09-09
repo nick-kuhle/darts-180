@@ -145,10 +145,10 @@ def validate_dart_label(
 
 
 def validate_capture_sidecar(value: Mapping[str, Any]) -> tuple[ValidationIssue, ...]:
-    """Validate either a Capture Lab manifest or a labeled/synthetic sidecar.
+    """Validate either a Data Lab manifest or a labeled/synthetic sidecar.
 
     Labeled sidecars place their manifest under `capture` and optional labels under `darts`.
-    A local Capture Lab export is itself a manifest and therefore needs no wrapper.
+    A local Data Lab export is itself a manifest and therefore needs no wrapper.
     """
     capture = value.get("capture", value)
     if not isinstance(capture, Mapping):
