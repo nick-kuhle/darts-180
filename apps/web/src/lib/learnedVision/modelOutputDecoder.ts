@@ -15,7 +15,10 @@ export interface LetterboxTransform {
   sourceHeight: number;
   inputWidth: number;
   inputHeight: number;
-  scale: number;
+  /** Exact drawn-width/source-width ratio after integer letterbox rounding. */
+  scaleX: number;
+  /** Exact drawn-height/source-height ratio after integer letterbox rounding. */
+  scaleY: number;
   offsetX: number;
   offsetY: number;
 }
@@ -61,9 +64,17 @@ function decodeLandmarks(
   const landmarks: BoardLandmarkObservation[] = [];
   for (let index = 0; index < LEARNED_BOARD_LANDMARK_KINDS.length; index += 1) {
     const offset = index * DARTS180_BOARD_TIP_V1_TENSORS.landmarks.fields.length;
-    const position = toSourcePoint(values[offset] ?? NaN, values[offset + 1] ?? NaN, transform);
     const confidence = values[offset + 2] ?? NaN;
-    if (position === null || !isProbability(confidence)) continue;
+    if (!isProbability(confidence)) {
+      throw new Error('The model landmark confidence is outside the browser contract.');
+    }
+    // A zero-confidence landmark represents no detection. It is not silently substituted with a
+    // geometric guess; the complete-pose admission gate will refuse the frame.
+    if (confidence === 0) continue;
+    const position = toSourcePoint(values[offset] ?? NaN, values[offset + 1] ?? NaN, transform);
+    if (position === null) {
+      throw new Error('The model landmark point is outside the source camera frame.');
+    }
     const kind = LEARNED_BOARD_LANDMARK_KINDS[index];
     if (kind === undefined) continue;
     landmarks.push({ kind, imagePoint: position, confidence });
@@ -91,13 +102,19 @@ function decodeDartTips(
     offset += DARTS180_BOARD_TIP_V1_TENSORS.dartTips.fields.length
   ) {
     const confidence = values[offset + 2] ?? NaN;
-    // This low floor only removes explicit all-zero padding rows; proposal thresholds remain in the
-    // reviewed artifact policy, never in an untracked browser heuristic.
-    if (!isProbability(confidence) || confidence <= 0.001) continue;
+    if (!isProbability(confidence)) {
+      throw new Error('The model dart-tip confidence is outside the browser contract.');
+    }
+    // The output contract pads absent detections with an exact zero confidence. Do not install an
+    // additional browser-side confidence threshold: score eligibility belongs to the reviewed
+    // artifact policy.
+    if (confidence === 0) continue;
     const imagePoint = toSourcePoint(values[offset] ?? NaN, values[offset + 1] ?? NaN, transform);
-    if (imagePoint === null) continue;
-    const sigmaX = sourcePixels(values[offset + 3] ?? NaN, transform);
-    const sigmaY = sourcePixels(values[offset + 4] ?? NaN, transform);
+    if (imagePoint === null) {
+      throw new Error('The model dart-tip point is outside the source camera frame.');
+    }
+    const sigmaX = sourcePixels(values[offset + 3] ?? NaN, transform, 'x');
+    const sigmaY = sourcePixels(values[offset + 4] ?? NaN, transform, 'y');
     const occlusionRisk = values[offset + 5] ?? NaN;
     if (
       !Number.isFinite(sigmaX) ||
@@ -106,7 +123,9 @@ function decodeDartTips(
       sigmaY <= 0 ||
       !isProbability(occlusionRisk)
     ) {
-      continue;
+      throw new Error(
+        'The model dart-tip uncertainty or occlusion output is outside the browser contract.',
+      );
     }
     tips.push({ imagePoint, sigmaXPx: sigmaX, sigmaYPx: sigmaY, confidence, occlusionRisk });
   }
@@ -120,22 +139,12 @@ function decodeQuality(
   if (values.length !== DARTS180_BOARD_TIP_V1_TENSORS.quality.fields.length) {
     throw new Error('The model quality output does not match darts180-board-tip-v1.');
   }
-  const overall = clampProbability(values[0] ?? NaN);
-  const boardCoverage = clampProbability(values[1] ?? NaN);
-  const sharpness = clampProbability(values[2] ?? NaN);
-  const glareRisk = clampProbability(values[3] ?? NaN);
-  const offAxisDegrees = clampProbability(values[4] ?? NaN) * 90;
-  const occlusionRisk = clampProbability(values[5] ?? NaN);
-  const boardDiameterPixels = estimatedBoardDiameterPixels(landmarks);
-  const reasons: string[] = [];
-  if (boardCoverage < 0.7)
-    reasons.push('Keep the full board and number ring inside the camera frame.');
-  if (sharpness < 0.6)
-    reasons.push('Wait for the rear camera to focus, then keep the mount still.');
-  if (glareRisk > 0.45) reasons.push('Reduce direct glare on the board face.');
-  if (offAxisDegrees > 55) {
-    reasons.push('Move to a clearer angle so the board face and dart entry remain visible.');
-  }
+  const overall = requiredProbability(values[0], 'overall');
+  const boardCoverage = requiredProbability(values[1], 'boardCoverage');
+  const sharpness = requiredProbability(values[2], 'sharpness');
+  const glareRisk = requiredProbability(values[3], 'glareRisk');
+  const offAxisDegrees = requiredProbability(values[4], 'offAxisFraction') * 90;
+  const occlusionRisk = requiredProbability(values[5], 'occlusionRisk');
   return {
     overall,
     boardCoverage,
@@ -143,8 +152,10 @@ function decodeQuality(
     glareRisk,
     occlusionRisk,
     offAxisDegrees,
-    boardDiameterPixels,
-    reasons,
+    boardDiameterPixels: estimatedBoardDiameterPixels(landmarks),
+    // Player-facing guidance is derived from the artifact's calibrated decision policy, not from
+    // hidden decoder thresholds.
+    reasons: [],
   };
 }
 
@@ -156,18 +167,22 @@ function toSourcePoint(
   if (!isProbability(normalizedX) || !isProbability(normalizedY)) return null;
   const inputX = normalizedX * transform.inputWidth;
   const inputY = normalizedY * transform.inputHeight;
-  const xPx = (inputX - transform.offsetX) / transform.scale;
-  const yPx = (inputY - transform.offsetY) / transform.scale;
+  const xPx = (inputX - transform.offsetX) / transform.scaleX;
+  const yPx = (inputY - transform.offsetY) / transform.scaleY;
   if (xPx < 0 || yPx < 0 || xPx > transform.sourceWidth || yPx > transform.sourceHeight)
     return null;
   return { xPx, yPx };
 }
 
-function sourcePixels(normalizedDistance: number, transform: LetterboxTransform): number {
+function sourcePixels(
+  normalizedDistance: number,
+  transform: LetterboxTransform,
+  axis: 'x' | 'y',
+): number {
   if (!Number.isFinite(normalizedDistance) || normalizedDistance <= 0) return Number.NaN;
-  return (
-    (normalizedDistance * Math.max(transform.inputWidth, transform.inputHeight)) / transform.scale
-  );
+  const inputExtent = axis === 'x' ? transform.inputWidth : transform.inputHeight;
+  const scale = axis === 'x' ? transform.scaleX : transform.scaleY;
+  return (normalizedDistance * inputExtent) / scale;
 }
 
 function estimatedBoardDiameterPixels(landmarks: readonly BoardLandmarkObservation[]): number {
@@ -177,8 +192,10 @@ function estimatedBoardDiameterPixels(landmarks: readonly BoardLandmarkObservati
   const horizontal = pairDistance(find('d6-double'), find('d11-double'));
   const measures = [vertical, horizontal].filter((value): value is number => value !== null);
   if (measures.length === 0) return 0;
-  // Named anchors lie at r=166mm; their 332mm separation scales to a 340mm outer double diameter.
-  return (measures.reduce((sum, value) => sum + value, 0) / measures.length) * (340 / 332);
+  // Named anchors lie at r=166mm; their 332mm separation scales to a 340mm outer-double diameter.
+  // Use the smaller independently observed axis: an average would overstate usable detail when an
+  // oblique phone view visibly foreshortens one direction.
+  return Math.min(...measures) * (340 / 332);
 }
 
 function pairDistance(
@@ -189,8 +206,12 @@ function pairDistance(
   return Math.hypot(left.xPx - right.xPx, left.yPx - right.yPx);
 }
 
-function clampProbability(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+function requiredProbability(value: number | undefined, name: string): number {
+  const probability = value ?? Number.NaN;
+  if (!isProbability(probability)) {
+    throw new Error(`The model quality ${name} value must be a finite probability.`);
+  }
+  return probability;
 }
 
 function isProbability(value: number): boolean {

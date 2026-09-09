@@ -192,8 +192,12 @@ quality:    [overall, board coverage, sharpness, glare risk, off-axis fraction, 
 ```
 
 The exported model owns learned NMS and semantic interpretation. The runtime rejects incompatible tensor
-shapes rather than silently applying a second detector. A model manifest locks its output names, dimensions,
-release stage, evaluation/provenance identifiers, calibration policy, and artifact checksum together.
+shapes, non-finite values, and out-of-range learned probabilities rather than silently applying a second detector
+or clamping unsafe evidence. A schema-v2 model manifest locks its output names, square input dimensions, release
+stage, evaluation/provenance identifiers, calibrated pose/quality/decision policy, and artifact checksum
+together. A production package also carries a separately hashed public attestation whose identity must exactly
+bind the ONNX hash, contract, provenance/evaluation IDs, timestamp, and approval ID; CI and the Worker verify
+that binding before deployment and production inference.
 
 ### 4.4 Dart entry-point model
 

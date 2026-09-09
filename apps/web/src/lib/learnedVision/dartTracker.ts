@@ -51,7 +51,11 @@ export class CanonicalDartTracker {
   private sequence = 0;
 
   public constructor(options: Partial<DartTrackerOptions> = {}) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    const resolved = { ...DEFAULT_OPTIONS, ...options };
+    if (!isValidOptions(resolved)) {
+      throw new Error('Learned dart-track policy is invalid.');
+    }
+    this.options = resolved;
   }
 
   public observe(
@@ -184,6 +188,20 @@ class TrackAccumulator {
       proposed: this.proposed,
     };
   }
+}
+
+function isValidOptions(options: DartTrackerOptions): boolean {
+  return (
+    Number.isFinite(options.matchDistanceMm) &&
+    options.matchDistanceMm > 0 &&
+    Number.isFinite(options.settleMs) &&
+    options.settleMs >= 0 &&
+    Number.isFinite(options.staleAfterMs) &&
+    options.staleAfterMs > 0 &&
+    options.staleAfterMs >= options.settleMs &&
+    Number.isFinite(options.maxSettledSpreadMm) &&
+    options.maxSettledSpreadMm >= 0
+  );
 }
 
 function distanceMm(left: BoardPointMm, right: BoardPointMm): number {

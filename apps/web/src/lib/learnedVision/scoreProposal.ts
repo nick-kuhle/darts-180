@@ -10,6 +10,7 @@ import type {
 import { decodeBoardPoint, formatZone, nearestWireMarginMm } from '@darts-180/rules';
 
 import type { BoardUncertaintyMm } from './boardPose';
+import { dartTipBlocker, modelQualityBlockers } from './qualityPolicy';
 
 export interface LearnedScoreInput {
   model: VisionModelArtifactManifest;
@@ -19,6 +20,15 @@ export interface LearnedScoreInput {
   uncertainty: BoardUncertaintyMm | null;
   frameTimestampMs: number;
 }
+
+/** Five-node Gauss–Hermite quadrature transformed for a standard-normal expectation. */
+const STANDARD_NORMAL_QUADRATURE = [
+  { value: -2.8569700138728056, weight: 0.0112574113277207 },
+  { value: -1.355626179974266, weight: 0.2220759220056126 },
+  { value: 0, weight: 0.5333333333333333 },
+  { value: 1.355626179974266, weight: 0.2220759220056126 },
+  { value: 2.8569700138728056, weight: 0.0112574113277207 },
+] as const;
 
 /**
  * Converts semantic model output into a player-facing proposal. This is intentionally the only
@@ -39,6 +49,11 @@ export function createLearnedScoringProposal(input: LearnedScoreInput): ScoringP
   ) {
     return abstain(input, ['The learned model did not produce a usable board-plane dart point.']);
   }
+  if (!hasUsableBoardMeasurement(input.boardPoint, input.uncertainty)) {
+    return abstain(input, [
+      'The learned board-plane measurement is invalid, so no score is proposed.',
+    ]);
+  }
 
   const candidates = rankZones(input.boardPoint, input.uncertainty);
   const best = candidates[0];
@@ -51,6 +66,7 @@ export function createLearnedScoringProposal(input: LearnedScoreInput): ScoringP
   );
   const reasons: string[] = [];
   const runnerUp = candidates[1];
+  const posteriorMargin = best.probability - (runnerUp?.probability ?? 0);
   if (best.zone.ring === 'MISS') {
     // A one-view system must not turn an outside point into a fabricated no-score. A validated
     // impact/miss model could later add a distinct evidence contract; until then it is review-only.
@@ -61,7 +77,10 @@ export function createLearnedScoringProposal(input: LearnedScoreInput): ScoringP
   if (best.wireMarginMm < input.model.decisionPolicy.minAutoScoreWireMarginMm) {
     reasons.push('The measured point is too close to a scoring wire for automatic recording.');
   }
-  if (runnerUp !== undefined && best.probability - runnerUp.probability < 0.08) {
+  if (
+    runnerUp !== undefined &&
+    posteriorMargin < input.model.decisionPolicy.minZonePosteriorMargin
+  ) {
     reasons.push(`The learned uncertainty overlaps ${formatZone(runnerUp.zone)}.`);
   }
   if (!input.model.decisionPolicy.autoRecordEnabled) {
@@ -74,7 +93,7 @@ export function createLearnedScoringProposal(input: LearnedScoreInput): ScoringP
     best.zone.ring !== 'MISS' &&
     confidence >= input.model.decisionPolicy.minAutoScoreProbability &&
     best.wireMarginMm >= input.model.decisionPolicy.minAutoScoreWireMarginMm &&
-    (runnerUp === undefined || best.probability - runnerUp.probability >= 0.08);
+    posteriorMargin >= input.model.decisionPolicy.minZonePosteriorMargin;
 
   if (safeForAutomaticScore) {
     return proposal(input, 'auto-score', candidates, confidence, [
@@ -92,8 +111,8 @@ export function createLearnedScoringProposal(input: LearnedScoreInput): ScoringP
 
 /**
  * Approximate a local score posterior from the learned point uncertainty in canonical millimetres.
- * The deterministic quadrature is deliberately small and replayable. Its calibration happens at the
- * model/policy layer; this function only captures geometric boundary ambiguity.
+ * The fixed five-by-five Gaussian quadrature is deterministic and replayable. Its calibration
+ * happens at the model/policy layer; this function only captures geometric boundary ambiguity.
  */
 export function rankZones(
   point: BoardPointMm,
@@ -101,31 +120,21 @@ export function rankZones(
 ): readonly RankedZoneCandidate[] {
   const sigmaX = Math.max(0.05, uncertainty.sigmaXMm);
   const sigmaY = Math.max(0.05, uncertainty.sigmaYMm);
-  const samples: readonly Readonly<{ x: number; y: number; weight: number }>[] = [
-    { x: 0, y: 0, weight: 0.28 },
-    { x: -1, y: 0, weight: 0.1 },
-    { x: 1, y: 0, weight: 0.1 },
-    { x: 0, y: -1, weight: 0.1 },
-    { x: 0, y: 1, weight: 0.1 },
-    { x: -1, y: -1, weight: 0.055 },
-    { x: -1, y: 1, weight: 0.055 },
-    { x: 1, y: -1, weight: 0.055 },
-    { x: 1, y: 1, weight: 0.055 },
-    { x: -2, y: 0, weight: 0.0225 },
-    { x: 2, y: 0, weight: 0.0225 },
-    { x: 0, y: -2, weight: 0.0225 },
-    { x: 0, y: 2, weight: 0.0225 },
-  ];
-
   const weights = new Map<string, { zone: DartZone; weight: number }>();
-  for (const sample of samples) {
-    const zone = decodeBoardPoint({
-      xMm: point.xMm + sample.x * sigmaX,
-      yMm: point.yMm + sample.y * sigmaY,
-    });
-    const key = `${zone.ring}:${zone.segment ?? 'none'}`;
-    const current = weights.get(key);
-    weights.set(key, { zone, weight: (current?.weight ?? 0) + sample.weight });
+  // Tensor sigma values are defined as independent standard deviations. A fixed Gauss–Hermite
+  // quadrature integrates that local uncertainty against the deterministic scoring geometry rather
+  // than treating a thresholded point estimate as certainty. Calibration still belongs to the
+  // manifest policy and its held-out evidence, not these mathematical integration nodes.
+  for (const xNode of STANDARD_NORMAL_QUADRATURE) {
+    for (const yNode of STANDARD_NORMAL_QUADRATURE) {
+      const zone = decodeBoardPoint({
+        xMm: point.xMm + xNode.value * sigmaX,
+        yMm: point.yMm + yNode.value * sigmaY,
+      });
+      const key = `${zone.ring}:${zone.segment ?? 'none'}`;
+      const current = weights.get(key);
+      weights.set(key, { zone, weight: (current?.weight ?? 0) + xNode.weight * yNode.weight });
+    }
   }
 
   const total = [...weights.values()].reduce((sum, entry) => sum + entry.weight, 0);
@@ -151,23 +160,24 @@ function qualityFailureReasons(
   }
   if (quality === undefined)
     return ['The model could not establish complete board pose and orientation.'];
-  const reasons: string[] = [];
-  if (quality.overall < model.decisionPolicy.minOverallQuality) {
-    reasons.push('The automatic quality model needs a clearer view before scoring.');
+  const qualityBlockers = modelQualityBlockers(model, quality);
+  if (qualityBlockers.length > 0) return qualityBlockers;
+  if (tip !== null) {
+    const tipBlocker = dartTipBlocker(model, tip);
+    if (tipBlocker !== null) return [tipBlocker];
   }
-  if (quality.boardDiameterPixels < model.decisionPolicy.minBoardDiameterPixels) {
-    reasons.push('Move the phone closer so the complete board has enough usable detail.');
-  }
-  if (quality.offAxisDegrees > model.decisionPolicy.maxQualityOffAxisDegrees) {
-    reasons.push('The current view hides too much board-plane detail; move to a clearer angle.');
-  }
-  if (
-    quality.occlusionRisk > model.decisionPolicy.maxOcclusionRisk ||
-    (tip?.occlusionRisk ?? 1) > model.decisionPolicy.maxOcclusionRisk
-  ) {
-    reasons.push('A dart or object is too occluded for a safe one-view score.');
-  }
-  return reasons;
+  return [];
+}
+
+function hasUsableBoardMeasurement(point: BoardPointMm, uncertainty: BoardUncertaintyMm): boolean {
+  return (
+    Number.isFinite(point.xMm) &&
+    Number.isFinite(point.yMm) &&
+    Number.isFinite(uncertainty.sigmaXMm) &&
+    uncertainty.sigmaXMm > 0 &&
+    Number.isFinite(uncertainty.sigmaYMm) &&
+    uncertainty.sigmaYMm > 0
+  );
 }
 
 function abstain(input: LearnedScoreInput, reasons: readonly string[]): ScoringProposal {

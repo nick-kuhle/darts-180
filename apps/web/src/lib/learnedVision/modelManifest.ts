@@ -1,10 +1,12 @@
 import type { ModelReleaseStage, VisionModelArtifactManifest } from '@darts-180/contracts';
 
+import { parseVisionModelDecisionPolicy } from './modelDecisionPolicy';
+
 export const DEFAULT_MODEL_MANIFEST_PATH = '/models/darts180-board-tip-v1.json';
 
 /** The checked-in state until a reviewed ONNX artifact is delivered with an evaluation report. */
 export const UNAVAILABLE_MODEL_MANIFEST: VisionModelArtifactManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modelId: 'darts180-board-tip',
   modelVersion: 'unavailable',
   releaseStage: 'unavailable',
@@ -28,10 +30,20 @@ export const UNAVAILABLE_MODEL_MANIFEST: VisionModelArtifactManifest = {
     minAutoScoreProbability: 1,
     minAutoScoreWireMarginMm: 99,
     minReviewProbability: 1,
+    minZonePosteriorMargin: 1,
+    minLandmarkConfidence: 1,
+    maxPoseValidationResidualMm: 0,
     maxQualityOffAxisDegrees: 0,
     minBoardDiameterPixels: Number.MAX_SAFE_INTEGER,
     minOverallQuality: 1,
+    minBoardCoverage: 1,
+    minSharpness: 1,
+    maxGlareRisk: 0,
     maxOcclusionRisk: 0,
+    tipTrackMatchDistanceMm: 0.1,
+    tipTrackSettleMs: 1,
+    tipTrackStaleAfterMs: 2,
+    maxTipTrackSpreadMm: 0,
     confidenceTemperature: 1,
     confidenceBias: 0,
     heldOutEvaluationId: null,
@@ -40,6 +52,11 @@ export const UNAVAILABLE_MODEL_MANIFEST: VisionModelArtifactManifest = {
     trainingDataId: null,
     licenseReviewId: null,
     evaluatedAt: null,
+  },
+  releaseEvidence: {
+    attestationPath: null,
+    attestationSha256: null,
+    approvalId: null,
   },
 };
 
@@ -95,11 +112,11 @@ export async function loadModelManifest(
 
 export function parseModelManifest(value: unknown): VisionModelArtifactManifest {
   if (!isRecord(value)) throw new Error('Model manifest must be an object.');
-  if (value.schemaVersion !== 1) throw new Error('Unsupported model manifest schema.');
+  if (value.schemaVersion !== 2) throw new Error('Unsupported model manifest schema.');
 
   const releaseStage = readReleaseStage(value.releaseStage);
   const manifest: VisionModelArtifactManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     modelId: requiredString(value.modelId, 'modelId'),
     modelVersion: requiredString(value.modelVersion, 'modelVersion'),
     releaseStage,
@@ -109,8 +126,9 @@ export function parseModelManifest(value: unknown): VisionModelArtifactManifest 
     input: readInput(value.input),
     outputContract: readOutputContract(value.outputContract),
     outputs: readOutputs(value.outputs),
-    decisionPolicy: readDecisionPolicy(value.decisionPolicy),
+    decisionPolicy: parseVisionModelDecisionPolicy(value.decisionPolicy),
     provenance: readProvenance(value.provenance),
+    releaseEvidence: readReleaseEvidence(value.releaseEvidence),
   };
 
   validateManifest(manifest);
@@ -126,44 +144,49 @@ export function isRunnableModelManifest(manifest: VisionModelArtifactManifest): 
 }
 
 export function isSameOriginAssetPath(path: string): boolean {
-  // Only a relative absolute path is accepted. Protocol-relative and traversal paths are rejected
+  // Only a root-relative path is accepted. Protocol-relative and traversal paths are rejected
   // so Vercel's `connect-src 'self'` posture is part of the model trust boundary.
-  return /^\/[a-zA-Z0-9._/-]+$/.test(path) && !path.includes('..') && !path.startsWith('//');
+  return /^\/(?:[a-zA-Z0-9._-]+\/)*[a-zA-Z0-9._-]+$/.test(path) && !path.includes('..');
 }
 
 function validateManifest(manifest: VisionModelArtifactManifest): void {
   const policy = manifest.decisionPolicy;
-  const unitProbabilityFields: readonly [string, number][] = [
-    ['minAutoScoreProbability', policy.minAutoScoreProbability],
-    ['minReviewProbability', policy.minReviewProbability],
-    ['minOverallQuality', policy.minOverallQuality],
-    ['maxOcclusionRisk', policy.maxOcclusionRisk],
-  ];
-  for (const [name, item] of unitProbabilityFields) {
-    if (!isProbability(item)) throw new Error(`decisionPolicy.${name} must be between 0 and 1.`);
+  if (new Set(Object.values(manifest.outputs)).size !== 3) {
+    throw new Error(
+      'Model landmark, dart-tip, and quality outputs must have distinct tensor names.',
+    );
   }
-  if (policy.minReviewProbability > policy.minAutoScoreProbability) {
-    throw new Error('Review threshold cannot exceed automatic-score threshold.');
+
+  const evidence = manifest.releaseEvidence;
+  const hasAttestation = evidence.attestationPath !== null || evidence.attestationSha256 !== null;
+  if ((evidence.attestationPath === null) !== (evidence.attestationSha256 === null)) {
+    throw new Error('Release attestation path and SHA-256 must be supplied together.');
   }
-  if (!isPositiveFinite(policy.minAutoScoreWireMarginMm)) {
-    throw new Error('decisionPolicy.minAutoScoreWireMarginMm must be non-negative.');
+  if (
+    evidence.attestationPath !== null &&
+    (!isSameOriginAssetPath(evidence.attestationPath) ||
+      !/^[a-f0-9]{64}$/.test(evidence.attestationSha256 ?? ''))
+  ) {
+    throw new Error('Release attestation must use a same-origin path and lowercase SHA-256 hash.');
   }
-  if (!isPositiveFinite(policy.maxQualityOffAxisDegrees) || policy.maxQualityOffAxisDegrees > 90) {
-    throw new Error('decisionPolicy.maxQualityOffAxisDegrees must be between 0 and 90.');
+  if (hasAttestation !== (evidence.approvalId !== null)) {
+    throw new Error('Release attestation and approval ID must be supplied together.');
   }
-  if (!isPositiveFinite(policy.minBoardDiameterPixels)) {
-    throw new Error('decisionPolicy.minBoardDiameterPixels must be non-negative.');
-  }
-  if (!Number.isFinite(policy.confidenceTemperature) || policy.confidenceTemperature <= 0) {
-    throw new Error('decisionPolicy.confidenceTemperature must be positive.');
-  }
-  if (!Number.isFinite(policy.confidenceBias)) {
-    throw new Error('decisionPolicy.confidenceBias must be finite.');
+  if (manifest.releaseStage !== 'production' && hasAttestation) {
+    throw new Error('Only production model manifests may name a release attestation.');
   }
 
   if (manifest.releaseStage === 'unavailable') {
-    if (manifest.assetPath !== '' || manifest.sha256 !== '' || policy.autoRecordEnabled) {
-      throw new Error('Unavailable model manifests cannot name an asset or permit auto-recording.');
+    if (
+      manifest.assetPath !== '' ||
+      manifest.sha256 !== '' ||
+      policy.autoRecordEnabled ||
+      hasAttestation ||
+      evidence.approvalId !== null
+    ) {
+      throw new Error(
+        'Unavailable model manifests cannot name an artifact, attestation, or auto-record policy.',
+      );
     }
     return;
   }
@@ -173,9 +196,15 @@ function validateManifest(manifest: VisionModelArtifactManifest): void {
       'Runnable model manifest must use a same-origin asset and lowercase SHA-256 hash.',
     );
   }
-  if (policy.autoRecordEnabled) {
-    if (manifest.releaseStage !== 'production') {
-      throw new Error('Only a production model manifest can enable auto-recording.');
+  if (manifest.releaseStage === 'production') {
+    if (
+      evidence.attestationPath === null ||
+      evidence.attestationSha256 === null ||
+      evidence.approvalId === null
+    ) {
+      throw new Error(
+        'Production model manifests require a hash-bound release attestation and approval ID.',
+      );
     }
     if (
       policy.heldOutEvaluationId === null ||
@@ -183,8 +212,13 @@ function validateManifest(manifest: VisionModelArtifactManifest): void {
       manifest.provenance.licenseReviewId === null ||
       manifest.provenance.evaluatedAt === null
     ) {
-      throw new Error('Auto-recording requires held-out evaluation and complete provenance.');
+      throw new Error(
+        'Production model manifests require held-out evaluation and complete provenance.',
+      );
     }
+  }
+  if (policy.autoRecordEnabled && manifest.releaseStage !== 'production') {
+    throw new Error('Only a production model manifest can enable auto-recording.');
   }
 }
 
@@ -221,9 +255,10 @@ function readInput(value: unknown): VisionModelArtifactManifest['input'] {
     width < 256 ||
     height < 256 ||
     width > 2048 ||
-    height > 2048
+    height > 2048 ||
+    width !== height
   ) {
-    throw new Error('Model input dimensions must be whole pixels between 256 and 2048.');
+    throw new Error('Model input dimensions must be equal whole pixels between 256 and 2048.');
   }
   if (value.colorOrder !== 'rgb' || value.normalization !== 'zero-to-one') {
     throw new Error('Unsupported browser image preprocessing descriptor.');
@@ -240,54 +275,21 @@ function readOutputs(value: unknown): VisionModelArtifactManifest['outputs'] {
   };
 }
 
-function readDecisionPolicy(value: unknown): VisionModelArtifactManifest['decisionPolicy'] {
-  if (!isRecord(value)) throw new Error('Model decision policy is required.');
-  const heldOutEvaluationId = nullableString(
-    value.heldOutEvaluationId,
-    'decisionPolicy.heldOutEvaluationId',
-  );
-  if (typeof value.autoRecordEnabled !== 'boolean') {
-    throw new Error('decisionPolicy.autoRecordEnabled must be boolean.');
-  }
-  return {
-    autoRecordEnabled: value.autoRecordEnabled,
-    minAutoScoreProbability: requiredNumber(
-      value.minAutoScoreProbability,
-      'decisionPolicy.minAutoScoreProbability',
-    ),
-    minAutoScoreWireMarginMm: requiredNumber(
-      value.minAutoScoreWireMarginMm,
-      'decisionPolicy.minAutoScoreWireMarginMm',
-    ),
-    minReviewProbability: requiredNumber(
-      value.minReviewProbability,
-      'decisionPolicy.minReviewProbability',
-    ),
-    maxQualityOffAxisDegrees: requiredNumber(
-      value.maxQualityOffAxisDegrees,
-      'decisionPolicy.maxQualityOffAxisDegrees',
-    ),
-    minBoardDiameterPixels: requiredNumber(
-      value.minBoardDiameterPixels,
-      'decisionPolicy.minBoardDiameterPixels',
-    ),
-    minOverallQuality: requiredNumber(value.minOverallQuality, 'decisionPolicy.minOverallQuality'),
-    maxOcclusionRisk: requiredNumber(value.maxOcclusionRisk, 'decisionPolicy.maxOcclusionRisk'),
-    confidenceTemperature: requiredNumber(
-      value.confidenceTemperature,
-      'decisionPolicy.confidenceTemperature',
-    ),
-    confidenceBias: requiredNumber(value.confidenceBias, 'decisionPolicy.confidenceBias'),
-    heldOutEvaluationId,
-  };
-}
-
 function readProvenance(value: unknown): VisionModelArtifactManifest['provenance'] {
   if (!isRecord(value)) throw new Error('Model provenance is required.');
   return {
     trainingDataId: nullableString(value.trainingDataId, 'provenance.trainingDataId'),
     licenseReviewId: nullableString(value.licenseReviewId, 'provenance.licenseReviewId'),
-    evaluatedAt: nullableString(value.evaluatedAt, 'provenance.evaluatedAt'),
+    evaluatedAt: nullableIsoTimestamp(value.evaluatedAt, 'provenance.evaluatedAt'),
+  };
+}
+
+function readReleaseEvidence(value: unknown): VisionModelArtifactManifest['releaseEvidence'] {
+  if (!isRecord(value)) throw new Error('Model release evidence is required.');
+  return {
+    attestationPath: nullableString(value.attestationPath, 'releaseEvidence.attestationPath'),
+    attestationSha256: nullableString(value.attestationSha256, 'releaseEvidence.attestationSha256'),
+    approvalId: nullableString(value.approvalId, 'releaseEvidence.approvalId'),
   };
 }
 
@@ -303,9 +305,22 @@ function nullableString(value: unknown, name: string): string | null {
   return requiredString(value, name);
 }
 
+function nullableIsoTimestamp(value: unknown, name: string): string | null {
+  const timestamp = nullableString(value, name);
+  if (timestamp === null) return null;
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(timestamp) ||
+    Number.isNaN(Date.parse(timestamp))
+  ) {
+    throw new Error(`${name} must be an ISO-8601 timestamp with timezone.`);
+  }
+  return timestamp;
+}
+
 function requiredNumber(value: unknown, name: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value))
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`${name} must be finite.`);
+  }
   return value;
 }
 
@@ -319,12 +334,4 @@ function requiredOutputName(value: unknown, name: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isProbability(value: number): boolean {
-  return Number.isFinite(value) && value >= 0 && value <= 1;
-}
-
-function isPositiveFinite(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
 }

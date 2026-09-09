@@ -71,8 +71,9 @@ For an exact done/next/non-claim snapshot, read
 
 There is no lawful trained production detection model, production authentication, durable database adapter,
 or guarantee of score accuracy. The checked-in learned Camera Play manifest is intentionally unavailable, so
-the browser runtime must not record a score until its ONNX artifact, calibrated decision policy, provenance,
-and held-out real-device evaluation gate exist. Native apps reuse that validated contract afterward. The old
+the browser runtime must not record a score until its ONNX artifact, calibrated decision policy, hash-bound
+public release attestation, provenance, and held-out real-device evaluation gate exist. Native apps reuse that
+validated contract afterward. The old
 browser frame-difference remediation is archived and is not a reason to relax thresholds or restore a fallback
 scorer.
 

@@ -8,6 +8,7 @@ apps/web/dist/
 *.tsbuildinfo
 
 # Native build products
+target/
 apps/mobile/android/
 apps/mobile/ios/
 *.xcworkspace

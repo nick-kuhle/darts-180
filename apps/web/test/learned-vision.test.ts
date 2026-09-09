@@ -38,10 +38,14 @@ const landmarks: readonly BoardLandmarkObservation[] = [
   { kind: 'd6-double', imagePoint: { xPx: 832, yPx: 500 }, confidence: 0.99 },
   { kind: 'd3-double', imagePoint: { xPx: 500, yPx: 832 }, confidence: 0.99 },
   { kind: 'd11-double', imagePoint: { xPx: 168, yPx: 500 }, confidence: 0.99 },
+  { kind: 'outer-top', imagePoint: { xPx: 500, yPx: 160 }, confidence: 0.99 },
+  { kind: 'outer-right', imagePoint: { xPx: 840, yPx: 500 }, confidence: 0.99 },
+  { kind: 'outer-bottom', imagePoint: { xPx: 500, yPx: 840 }, confidence: 0.99 },
+  { kind: 'outer-left', imagePoint: { xPx: 160, yPx: 500 }, confidence: 0.99 },
 ];
 
 const productionManifest: VisionModelArtifactManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modelId: 'darts180-board-tip',
   modelVersion: 'test-production-v1',
   releaseStage: 'production',
@@ -56,10 +60,20 @@ const productionManifest: VisionModelArtifactManifest = {
     minAutoScoreProbability: 0.97,
     minAutoScoreWireMarginMm: 1.5,
     minReviewProbability: 0.45,
+    minZonePosteriorMargin: 0.08,
+    minLandmarkConfidence: 0.45,
+    maxPoseValidationResidualMm: 18,
     maxQualityOffAxisDegrees: 65,
     minBoardDiameterPixels: 480,
     minOverallQuality: 0.7,
+    minBoardCoverage: 0.8,
+    minSharpness: 0.7,
+    maxGlareRisk: 0.45,
     maxOcclusionRisk: 0.5,
+    tipTrackMatchDistanceMm: 12,
+    tipTrackSettleMs: 320,
+    tipTrackStaleAfterMs: 1200,
+    maxTipTrackSpreadMm: 4,
     confidenceTemperature: 1,
     confidenceBias: 0,
     heldOutEvaluationId: 'sacred-eval-test-v1',
@@ -69,6 +83,16 @@ const productionManifest: VisionModelArtifactManifest = {
     licenseReviewId: 'license-review-test-v1',
     evaluatedAt: '2026-09-08T00:00:00.000Z',
   },
+  releaseEvidence: {
+    attestationPath: '/models/test-production-v1.attestation.json',
+    attestationSha256: 'c'.repeat(64),
+    approvalId: 'approval-test-v1',
+  },
+};
+
+const productionPoseGate = {
+  minLandmarkConfidence: productionManifest.decisionPolicy.minLandmarkConfidence,
+  maxPoseValidationResidualMm: productionManifest.decisionPolicy.maxPoseValidationResidualMm,
 };
 
 function dartTip(xPx: number, yPx: number): DartTipObservation {
@@ -81,7 +105,7 @@ function dartTip(xPx: number, yPx: number): DartTipObservation {
   };
 }
 
-test('model manifest rejects an auto-record model without evidence provenance', () => {
+test('model manifest binds automatic scoring to calibrated quality, provenance, and a release attestation', () => {
   assert.equal(isRunnableModelManifest(UNAVAILABLE_MODEL_MANIFEST), false);
   assert.throws(
     () =>
@@ -89,13 +113,46 @@ test('model manifest rejects an auto-record model without evidence provenance', 
         ...productionManifest,
         provenance: { ...productionManifest.provenance, evaluatedAt: null },
       }),
-    /Auto-recording requires held-out evaluation/,
+    /Production model manifests require held-out evaluation/,
+  );
+  assert.throws(
+    () =>
+      parseModelManifest({
+        ...productionManifest,
+        releaseEvidence: { ...productionManifest.releaseEvidence, approvalId: null },
+      }),
+    /Release attestation and approval ID must be supplied together/,
+  );
+  assert.throws(
+    () =>
+      parseModelManifest({
+        ...productionManifest,
+        releaseEvidence: { attestationPath: null, attestationSha256: null, approvalId: null },
+      }),
+    /Production model manifests require a hash-bound release attestation/,
+  );
+  assert.throws(
+    () =>
+      parseModelManifest({
+        ...productionManifest,
+        decisionPolicy: { ...productionManifest.decisionPolicy, minSharpness: 1.1 },
+      }),
+    /minSharpness must be a finite probability/,
+  );
+  assert.throws(
+    () =>
+      parseModelManifest({
+        ...productionManifest,
+        decisionPolicy: { ...productionManifest.decisionPolicy, tipTrackStaleAfterMs: 100 },
+      }),
+    /Tip-track stale interval cannot be shorter/,
   );
   assert.throws(
     () =>
       parseModelManifest({
         ...productionManifest,
         releaseStage: 'development',
+        releaseEvidence: { attestationPath: null, attestationSha256: null, approvalId: null },
       }),
     /Only a production model manifest/,
   );
@@ -103,11 +160,27 @@ test('model manifest rejects an auto-record model without evidence provenance', 
     () => parseModelManifest({ ...productionManifest, assetPath: '/models/../outside.onnx' }),
     /same-origin asset/,
   );
+  assert.throws(
+    () => parseModelManifest({ ...productionManifest, assetPath: '/models//outside.onnx' }),
+    /same-origin asset/,
+  );
+  assert.throws(
+    () => parseModelManifest({ ...productionManifest, assetPath: '/models/' }),
+    /same-origin asset/,
+  );
+  assert.throws(
+    () =>
+      parseModelManifest({
+        ...productionManifest,
+        input: { ...productionManifest.input, height: 768 },
+      }),
+    /dimensions must be equal whole pixels/,
+  );
   assert.equal(isRunnableModelManifest(productionManifest), true);
 });
 
 test('learned named anchors produce an oriented automatic calibration and map an entry point', () => {
-  const pose = deriveBoardPose(landmarks, quality, 1_000);
+  const pose = deriveBoardPose(landmarks, quality, 1_000, productionPoseGate);
   assert.notEqual(pose, null);
   if (pose === null) return;
   assert.ok(pose.bullResidualMm !== null && pose.bullResidualMm < 0.01);
@@ -122,22 +195,31 @@ test('pose refuses anchors that conflict with independently learned board landma
   const inconsistentBull = landmarks.map((landmark) =>
     landmark.kind === 'bull' ? { ...landmark, imagePoint: { xPx: 700, yPx: 700 } } : landmark,
   );
-  assert.equal(deriveBoardPose(inconsistentBull, quality, 1_000), null);
+  assert.equal(deriveBoardPose(inconsistentBull, quality, 1_000, productionPoseGate), null);
 
-  const inconsistentOuter = [
-    ...landmarks,
-    { kind: 'outer-top' as const, imagePoint: { xPx: 500, yPx: 500 }, confidence: 0.99 },
-  ];
-  assert.equal(deriveBoardPose(inconsistentOuter, quality, 1_000), null);
+  const inconsistentOuter = landmarks.map((landmark) =>
+    landmark.kind === 'outer-top' ? { ...landmark, imagePoint: { xPx: 500, yPx: 500 } } : landmark,
+  );
+  assert.equal(deriveBoardPose(inconsistentOuter, quality, 1_000, productionPoseGate), null);
 
   const noReliableBull = landmarks.map((landmark) =>
     landmark.kind === 'bull' ? { ...landmark, confidence: 0.1 } : landmark,
   );
-  assert.equal(deriveBoardPose(noReliableBull, quality, 1_000), null);
+  assert.equal(deriveBoardPose(noReliableBull, quality, 1_000, productionPoseGate), null);
+
+  const noReliableOuter = landmarks.map((landmark) =>
+    landmark.kind === 'outer-left' ? { ...landmark, confidence: 0.1 } : landmark,
+  );
+  assert.equal(deriveBoardPose(noReliableOuter, quality, 1_000, productionPoseGate), null);
+  assert.equal(
+    deriveBoardPose(landmarks, { ...quality, glareRisk: Number.NaN }, 1_000, productionPoseGate),
+    null,
+  );
+  assert.equal(deriveBoardPose(landmarks, quality, Number.NaN, productionPoseGate), null);
 });
 
 test('canonical uncertainty ranking preserves wire ambiguity and automatic policy is model-gated', () => {
-  const pose = deriveBoardPose(landmarks, quality, 2_000);
+  const pose = deriveBoardPose(landmarks, quality, 2_000, productionPoseGate);
   assert.notEqual(pose, null);
   if (pose === null) return;
   const mapped = mapDartTipToBoard(dartTip(500, 296), pose.calibration.imageToBoardHomography);
@@ -180,6 +262,45 @@ test('canonical uncertainty ranking preserves wire ambiguity and automatic polic
   });
   assert.equal(development.disposition, 'review');
   assert.match(development.reasons.join(' '), /not approved/);
+
+  const poorFocus = createLearnedScoringProposal({
+    model: productionManifest,
+    calibration: {
+      ...pose.calibration,
+      quality: { ...pose.calibration.quality, sharpness: 0.2 },
+    },
+    tip: dartTip(500, 296),
+    boardPoint: mapped.point,
+    uncertainty: mapped.uncertainty,
+    frameTimestampMs: 2_500,
+  });
+  assert.equal(poorFocus.disposition, 'abstain');
+  assert.match(poorFocus.reasons.join(' '), /focus/);
+
+  const malformedQuality = createLearnedScoringProposal({
+    model: productionManifest,
+    calibration: {
+      ...pose.calibration,
+      quality: { ...pose.calibration.quality, glareRisk: Number.NaN },
+    },
+    tip: dartTip(500, 296),
+    boardPoint: mapped.point,
+    uncertainty: mapped.uncertainty,
+    frameTimestampMs: 2_550,
+  });
+  assert.equal(malformedQuality.disposition, 'abstain');
+  assert.match(malformedQuality.reasons.join(' '), /quality output is invalid/);
+
+  const occludedTip = createLearnedScoringProposal({
+    model: productionManifest,
+    calibration: pose.calibration,
+    tip: { ...dartTip(500, 296), occlusionRisk: 0.9 },
+    boardPoint: mapped.point,
+    uncertainty: mapped.uncertainty,
+    frameTimestampMs: 2_575,
+  });
+  assert.equal(occludedTip.disposition, 'abstain');
+  assert.match(occludedTip.reasons.join(' '), /too occluded/);
 
   const possibleMiss = createLearnedScoringProposal({
     model: productionManifest,
@@ -247,7 +368,8 @@ test('strict model decoder restores source coordinates and preserves learned tip
       sourceHeight: 1080,
       inputWidth: 1024,
       inputHeight: 1024,
-      scale: 1024 / 1920,
+      scaleX: 1024 / 1920,
+      scaleY: 576 / 1080,
       offsetX: 0,
       offsetY: 224,
     },
@@ -259,6 +381,25 @@ test('strict model decoder restores source coordinates and preserves learned tip
   assert.ok(Math.abs(decoded.dartTips[0]!.sigmaXPx - 19.2) < 0.01);
   assert.ok(Math.abs(decoded.dartTips[0]!.occlusionRisk - 0.18) < 0.00001);
   assert.ok(Math.abs(decoded.quality.offAxisDegrees - 18) < 0.00001);
+
+  const lowConfidenceButContractValid = decodeModelOutputs(
+    {
+      landmarks: new Float32Array(27),
+      dartTips: new Float32Array([0.5, 0.5, 0.0005, 0.01, 0.02, 0.18]),
+      quality: new Float32Array([0.9, 0.9, 0.8, 0.1, 0.2, 0.05]),
+    },
+    {
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      inputWidth: 1024,
+      inputHeight: 1024,
+      scaleX: 1024 / 1920,
+      scaleY: 576 / 1080,
+      offsetX: 0,
+      offsetY: 224,
+    },
+  );
+  assert.equal(lowConfidenceButContractValid.dartTips.length, 1);
 
   assert.throws(
     () =>
@@ -273,13 +414,87 @@ test('strict model decoder restores source coordinates and preserves learned tip
           sourceHeight: 100,
           inputWidth: 100,
           inputHeight: 100,
-          scale: 1,
+          scaleX: 1,
+          scaleY: 1,
           offsetX: 0,
           offsetY: 0,
         },
       ),
     /dart-tip output/,
   );
+  assert.throws(
+    () =>
+      decodeModelOutputs(
+        {
+          landmarks: new Float32Array(27),
+          dartTips: new Float32Array(6),
+          quality: new Float32Array([Number.NaN, 0, 0, 0, 0, 0]),
+        },
+        {
+          sourceWidth: 100,
+          sourceHeight: 100,
+          inputWidth: 100,
+          inputHeight: 100,
+          scaleX: 1,
+          scaleY: 1,
+          offsetX: 0,
+          offsetY: 0,
+        },
+      ),
+    /quality overall/,
+  );
+  assert.throws(
+    () =>
+      decodeModelOutputs(
+        {
+          landmarks: new Float32Array(27),
+          dartTips: new Float32Array([1.1, 0.5, 0.9, 0.01, 0.01, 0.1]),
+          quality: new Float32Array([0.9, 0.9, 0.9, 0.1, 0.1, 0.1]),
+        },
+        {
+          sourceWidth: 100,
+          sourceHeight: 100,
+          inputWidth: 100,
+          inputHeight: 100,
+          scaleX: 1,
+          scaleY: 1,
+          offsetX: 0,
+          offsetY: 0,
+        },
+      ),
+    /dart-tip point/,
+  );
+});
+
+test('decoder restores rounded letterbox coordinates with independent horizontal and vertical scales', () => {
+  const inputWidth = 1024;
+  const inputHeight = 1024;
+  const sourceWidth = 1000;
+  const sourceHeight = 333;
+  const drawnHeight = 341;
+  const decoded = decodeModelOutputs(
+    {
+      landmarks: new Float32Array(27),
+      dartTips: new Float32Array([0.5, (341 + 170.5) / inputHeight, 0.9, 0.01, 0.01, 0.1]),
+      quality: new Float32Array([0.9, 0.9, 0.9, 0.1, 0.1, 0.1]),
+    },
+    {
+      sourceWidth,
+      sourceHeight,
+      inputWidth,
+      inputHeight,
+      scaleX: inputWidth / sourceWidth,
+      scaleY: drawnHeight / sourceHeight,
+      offsetX: 0,
+      offsetY: Math.floor((inputHeight - drawnHeight) / 2),
+    },
+  );
+  const tip = decoded.dartTips[0];
+  assert.notEqual(tip, undefined);
+  assert.ok(Math.abs(tip!.imagePoint.xPx - 500) < 0.001);
+  assert.ok(Math.abs(tip!.imagePoint.yPx - 166.5) < 0.001);
+  assert.ok(Math.abs(tip!.sigmaXPx - 10) < 0.001);
+  assert.ok(Math.abs(tip!.sigmaYPx - 10) < 0.001);
 });
 
 test('learned vision engine emits one settled semantic proposal without invoking a pixel heuristic', () => {
@@ -297,4 +512,78 @@ test('learned vision engine emits one settled semantic proposal without invoking
   assert.equal(settled.proposal?.disposition, 'auto-score');
   assert.equal(formatZone(settled.proposal?.candidates[0]!.zone!), 'T20');
   assert.equal(engine.process(result(1_600), productionManifest).proposal, null);
+});
+
+test('learned vision drops tracked tips when complete board pose is lost', () => {
+  const engine = new LearnedVisionEngine();
+  const result = (atMs: number) => ({
+    frameTimestampMs: atMs,
+    landmarks,
+    dartTips: [dartTip(500, 296)],
+    quality,
+    inferenceMs: 12,
+    backend: 'wasm' as const,
+  });
+  assert.equal(engine.process(result(1_000), productionManifest).tracks.length, 1);
+  const lostPose = engine.process({ ...result(1_200), landmarks: [] }, productionManifest);
+  assert.equal(lostPose.pose, null);
+  assert.equal(lostPose.tracks.length, 0);
+  const reacquired = engine.process(result(1_600), productionManifest);
+  assert.equal(reacquired.proposal, null);
+  assert.equal(reacquired.tracks[0]?.observationCount, 1);
+
+  const lostQuality = engine.process(
+    { ...result(1_800), quality: { ...quality, sharpness: 0.1 } },
+    productionManifest,
+  );
+  assert.equal(lostQuality.pose, null);
+  assert.equal(lostQuality.tracks.length, 0);
+  const afterQualityRecovery = engine.process(result(2_200), productionManifest);
+  assert.equal(afterQualityRecovery.proposal, null);
+  assert.equal(afterQualityRecovery.tracks[0]?.observationCount, 1);
+});
+
+test('learned vision resets temporal state when any artifact decision policy changes', () => {
+  const engine = new LearnedVisionEngine();
+  const result = (atMs: number) => ({
+    frameTimestampMs: atMs,
+    landmarks,
+    dartTips: [dartTip(500, 296)],
+    quality,
+    inferenceMs: 12,
+    backend: 'wasm' as const,
+  });
+  assert.equal(engine.process(result(1_000), productionManifest).tracks[0]?.observationCount, 1);
+  const changedPolicy = {
+    ...productionManifest,
+    decisionPolicy: { ...productionManifest.decisionPolicy, minSharpness: 0.9 },
+  };
+  const afterChange = engine.process(result(1_400), changedPolicy);
+  assert.equal(afterChange.proposal, null);
+  assert.equal(afterChange.tracks[0]?.observationCount, 1);
+});
+
+test('learned vision does not track a materially occluded dart tip', () => {
+  const engine = new LearnedVisionEngine();
+  const result = (atMs: number, occlusionRisk: number) => ({
+    frameTimestampMs: atMs,
+    landmarks,
+    dartTips: [{ ...dartTip(500, 296), occlusionRisk }],
+    quality,
+    inferenceMs: 12,
+    backend: 'wasm' as const,
+  });
+  const occluded = engine.process(result(1_000, 0.9), productionManifest);
+  assert.equal(occluded.blockedTipCount, 1);
+  assert.equal(occluded.tracks.length, 0);
+  assert.equal(occluded.proposal, null);
+
+  const firstClear = engine.process(result(1_400, 0.01), productionManifest);
+  assert.equal(firstClear.blockedTipCount, 0);
+  assert.equal(firstClear.tracks[0]?.observationCount, 1);
+  assert.equal(firstClear.proposal, null);
+
+  const secondClear = engine.process(result(1_800, 0.01), productionManifest);
+  assert.equal(secondClear.tracks[0]?.observationCount, 2);
+  assert.notEqual(secondClear.proposal, null);
 });

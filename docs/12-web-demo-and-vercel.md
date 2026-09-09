@@ -34,18 +34,23 @@ restore live scoring behavior.
 
 ## Critical release boundary: the checked-in model is deliberately unavailable
 
-`public/models/darts180-board-tip-v1.json` is an explicit unavailable placeholder. It names no ONNX
-artifact, no checksum, and no auto-record policy. Camera Play can still request a direct browser camera
-preview, but it displays **Verified model package required** and records no score. This is intentional.
+`public/models/darts180-board-tip-v1.json` is an explicit schema-v2 unavailable placeholder. It names no ONNX
+artifact or checksum and carries an intentionally impossible, disabled policy rather than production evidence.
+Camera Play can still request a direct browser camera preview, but it displays **Verified model package required**
+and records no score. This is intentional.
 
 A runnable artifact must be supplied only after all of the following are complete:
 
 1. a lawful, provenance-reviewed and consented training-data record;
 2. exported ONNX bytes matching the fixed `darts180-board-tip-v1` tensor semantics;
 3. a lowercase SHA-256 of those exact bytes in the same-origin manifest;
-4. model-card/release-policy values calibrated against a locked, held-out real-device evaluation set; and
-5. a production manifest with training-data, licence-review, evaluation timestamp, and held-out evaluation
-   identifiers. Only that parser-gated state may set `autoRecordEnabled: true`.
+4. model-card/release-policy values, including temporal association/settle gates, calibrated against a locked,
+   held-out real-device evaluation set;
+5. a production manifest with training-data, licence-review, evaluation timestamp, held-out evaluation, and
+   approval identifiers; and
+6. a separately hashed public release attestation that exactly binds those IDs, the artifact hash, output
+   contract, and every decision-policy value. Only that parser- and verifier-gated state may set
+   `autoRecordEnabled: true`.
 
 A compiled Worker and passing unit tests do **not** prove physical dart recognition. No deployed copy should
 be described as live or accurate camera scoring until an approved artifact has completed the device test
@@ -107,6 +112,7 @@ git diff --check
 npm run typecheck
 npm run test --workspace=@darts-180/web
 npm run build --workspace=@darts-180/web
+npm run verify:model-artifact --workspace=@darts-180/web
 npm run verify
 cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```

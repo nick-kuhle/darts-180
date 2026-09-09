@@ -1,6 +1,6 @@
 import type { VisionModelArtifactManifest } from '@darts-180/contracts';
 
-import { isRunnableModelManifest } from './modelManifest';
+import { isRunnableModelManifest, parseModelManifest } from './modelManifest';
 import type {
   LearnedInferenceFrameResult,
   VisionWorkerRequest,
@@ -50,14 +50,18 @@ export class WebInferenceClient {
 
   public async initialize(manifest: VisionModelArtifactManifest): Promise<'webgpu' | 'wasm'> {
     if (this.disposed) throw new Error('The local vision runtime has been closed.');
-    if (!isRunnableModelManifest(manifest)) {
+    const verifiedManifest = parseModelManifest(manifest);
+    if (!isRunnableModelManifest(verifiedManifest)) {
       throw new Error(
         'A verified local learned model is required before camera inference can start.',
       );
     }
     if (this.ready && this.backend !== null) return this.backend;
     const worker = this.ensureWorker();
-    const response = await this.send({ kind: 'initialize', requestId: 0, manifest }, worker);
+    const response = await this.send(
+      { kind: 'initialize', requestId: 0, manifest: verifiedManifest },
+      worker,
+    );
     if (response.kind !== 'initialized')
       throw new Error('The local learned model did not initialize.');
     this.ready = true;
@@ -74,6 +78,17 @@ export class WebInferenceClient {
     if (!this.ready || this.worker === null) {
       bitmap.close();
       throw new Error('The local learned model is not ready.');
+    }
+    if (
+      !Number.isInteger(sourceWidth) ||
+      sourceWidth <= 0 ||
+      !Number.isInteger(sourceHeight) ||
+      sourceHeight <= 0 ||
+      !Number.isFinite(frameTimestampMs) ||
+      frameTimestampMs < 0
+    ) {
+      bitmap.close();
+      throw new Error('The local vision request has invalid frame dimensions or timestamp.');
     }
     const response = await this.send(
       {
@@ -98,15 +113,17 @@ export class WebInferenceClient {
     const worker = this.worker;
     this.ready = false;
     this.backend = null;
+    this.worker = null;
     if (worker !== null) {
       try {
-        await this.send({ kind: 'dispose', requestId: 0 }, worker);
+        // Do not await this message: it can be queued behind a slow or wedged ONNX inference.
+        // Termination is the bounded teardown guarantee for a Stop Camera/unmount action.
+        worker.postMessage({ kind: 'dispose', requestId: this.nextRequestId++ });
       } catch {
         // Worker teardown is best-effort; it must not turn camera shutdown into an app failure.
       }
       worker.terminate();
     }
-    this.worker = null;
     this.rejectAll('The local vision runtime was closed.');
   }
 
@@ -114,7 +131,15 @@ export class WebInferenceClient {
     if (this.worker !== null) return this.worker;
     const worker = this.makeWorker();
     worker.onmessage = (event) => this.handleMessage(event.data);
-    worker.onerror = () => this.rejectAll('The local vision worker stopped unexpectedly.');
+    worker.onerror = () => {
+      if (this.worker === worker) {
+        this.worker = null;
+        this.ready = false;
+        this.backend = null;
+        worker.terminate();
+      }
+      this.rejectAll('The local vision worker stopped unexpectedly.');
+    };
     this.worker = worker;
     return worker;
   }

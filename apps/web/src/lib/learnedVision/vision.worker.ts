@@ -3,6 +3,11 @@
 import type { VisionModelArtifactManifest } from '@darts-180/contracts';
 import * as ort from 'onnxruntime-web';
 
+import { isRunnableModelManifest, parseModelManifest } from './modelManifest';
+import {
+  assertAttestationMatchesManifest,
+  parsePublicModelReleaseAttestation,
+} from './modelReleaseAttestation';
 import { decodeModelOutputs, type LetterboxTransform } from './modelOutputDecoder';
 import type {
   LearnedInferenceFrameResult,
@@ -14,6 +19,8 @@ let session: ort.InferenceSession | null = null;
 let manifest: VisionModelArtifactManifest | null = null;
 let backend: 'webgpu' | 'wasm' | null = null;
 let processing: Promise<void> = Promise.resolve();
+let preprocessCanvas: OffscreenCanvas | null = null;
+let preprocessContext: OffscreenCanvasRenderingContext2D | null = null;
 
 // The browser app intentionally stays usable without cross-origin isolation. ONNX Runtime's
 // single-threaded WASM mode avoids requiring COOP/COEP while the WebGPU path is opportunistic.
@@ -58,15 +65,15 @@ async function handleMessage(request: VisionWorkerRequest): Promise<void> {
 }
 
 async function initialize(nextManifest: VisionModelArtifactManifest): Promise<'webgpu' | 'wasm'> {
-  if (
-    nextManifest.releaseStage === 'unavailable' ||
-    nextManifest.assetPath === '' ||
-    nextManifest.sha256 === ''
-  ) {
+  // The main thread parses the static manifest, but structured-clone input is not a security
+  // boundary. Re-parse it here so a direct Worker message cannot bypass production release gates.
+  const verifiedManifest = parseModelManifest(nextManifest);
+  if (!isRunnableModelManifest(verifiedManifest)) {
     throw new Error('The verified local learned model is not installed.');
   }
   await dispose();
-  const bytes = await fetchVerifiedModel(nextManifest);
+  await verifyProductionReleaseAttestation(verifiedManifest);
+  const bytes = await fetchVerifiedModel(verifiedManifest);
 
   if (supportsWebGpu()) {
     try {
@@ -74,12 +81,14 @@ async function initialize(nextManifest: VisionModelArtifactManifest): Promise<'w
         executionProviders: ['webgpu'],
         graphOptimizationLevel: 'all',
       });
-      manifest = nextManifest;
+      manifest = verifiedManifest;
       backend = 'webgpu';
       return backend;
     } catch {
-      // A browser may expose WebGPU but lack an operator supported by the exported graph. Fall back
-      // to the app-bundled, single-threaded WASM runtime rather than failing the entire camera flow.
+      // A browser may expose WebGPU but lack an operator supported by the exported graph. Release
+      // any partially initialized state before falling back to the app-bundled single-threaded WASM
+      // runtime rather than failing the entire camera flow.
+      await dispose();
     }
   }
 
@@ -87,7 +96,7 @@ async function initialize(nextManifest: VisionModelArtifactManifest): Promise<'w
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
   });
-  manifest = nextManifest;
+  manifest = verifiedManifest;
   backend = 'wasm';
   return backend;
 }
@@ -99,6 +108,16 @@ async function infer(
   try {
     if (session === null || manifest === null || backend === null) {
       throw new Error('The local learned model is not ready.');
+    }
+    if (
+      !Number.isInteger(request.sourceWidth) ||
+      !Number.isInteger(request.sourceHeight) ||
+      !Number.isFinite(request.frameTimestampMs) ||
+      request.frameTimestampMs < 0 ||
+      request.sourceWidth !== request.bitmap.width ||
+      request.sourceHeight !== request.bitmap.height
+    ) {
+      throw new Error('The camera frame dimensions do not match the local vision request.');
     }
     const prepared = await preprocess(request.bitmap, manifest.input.width, manifest.input.height);
     const inputName = session.inputNames[0];
@@ -135,10 +154,13 @@ async function infer(
 }
 
 async function dispose(): Promise<void> {
-  if (session !== null) await session.release();
+  const previousSession = session;
   session = null;
   manifest = null;
   backend = null;
+  preprocessCanvas = null;
+  preprocessContext = null;
+  if (previousSession !== null) await previousSession.release();
 }
 
 async function fetchVerifiedModel(nextManifest: VisionModelArtifactManifest): Promise<Uint8Array> {
@@ -148,13 +170,44 @@ async function fetchVerifiedModel(nextManifest: VisionModelArtifactManifest): Pr
   });
   if (!response.ok) throw new Error('The local learned model file is missing.');
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const actualHash = [...new Uint8Array(digest)]
-    .map((part) => part.toString(16).padStart(2, '0'))
-    .join('');
-  if (actualHash !== nextManifest.sha256)
+  if ((await sha256Hex(bytes)) !== nextManifest.sha256) {
     throw new Error('The local learned model failed integrity verification.');
+  }
   return bytes;
+}
+
+async function verifyProductionReleaseAttestation(
+  nextManifest: VisionModelArtifactManifest,
+): Promise<void> {
+  if (nextManifest.releaseStage !== 'production') return;
+  const { attestationPath, attestationSha256 } = nextManifest.releaseEvidence;
+  if (attestationPath === null || attestationSha256 === null) {
+    throw new Error('The production model release attestation is missing.');
+  }
+  const response = await fetch(attestationPath, {
+    cache: 'force-cache',
+    credentials: 'same-origin',
+  });
+  if (!response.ok) throw new Error('The production model release attestation is missing.');
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if ((await sha256Hex(bytes)) !== attestationSha256) {
+    throw new Error('The production model release attestation failed integrity verification.');
+  }
+  let rawAttestation: unknown;
+  try {
+    rawAttestation = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  } catch {
+    throw new Error('The production model release attestation is not valid JSON.');
+  }
+  assertAttestationMatchesManifest(
+    parsePublicModelReleaseAttestation(rawAttestation),
+    nextManifest,
+  );
+}
+
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, '0')).join('');
 }
 
 interface PreparedFrame {
@@ -176,9 +229,7 @@ async function preprocess(
   const drawnHeight = Math.round(sourceHeight * scale);
   const offsetX = Math.floor((inputWidth - drawnWidth) / 2);
   const offsetY = Math.floor((inputHeight - drawnHeight) / 2);
-  const canvas = new OffscreenCanvas(inputWidth, inputHeight);
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (context === null) throw new Error('The browser could not prepare a local model frame.');
+  const context = getPreprocessContext(inputWidth, inputHeight);
   context.fillStyle = '#000000';
   context.fillRect(0, 0, inputWidth, inputHeight);
   context.drawImage(bitmap, offsetX, offsetY, drawnWidth, drawnHeight);
@@ -193,8 +244,36 @@ async function preprocess(
   }
   return {
     tensor,
-    transform: { sourceWidth, sourceHeight, inputWidth, inputHeight, scale, offsetX, offsetY },
+    transform: {
+      sourceWidth,
+      sourceHeight,
+      inputWidth,
+      inputHeight,
+      scaleX: drawnWidth / sourceWidth,
+      scaleY: drawnHeight / sourceHeight,
+      offsetX,
+      offsetY,
+    },
   };
+}
+
+function getPreprocessContext(
+  inputWidth: number,
+  inputHeight: number,
+): OffscreenCanvasRenderingContext2D {
+  if (
+    preprocessCanvas === null ||
+    preprocessContext === null ||
+    preprocessCanvas.width !== inputWidth ||
+    preprocessCanvas.height !== inputHeight
+  ) {
+    preprocessCanvas = new OffscreenCanvas(inputWidth, inputHeight);
+    preprocessContext = preprocessCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (preprocessContext === null) {
+    throw new Error('The browser could not prepare a local model frame.');
+  }
+  return preprocessContext;
 }
 
 function floatTensorData(tensor: ort.Tensor | undefined, name: string): Float32Array {
@@ -218,7 +297,8 @@ function safeErrorMessage(error: unknown): string {
   if (
     message.includes('contract') ||
     message.includes('output') ||
-    message.includes('single-image')
+    message.includes('single-image') ||
+    message.includes('dimensions')
   ) {
     return 'The local learned model does not match the Darts 180 browser contract.';
   }

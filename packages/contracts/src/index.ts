@@ -105,7 +105,12 @@ export interface CameraPoseQuality {
 
 export interface BoardCalibration {
   calibrationId: string;
-  boardProfile: 'standard-steel-tip' | 'custom';
+  /**
+   * `standard-darts` is the 340 mm regulation scoring geometry shared by the normal web flow.
+   * Point type is not a setup choice; a non-standard electronic layout must be identified as
+   * `custom` rather than silently mapped through the regulation board.
+   */
+  boardProfile: 'standard-darts' | 'custom';
   createdAt: string;
   source: 'auto' | 'guided' | 'manual';
   /** Homography maps image pixel coordinates into canonical board millimetres. */

@@ -26,6 +26,7 @@ import {
   loadModelManifest,
   UNAVAILABLE_MODEL_MANIFEST,
 } from '../lib/learnedVision/modelManifest';
+import { modelQualityBlockers } from '../lib/learnedVision/qualityPolicy';
 import {
   getBrowserVisionSupport,
   WebInferenceClient,
@@ -118,7 +119,7 @@ export function LearnedCameraPlay({
   const quality = latestFrame?.observation.quality ?? null;
   const poseReady = latestFrame?.pose !== null && latestFrame?.pose !== undefined;
   const qualityReasons = useMemo(
-    () => (quality === null ? [] : qualityBlockers(model, quality)),
+    () => (quality === null ? [] : modelQualityBlockers(model, quality)),
     [model, quality],
   );
 
@@ -231,7 +232,9 @@ export function LearnedCameraPlay({
         }
         return null;
       } finally {
-        inferenceInFlightRef.current = false;
+        // A stopped/restarted camera may already have a new inference in flight. An obsolete
+        // generation must not clear that new run's serialization guard.
+        if (generation === runGenerationRef.current) inferenceInFlightRef.current = false;
       }
     },
     [model],
@@ -245,7 +248,7 @@ export function LearnedCameraPlay({
         setStatus('Looking for the full standard board and its orientation…');
         return false;
       }
-      const blockers = qualityBlockers(model, frame.observation.quality);
+      const blockers = modelQualityBlockers(model, frame.observation.quality);
       if (blockers.length > 0) {
         setPhase('finding-board');
         setStatus(blockers[0] ?? 'Looking for a camera view safe enough to score.');
@@ -268,7 +271,9 @@ export function LearnedCameraPlay({
       setPhase('error');
       return;
     }
-    if (!browserSupport.supported) {
+    // An unavailable manifest may still offer a privacy-safe camera preview. A runnable model,
+    // however, must fail closed when this browser cannot start its local inference boundary.
+    if (runnableModel && !browserSupport.supported) {
       setCameraError(browserSupport.reasons.join(' '));
       setPhase('error');
       return;
@@ -285,9 +290,11 @@ export function LearnedCameraPlay({
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
-          frameRate: { ideal: 30, min: 15 },
+          // 1080p is enough for a 1024px learned input while avoiding avoidable 4K bitmap transfer
+          // pressure on mid-range phones. Browsers may still choose a higher supported mode.
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
         },
       });
       if (generation !== runGenerationRef.current) {
@@ -334,7 +341,18 @@ export function LearnedCameraPlay({
       if (openedCamera) {
         const client = clientRef.current;
         clientRef.current = null;
+        engineRef.current = null;
         if (client !== null) void client.dispose();
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        if (videoRef.current !== null) videoRef.current.srcObject = null;
+        if (animationFrameRef.current !== null) {
+          window.cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = null;
+        }
+        setCameraActive(false);
+        setRuntimeBackend(null);
+        setLatestFrame(null);
       }
       setCameraError(openedCamera ? safeVisionError(error) : describeCameraAccessError(error));
       setPhase('error');
@@ -356,6 +374,7 @@ export function LearnedCameraPlay({
   ]);
 
   const armCamera = useCallback(async () => {
+    if (phase !== 'ready-to-play' || inferenceInFlightRef.current) return;
     if (gameComplete || availableSlots <= 0) {
       setPhase('visit-complete');
       setStatus(
@@ -376,9 +395,9 @@ export function LearnedCameraPlay({
     const frame = await runInference(generation);
     if (generation !== runGenerationRef.current || frame === null) return;
     if (!admitBoard(frame)) return;
-    if (frame.tracks.length > 0) {
+    if (frame.tracks.length > 0 || frame.blockedTipCount > 0) {
       setStatus(
-        'Darts are still visible. Remove them, then Darts 180 will check the clear board automatically.',
+        'Darts are visible or too obscured to verify a clear board. Remove them, then Darts 180 will check automatically.',
       );
       return;
     }
@@ -388,7 +407,7 @@ export function LearnedCameraPlay({
     setStatus(
       'Camera armed. Throw normally; Darts 180 watches for a settled dart and checks the physical tip locally.',
     );
-  }, [admitBoard, availableSlots, gameComplete, runInference, runnableModel]);
+  }, [admitBoard, availableSlots, gameComplete, phase, runInference, runnableModel]);
 
   const handleProposal = useCallback(
     (proposal: ScoringProposal): boolean => {
@@ -453,7 +472,7 @@ export function LearnedCameraPlay({
       if (proposal !== null) handleProposal(proposal);
       else
         setStatus(
-          'No settled physical tip was ready to score. Keep the camera still and throw the next dart normally.',
+          'No safe settled physical-tip score was available. If a dart is embedded, use Correct a Score before continuing.',
         );
       if (availableSlots <= 1) setPhase('visit-complete');
       else setPhase('watching');
@@ -464,7 +483,8 @@ export function LearnedCameraPlay({
         setStatus('The post-impact inference burst failed safely. No score was recorded.');
       }
     } finally {
-      inferenceInFlightRef.current = false;
+      // Do not let a cancelled post-impact burst unlock a newer camera generation.
+      if (generation === runGenerationRef.current) inferenceInFlightRef.current = false;
     }
   }, [availableSlots, handleProposal, model]);
 
@@ -472,7 +492,7 @@ export function LearnedCameraPlay({
     const generation = runGenerationRef.current;
     const frame = await runInference(generation);
     if (generation !== runGenerationRef.current || frame === null) return;
-    if (frame.pose === null || qualityBlockers(model, frame.observation.quality).length > 0) {
+    if (frame.pose === null || modelQualityBlockers(model, frame.observation.quality).length > 0) {
       setPhase('finding-board');
       setStatus(
         'Camera conditions changed. Re-reading the board automatically before another score.',
@@ -557,7 +577,7 @@ export function LearnedCameraPlay({
     const interval = window.setInterval(() => {
       void runInference(runGenerationRef.current).then((frame) => {
         if (frame === null || frame.pose === null) return;
-        if (frame.tracks.length > 0) return;
+        if (frame.tracks.length > 0 || frame.blockedTipCount > 0) return;
         engineRef.current?.resetVisit();
         eventGateRef.current.reset();
         setPhase('ready-to-play');
@@ -651,19 +671,15 @@ export function LearnedCameraPlay({
             >
               {primaryAction}
             </button>
-            {cameraActive &&
-              runnableModel &&
-              phase !== 'watching' &&
-              phase !== 'analysing-impact' &&
-              phase !== 'awaiting-clear' && (
-                <button
-                  className="button secondary"
-                  onClick={() => void armCamera()}
-                  disabled={!canArm || gameComplete || availableSlots <= 0}
-                >
-                  ARM CAMERA
-                </button>
-              )}
+            {cameraActive && runnableModel && phase === 'ready-to-play' && (
+              <button
+                className="button secondary"
+                onClick={() => void armCamera()}
+                disabled={!canArm || gameComplete || availableSlots <= 0}
+              >
+                ARM CAMERA
+              </button>
+            )}
             <button className="text-button" onClick={onOpenAdvanced}>
               DIAGNOSTICS →
             </button>
@@ -690,9 +706,9 @@ export function LearnedCameraPlay({
 
           <div className="learned-dart-cards">
             {turnDarts.map((dart) => {
-              const needsReview =
-                dart.requiresReview === true ||
-                (dart.source === 'auto' && (dart.confidence < 0.97 || dart.wireMarginMm < 1.5));
+              // The proposal's reviewed manifest policy determines review status. Do not add a
+              // second UI-only confidence or wire threshold that could drift from the artifact.
+              const needsReview = dart.requiresReview === true;
               return (
                 <article
                   key={dart.slot}
@@ -833,29 +849,6 @@ function QualityState({
       )}
     </section>
   );
-}
-
-function qualityBlockers(
-  model: VisionModelArtifactManifest,
-  quality: ModelQualityObservation,
-): readonly string[] {
-  if (!isRunnableModelManifest(model))
-    return ['A verified local learned model package is required before scoring.'];
-  const policy = model.decisionPolicy;
-  const blockers: string[] = [];
-  if (quality.boardDiameterPixels < policy.minBoardDiameterPixels) {
-    blockers.push('Move the mount closer so the board face has enough learned detail.');
-  }
-  if (quality.offAxisDegrees > policy.maxQualityOffAxisDegrees) {
-    blockers.push('Move toward a clearer angle while keeping the full board in view.');
-  }
-  if (quality.overall < policy.minOverallQuality) {
-    blockers.push('Improve focus or lighting until the learned quality check is ready.');
-  }
-  if (quality.occlusionRisk > policy.maxOcclusionRisk) {
-    blockers.push('Clear the board face or move to a view with less occlusion.');
-  }
-  return blockers;
 }
 
 function phaseLabel(phase: LearnedCameraPhase): string {

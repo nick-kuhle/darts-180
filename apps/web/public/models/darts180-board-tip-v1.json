@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "modelId": "darts180-board-tip",
   "modelVersion": "unavailable",
   "releaseStage": "unavailable",
@@ -23,10 +23,20 @@
     "minAutoScoreProbability": 1,
     "minAutoScoreWireMarginMm": 99,
     "minReviewProbability": 1,
+    "minZonePosteriorMargin": 1,
+    "minLandmarkConfidence": 1,
+    "maxPoseValidationResidualMm": 0,
     "maxQualityOffAxisDegrees": 0,
     "minBoardDiameterPixels": 9007199254740991,
     "minOverallQuality": 1,
+    "minBoardCoverage": 1,
+    "minSharpness": 1,
+    "maxGlareRisk": 0,
     "maxOcclusionRisk": 0,
+    "tipTrackMatchDistanceMm": 0.1,
+    "tipTrackSettleMs": 1,
+    "tipTrackStaleAfterMs": 2,
+    "maxTipTrackSpreadMm": 0,
     "confidenceTemperature": 1,
     "confidenceBias": 0,
     "heldOutEvaluationId": null
@@ -35,5 +45,10 @@
     "trainingDataId": null,
     "licenseReviewId": null,
     "evaluatedAt": null
+  },
+  "releaseEvidence": {
+    "attestationPath": null,
+    "attestationSha256": null,
+    "approvalId": null
   }
 }

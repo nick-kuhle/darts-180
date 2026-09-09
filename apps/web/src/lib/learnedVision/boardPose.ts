@@ -17,6 +17,13 @@ import {
 } from '../annotationGeometry';
 
 const REQUIRED_ANCHOR_KINDS = ['d20-double', 'd6-double', 'd3-double', 'd11-double'] as const;
+const REQUIRED_VALIDATION_KINDS = [
+  'bull',
+  'outer-top',
+  'outer-right',
+  'outer-bottom',
+  'outer-left',
+] as const;
 
 const CANONICAL_ANCHORS: Record<(typeof REQUIRED_ANCHOR_KINDS)[number], BoardPointMm> = {
   'd20-double': { xMm: 0, yMm: -166 },
@@ -25,9 +32,12 @@ const CANONICAL_ANCHORS: Record<(typeof REQUIRED_ANCHOR_KINDS)[number], BoardPoi
   'd11-double': { xMm: -166, yMm: 0 },
 };
 
-// These are redundant semantic observations, not additional player calibration handles. The outer
-// cardinal points are defined on the outer double boundary at r=170 mm.
-const SECONDARY_LANDMARKS: Readonly<Partial<Record<BoardLandmarkKind, BoardPointMm>>> = {
+// These are semantic model observations, not additional player calibration handles. The outer
+// cardinal points are defined on the outer-double boundary at r=170 mm.
+const CANONICAL_VALIDATION_POINTS: Record<
+  (typeof REQUIRED_VALIDATION_KINDS)[number],
+  BoardPointMm
+> = {
   bull: { xMm: 0, yMm: 0 },
   'outer-top': { xMm: 0, yMm: -170 },
   'outer-right': { xMm: 170, yMm: 0 },
@@ -35,18 +45,21 @@ const SECONDARY_LANDMARKS: Readonly<Partial<Record<BoardLandmarkKind, BoardPoint
   'outer-left': { xMm: -170, yMm: 0 },
 };
 
-const SECONDARY_LANDMARK_MIN_CONFIDENCE = 0.45;
-const MAX_SECONDARY_LANDMARK_RESIDUAL_MM = 18;
+/** Geometry-only thresholds carried by the model artifact's calibrated decision policy. */
+export interface BoardPoseGate {
+  minLandmarkConfidence: number;
+  maxPoseValidationResidualMm: number;
+}
 
 export interface DerivedBoardPose {
   calibration: BoardCalibration;
   boardToImageHomography: Homography;
   /** Distance of the independently predicted bull from canonical (0, 0), in millimetres. */
-  bullResidualMm: number | null;
+  bullResidualMm: number;
   /** Mean anchor reprojection error in source-frame pixels. */
   anchorReprojectionErrorPx: number;
-  /** Largest redundant learned-landmark residual in board millimetres, when available. */
-  secondaryLandmarkResidualMm: number | null;
+  /** Largest redundant learned-landmark residual in board millimetres. */
+  secondaryLandmarkResidualMm: number;
 }
 
 export interface BoardUncertaintyMm {
@@ -55,22 +68,45 @@ export interface BoardUncertaintyMm {
 }
 
 /**
- * Creates a fully oriented board calibration only from named learned landmarks. Repeated red/green
- * bands never supply the number orientation: the distinct D20/D6/D3/D11 landmark identities do.
+ * Creates a fully oriented board calibration only from complete named learned landmarks. Repeated
+ * red/green bands never supply the number orientation: D20/D6/D3/D11 identify the rotation, while
+ * bull and outer-double points independently reject a flipped or internally inconsistent solution.
  */
 export function deriveBoardPose(
   landmarks: readonly BoardLandmarkObservation[],
   quality: ModelQualityObservation,
   frameTimestampMs: number,
+  gate: Readonly<BoardPoseGate>,
 ): DerivedBoardPose | null {
+  if (
+    !Number.isFinite(frameTimestampMs) ||
+    frameTimestampMs < 0 ||
+    !isValidGate(gate) ||
+    !isValidModelQuality(quality)
+  ) {
+    return null;
+  }
+
   const anchors = REQUIRED_ANCHOR_KINDS.map((kind) => mostConfidentLandmark(landmarks, kind));
-  if (anchors.some((anchor) => anchor === undefined)) return null;
+  const validations = REQUIRED_VALIDATION_KINDS.map((kind) =>
+    mostConfidentLandmark(landmarks, kind),
+  );
+  if (
+    anchors.some(
+      (anchor) => anchor === undefined || anchor.confidence < gate.minLandmarkConfidence,
+    ) ||
+    validations.some(
+      (landmark) => landmark === undefined || landmark.confidence < gate.minLandmarkConfidence,
+    )
+  ) {
+    return null;
+  }
 
   const imagePoints: ImagePoint[] = [];
   const boardPoints: BoardPointMm[] = [];
   for (const kind of REQUIRED_ANCHOR_KINDS) {
     const anchor = mostConfidentLandmark(landmarks, kind);
-    if (anchor === undefined || anchor.confidence <= 0) return null;
+    if (anchor === undefined) return null;
     imagePoints.push({ x: anchor.imagePoint.xPx, y: anchor.imagePoint.yPx });
     boardPoints.push(CANONICAL_ANCHORS[kind]);
   }
@@ -81,25 +117,26 @@ export function deriveBoardPose(
   if (boardToImage === null) return null;
 
   const anchorError = meanAnchorReprojectionError(imagePoints, boardPoints, boardToImage);
-  if (!Number.isFinite(anchorError) || anchorError > 8) return null;
+  if (!Number.isFinite(anchorError)) return null;
 
-  const bull = mostConfidentLandmark(landmarks, 'bull');
-  const mappedBull =
-    bull === undefined
-      ? null
-      : mapImagePointToBoard({ x: bull.imagePoint.xPx, y: bull.imagePoint.yPx }, imageToBoard);
-  const bullResidualMm = mappedBull === null ? null : Math.hypot(mappedBull.xMm, mappedBull.yMm);
-  const secondaryLandmarkResidualMm = maxSecondaryLandmarkResidual(landmarks, imageToBoard);
-  // Independent bull and outer-double cues validate the exact four points used to solve the
-  // homography. They catch flipped, repeated-band, and internally inconsistent landmark sets;
-  // they never infer a score from colour or frame difference.
+  const validationResiduals: number[] = [];
+  for (const kind of REQUIRED_VALIDATION_KINDS) {
+    const landmark = mostConfidentLandmark(landmarks, kind);
+    if (landmark === undefined) return null;
+    const mapped = mapImagePointToBoard(
+      { x: landmark.imagePoint.xPx, y: landmark.imagePoint.yPx },
+      imageToBoard,
+    );
+    const expected = CANONICAL_VALIDATION_POINTS[kind];
+    if (mapped === null) return null;
+    validationResiduals.push(Math.hypot(mapped.xMm - expected.xMm, mapped.yMm - expected.yMm));
+  }
+  const secondaryLandmarkResidualMm = Math.max(...validationResiduals);
+  const bullResidualMm = validationResiduals[0];
   if (
-    bull === undefined ||
-    bull.confidence < SECONDARY_LANDMARK_MIN_CONFIDENCE ||
-    bullResidualMm === null ||
-    bullResidualMm > MAX_SECONDARY_LANDMARK_RESIDUAL_MM ||
-    (secondaryLandmarkResidualMm !== null &&
-      secondaryLandmarkResidualMm > MAX_SECONDARY_LANDMARK_RESIDUAL_MM)
+    bullResidualMm === undefined ||
+    !Number.isFinite(secondaryLandmarkResidualMm) ||
+    secondaryLandmarkResidualMm > gate.maxPoseValidationResidualMm
   ) {
     return null;
   }
@@ -109,7 +146,7 @@ export function deriveBoardPose(
   return {
     calibration: {
       calibrationId,
-      boardProfile: 'standard-steel-tip',
+      boardProfile: 'standard-darts',
       createdAt: new Date(frameTimestampMs).toISOString(),
       source: 'auto',
       imageToBoardHomography: imageToBoard,
@@ -164,6 +201,35 @@ export function toCameraPoseQuality(quality: ModelQualityObservation): CameraPos
   };
 }
 
+function isValidGate(gate: Readonly<BoardPoseGate>): boolean {
+  return (
+    Number.isFinite(gate.minLandmarkConfidence) &&
+    gate.minLandmarkConfidence >= 0 &&
+    gate.minLandmarkConfidence <= 1 &&
+    Number.isFinite(gate.maxPoseValidationResidualMm) &&
+    gate.maxPoseValidationResidualMm >= 0
+  );
+}
+
+function isValidModelQuality(quality: ModelQualityObservation): boolean {
+  return (
+    isProbability(quality.overall) &&
+    isProbability(quality.boardCoverage) &&
+    isProbability(quality.sharpness) &&
+    isProbability(quality.glareRisk) &&
+    isProbability(quality.occlusionRisk) &&
+    Number.isFinite(quality.offAxisDegrees) &&
+    quality.offAxisDegrees >= 0 &&
+    quality.offAxisDegrees <= 90 &&
+    Number.isFinite(quality.boardDiameterPixels) &&
+    quality.boardDiameterPixels >= 0
+  );
+}
+
+function isProbability(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 function mostConfidentLandmark(
   landmarks: readonly BoardLandmarkObservation[],
   kind: BoardLandmarkKind,
@@ -174,31 +240,9 @@ function mostConfidentLandmark(
         landmark.kind === kind &&
         Number.isFinite(landmark.imagePoint.xPx) &&
         Number.isFinite(landmark.imagePoint.yPx) &&
-        Number.isFinite(landmark.confidence),
+        isProbability(landmark.confidence),
     )
     .sort((left, right) => right.confidence - left.confidence)[0];
-}
-
-function maxSecondaryLandmarkResidual(
-  landmarks: readonly BoardLandmarkObservation[],
-  imageToBoard: Homography,
-): number | null {
-  const residuals: number[] = [];
-  for (const [kind, expected] of Object.entries(SECONDARY_LANDMARKS) as [
-    BoardLandmarkKind,
-    BoardPointMm,
-  ][]) {
-    const landmark = mostConfidentLandmark(landmarks, kind);
-    if (landmark === undefined || landmark.confidence < SECONDARY_LANDMARK_MIN_CONFIDENCE) continue;
-    const mapped = mapImagePointToBoard(
-      { x: landmark.imagePoint.xPx, y: landmark.imagePoint.yPx },
-      imageToBoard,
-    );
-    if (mapped === null) return Number.POSITIVE_INFINITY;
-    residuals.push(Math.hypot(mapped.xMm - expected.xMm, mapped.yMm - expected.yMm));
-  }
-  if (residuals.length === 0) return null;
-  return Math.max(...residuals);
 }
 
 function meanAnchorReprojectionError(

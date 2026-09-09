@@ -1,8 +1,9 @@
 # `native/vision-core`
 
 This is the seed of the deterministic native layer shared by iOS and Android. It currently
-contains canonical steel-tip board geometry and camera-quality policy; it is **not yet** the
-on-device detector.
+contains canonical standard-darts board geometry and schema-v2 manifest-policy primitives; it is
+**not yet** the on-device detector. Normal scoring setup remains identical for steel-tip and
+soft-tip darts.
 
 ## Why this exists
 
@@ -29,6 +30,11 @@ possible (UniFFI is a candidate after the core API stabilizes).
 - Do not send full camera frames across a bridge.
 - Emit only quality updates, pose/calibration updates, ranked score candidates, and an optional
   local clip handle.
+- Map only a verified web-contract-equivalent schema-v2 policy into the Rust bridge. Do not use a
+  native default, screen-level threshold, or remote toggle to promote a review-only release.
+- Require the complete nine learned landmarks, learned quality/occlusion evidence, and verified
+  production attestation/evaluation/provenance evidence before an automatic score. A possible
+  one-view `MISS` is review-only.
 - Keep the pure board decoder mirrored by tests in `packages/rules` until Rust becomes the
   authoritative shared core. Differential tests must prove the two implementations agree before
   making the switch.

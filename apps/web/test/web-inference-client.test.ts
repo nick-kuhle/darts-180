@@ -10,7 +10,7 @@ import type {
 } from '../src/lib/learnedVision/workerProtocol.js';
 
 const manifest: VisionModelArtifactManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   modelId: 'darts180-board-tip',
   modelVersion: 'client-test-v1',
   releaseStage: 'evaluation',
@@ -25,10 +25,20 @@ const manifest: VisionModelArtifactManifest = {
     minAutoScoreProbability: 0.97,
     minAutoScoreWireMarginMm: 1.5,
     minReviewProbability: 0.45,
+    minZonePosteriorMargin: 0.08,
+    minLandmarkConfidence: 0.45,
+    maxPoseValidationResidualMm: 18,
     maxQualityOffAxisDegrees: 65,
     minBoardDiameterPixels: 480,
     minOverallQuality: 0.7,
+    minBoardCoverage: 0.8,
+    minSharpness: 0.7,
+    maxGlareRisk: 0.45,
     maxOcclusionRisk: 0.5,
+    tipTrackMatchDistanceMm: 12,
+    tipTrackSettleMs: 320,
+    tipTrackStaleAfterMs: 1200,
+    maxTipTrackSpreadMm: 4,
     confidenceTemperature: 1,
     confidenceBias: 0,
     heldOutEvaluationId: 'client-test-eval',
@@ -38,12 +48,18 @@ const manifest: VisionModelArtifactManifest = {
     licenseReviewId: 'client-test-license',
     evaluatedAt: null,
   },
+  releaseEvidence: {
+    attestationPath: null,
+    attestationSha256: null,
+    approvalId: null,
+  },
 };
 
 class FakeWorker {
   public onmessage: ((event: MessageEvent<VisionWorkerResponse>) => void) | null = null;
   public onerror: ((event: ErrorEvent) => void) | null = null;
   public terminated = false;
+  public replyToDispose = true;
   public readonly received: Array<{
     request: VisionWorkerRequest;
     transfer: Transferable[] | undefined;
@@ -81,7 +97,7 @@ class FakeWorker {
             backend: 'wasm',
           },
         });
-      } else {
+      } else if (request.kind === 'dispose' && this.replyToDispose) {
         this.reply({ kind: 'disposed', requestId: request.requestId });
       }
     });
@@ -113,6 +129,35 @@ test('WebInferenceClient uses typed requests, transfers a camera bitmap, and rel
   assert.equal(worker.received[2]?.request.kind, 'dispose');
   assert.equal(worker.terminated, true);
   assert.equal(client.isReady, false);
+});
+
+test('WebInferenceClient tears down immediately even when a Worker never acknowledges disposal', async () => {
+  const worker = new FakeWorker();
+  worker.replyToDispose = false;
+  const client = new WebInferenceClient(() => worker);
+  await client.initialize(manifest);
+
+  const completed = await Promise.race([
+    client.dispose().then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+
+  assert.equal(completed, true);
+  assert.equal(worker.received[1]?.request.kind, 'dispose');
+  assert.equal(worker.terminated, true);
+});
+
+test('WebInferenceClient closes an invalid camera bitmap before sending it to a Worker', async () => {
+  const worker = new FakeWorker();
+  const client = new WebInferenceClient(() => worker);
+  await client.initialize(manifest);
+  let closed = false;
+  const bitmap = { close: () => (closed = true) } as unknown as ImageBitmap;
+
+  await assert.rejects(client.infer(bitmap, 0, 1080, 1234), /invalid frame dimensions/);
+  assert.equal(closed, true);
+  assert.equal(worker.received.length, 1);
+  await client.dispose();
 });
 
 test('WebInferenceClient refuses an unavailable model before starting a worker', async () => {

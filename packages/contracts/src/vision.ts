@@ -117,11 +117,85 @@ export interface ModelQualityObservation {
 }
 
 /**
+ * Public, hash-bound release attestation for a runnable production artifact. It contains only
+ * review identifiers and a safe summary pointer; the governed raw data, private evaluator notes,
+ * and participant media remain outside the web bundle.
+ */
+export interface ModelReleaseEvidence {
+  /** Same-origin public attestation JSON. Null for unavailable/development/evaluation artifacts. */
+  attestationPath: string | null;
+  /** Lowercase SHA-256 of the exact public attestation bytes. */
+  attestationSha256: string | null;
+  /** Immutable approval record ID from the controlled release system. */
+  approvalId: string | null;
+}
+
+/**
+ * Values fitted on a locked held-out set. This entire object is duplicated in a production public
+ * attestation so model bytes cannot be paired with less conservative browser decision thresholds.
+ */
+export interface VisionModelDecisionPolicy {
+  autoRecordEnabled: boolean;
+  minAutoScoreProbability: number;
+  minAutoScoreWireMarginMm: number;
+  minReviewProbability: number;
+  /** Required best-vs-runner-up geometric posterior separation. */
+  minZonePosteriorMargin: number;
+  /** Minimum calibrated landmark confidence for each complete-board pose anchor. */
+  minLandmarkConfidence: number;
+  /** Largest allowed redundant landmark residual after the oriented homography is solved. */
+  maxPoseValidationResidualMm: number;
+  maxQualityOffAxisDegrees: number;
+  minBoardDiameterPixels: number;
+  minOverallQuality: number;
+  minBoardCoverage: number;
+  minSharpness: number;
+  maxGlareRisk: number;
+  maxOcclusionRisk: number;
+  /** Canonical-board association/settle policy for learned tips across a post-impact burst. */
+  tipTrackMatchDistanceMm: number;
+  tipTrackSettleMs: number;
+  tipTrackStaleAfterMs: number;
+  maxTipTrackSpreadMm: number;
+  /** Temperature/logit calibration applied to the combined model/geometry confidence. */
+  confidenceTemperature: number;
+  confidenceBias: number;
+  heldOutEvaluationId: string | null;
+}
+
+/**
+ * Safe aggregate record published beside a production artifact. It deliberately excludes raw media,
+ * participant identifiers, precise sites, and private review notes while binding the public release
+ * to its data/license/evaluation IDs and decision evidence.
+ */
+export interface PublicModelReleaseAttestation {
+  schemaVersion: 1;
+  modelId: string;
+  modelVersion: string;
+  modelSha256: string;
+  outputContract: 'darts180-board-tip-v1';
+  trainingDataId: string;
+  licenseReviewId: string;
+  heldOutEvaluationId: string;
+  evaluatedAt: string;
+  approvalId: string;
+  /** Exact decision policy approved for these model bytes and held-out evidence. */
+  decisionPolicy: VisionModelDecisionPolicy;
+  evaluation: {
+    evaluatedDartCount: number;
+    exactScoreRate: number;
+    unsafeAutoRecordRate: number;
+    reviewOrAbstainRate: number;
+  };
+}
+
+/**
  * Versioned static-model metadata. A release cannot enable auto-recording just by changing a UI
- * threshold: its held-out evaluation decision and model checksum travel with the artifact.
+ * threshold: its held-out evaluation decision, quality/ambiguity policy, checksum, and reviewed
+ * release attestation travel with the artifact.
  */
 export interface VisionModelArtifactManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   modelId: string;
   modelVersion: string;
   releaseStage: ModelReleaseStage;
@@ -142,26 +216,14 @@ export interface VisionModelArtifactManifest {
     dartTips: string;
     quality: string;
   };
-  /** Values learned/fitted on a held-out validation set, never inferred from a UI target. */
-  decisionPolicy: {
-    autoRecordEnabled: boolean;
-    minAutoScoreProbability: number;
-    minAutoScoreWireMarginMm: number;
-    minReviewProbability: number;
-    maxQualityOffAxisDegrees: number;
-    minBoardDiameterPixels: number;
-    minOverallQuality: number;
-    maxOcclusionRisk: number;
-    /** Temperature/logit calibration applied to the combined model/geometry confidence. */
-    confidenceTemperature: number;
-    confidenceBias: number;
-    heldOutEvaluationId: string | null;
-  };
+  /** Values learned/fitted on a locked held-out validation set, never inferred from a UI target. */
+  decisionPolicy: VisionModelDecisionPolicy;
   provenance: {
     trainingDataId: string | null;
     licenseReviewId: string | null;
     evaluatedAt: string | null;
   };
+  releaseEvidence: ModelReleaseEvidence;
 }
 
 export interface BoardPoseObservation {

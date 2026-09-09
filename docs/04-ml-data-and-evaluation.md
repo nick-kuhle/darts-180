@@ -162,7 +162,8 @@ Every candidate model must register:
 - model and preprocessing code commit;
 - dataset manifest/version and split hash;
 - training config, seed, hardware/runtime;
-- artifact checksum and export target (Core ML/TFLite);
+- exact ONNX Runtime Web artifact checksum plus future Core ML/TFLite export targets;
+- schema-v2 manifest/attestation hashes and an exact policy-binding record;
 - full metrics + stratified reports + confidence calibration;
 - evaluation approval, security/privacy review, rollout cohort, rollback owner.
 
