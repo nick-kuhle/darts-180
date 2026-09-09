@@ -32,10 +32,11 @@ location, and split lineage before training. Keep raw external media and weights
 
 The currently reviewed external lead is **DeepDarts YOLOv8 v2**. It is conditionally admitted only
 for research intake: its official source dataset metadata identifies CC BY 4.0, while its Roboflow
-export preserves only five numeric labels and uses 640×640 stretch/augmentation. The candidate has
-no approved browser artifact and does not satisfy the current nine-landmark contract. See the
-[dated candidate review](research/2026-09-deepdarts-yolov8-candidate.md) and run the local
-aggregate-only audit before any experiment.
+export preserves only five numeric labels and uses 640×640 stretch/augmentation. One reviewed image/label
+pair confirms the roles of one dart point and four calibration anchors, but not export-wide lineage or
+performance. The candidate has no approved browser artifact and does not satisfy the current nine-landmark
+contract. See the [dated candidate review](research/2026-09-deepdarts-yolov8-candidate.md) and run the
+local aggregate-only audit before any experiment.
 
 ## 3. Capture matrix
 

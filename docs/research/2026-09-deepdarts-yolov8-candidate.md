@@ -71,7 +71,7 @@ publish a detectable repository licence (its public GitHub licence endpoint retu
 - any experiment must use Darts 180's independent implementation and document only high-level published
   method ideas and data provenance.
 
-## 4. Five-class mapping — strong evidence, not yet final confirmation
+## 4. Five-class mapping — sample-confirmed roles, source order still audited
 
 The Roboflow export stores only numeric label names. Its README states that it converted DeepDarts
 annotations. The upstream [classes file](https://raw.githubusercontent.com/wmcnally/deep-darts/master/classes)
@@ -91,10 +91,32 @@ maps dart coordinates through standard-board geometry. This is why the candidate
 its five classes likely represent **one dart point plus four pose anchors**, not five arbitrary dartboard
 objects.
 
-However, the Roboflow `data.yaml` does not preserve the human-readable names. The mapping remains
-`requires-visual-confirmation` until a matched exported image and its YOLO `.txt` annotation demonstrate
-that the conversion kept that class order. Do not silently relabel the numeric classes in a production
-pipeline.
+The Roboflow `data.yaml` still does not preserve the human-readable names, so an automated importer
+must continue to report the map as `requires-visual-confirmation`. The following sample review supplies
+that human confirmation for v2 research intake; it does not license a silent production relabeling.
+
+### 4.1 Visual and geometric sample review — 2026-09-08
+
+A matched 640×640 v2 image/YOLO-label pair was reviewed locally and remains outside Git:
+
+| Item                                                   | SHA-256                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `DSC_0002_JPG.rf.1bd54328bf6c173a96d414d5664b908b.jpg` | `6604c3c26df724da3ff31ea696407ef39a86dadcaed02c1260bccf9f30a8ca60` |
+| matching `.txt` label file                             | `6e8be3ba0c63b348391fbea3441270c99f80271a47347fc7b75bce5a56a1a36d` |
+
+The label file has seven valid rows: one each for IDs `1`–`4` and three rows for ID `0`. Visual overlay
+confirms that the three ID-`0` boxes are centered on the three visible dart entry points, while IDs `1`–`4`
+mark four ordered, perimeter calibration locations around the same board.
+
+As an additional sanity check, applying the upstream four-anchor perspective transform and standard-board
+geometry places its projected ring/wedge boundaries on the visible board wires and preserves the printed
+number order. It yields source-geometry proposals `9`, `10`, and `3` for the three visible points. Those
+are a mapping/geometry check only—not independently verified ground truth, an inference result, or an
+accuracy measurement.
+
+This confirms the **roles** of the five v2 IDs for the reviewed sample. The exact v2-wide ordinal
+provenance, split lineage, class consistency, and performance still require the aggregate audit and
+held-out evaluation. Do not silently relabel the numeric classes in a production pipeline.
 
 ## 5. Technical fit and gaps
 
@@ -161,9 +183,10 @@ labels, ZIP files, weights, and model artifacts remain excluded from Git by `.gi
 
 ## 8. Next smallest safe handoff
 
-The next useful evidence is one representative exported board image and its matching YOLO label `.txt`
-file, preferably a frame containing all IDs `0`–`4`. It validates the conversion order without sharing
-the whole dataset. Also retain the archive locally and generate the aggregate audit report above.
+The first representative v2 image/label review is complete. The next useful evidence is the aggregate
+report from the local audit above—especially split counts, class counts, orphan/malformed-row findings,
+relative-name collisions, exact byte-duplicate findings, and the listed representative pairs. If a later
+sample conflicts with the confirmed roles, pause the candidate and investigate the derivative version.
 
 Do not send an API key, password, token-bearing download link, full dataset archive, or third-party
 hosted-inference credential. No deployed camera frame should leave the device for this research path.

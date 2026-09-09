@@ -27,10 +27,10 @@ removed from the web application. Its history remains documented only as a failu
 reintroduced to make live scoring appear to work.
 
 A DeepDarts YOLOv8 v2 public-data lead is now conditionally admitted for isolated research intake. Its official
-source dataset metadata identifies CC BY 4.0, and its likely five-class structure is one dart point plus four
-ordered board-calibration anchors. It remains a data-only candidate: the class mapping needs visual confirmation,
-no weights or browser artifact have been acquired, its four-anchor output cannot be silently substituted for the
-nine-landmark production contract, and no live behavior changes. See
+source dataset metadata identifies CC BY 4.0, and one reviewed image/label pair confirms the five-class roles
+of one dart point plus four ordered board-calibration anchors. It remains a data-only candidate: export-wide class
+lineage and split quality still need audit, no weights or browser artifact have been acquired, its four-anchor
+output cannot be silently substituted for the nine-landmark production contract, and no live behavior changes. See
 [`research/2026-09-deepdarts-yolov8-candidate.md`](research/2026-09-deepdarts-yolov8-candidate.md).
 
 ## Delivered in the active branch, not yet merged/deployed
