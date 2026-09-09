@@ -24,6 +24,7 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 |  14 | [Browser camera field test](14-browser-camera-field-test.md)                  | How to conduct the local, fixed-camera real-board test safely         |
 |  17 | [Web model artifact contract](17-web-model-artifact-contract.md)              | Binding production browser/native model boundary                      |
 |  18 | [Editable five-point development scorer](18-development-five-point-scorer.md) | Real learned editable test scoring without weakening production gates |
+|  19 | [Build the first camera model](19-build-the-first-camera-model.md)            | How real throws become the first editable development model           |
 
 ## Decision records
 

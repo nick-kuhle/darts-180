@@ -6,6 +6,7 @@ type CaptureMode = 'empty-board' | 'static-dart' | 'failure-case';
 type LightingBand = 'low' | 'normal' | 'bright' | 'mixed' | 'glare';
 
 interface CaptureMetadata {
+  sessionId: string;
   boardModel: string;
   deviceModel: string;
   captureMode: CaptureMode;
@@ -14,14 +15,17 @@ interface CaptureMetadata {
   lightingBand: LightingBand;
 }
 
-const initialMetadata: CaptureMetadata = {
-  boardModel: 'Standard steel-tip board',
-  deviceModel: 'Browser camera',
-  captureMode: 'static-dart',
-  offAxisDegrees: '20',
-  distanceMm: '900',
-  lightingBand: 'normal',
-};
+function initialCaptureMetadata(): CaptureMetadata {
+  return {
+    sessionId: newSessionId(),
+    boardModel: 'Standard steel-tip board',
+    deviceModel: 'Browser camera',
+    captureMode: 'static-dart',
+    offAxisDegrees: '20',
+    distanceMm: '900',
+    lightingBand: 'normal',
+  };
+}
 
 /**
  * Local-only, browser-based controlled capture helper. It intentionally has no upload endpoint:
@@ -30,13 +34,14 @@ const initialMetadata: CaptureMetadata = {
 export function CaptureLab() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [metadata, setMetadata] = useState<CaptureMetadata>(initialMetadata);
+  const [metadata, setMetadata] = useState<CaptureMetadata>(initialCaptureMetadata);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [captureRecordId, setCaptureRecordId] = useState<string | null>(null);
   const [capturedMetadata, setCapturedMetadata] = useState<CaptureMetadata | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [facesExcluded, setFacesExcluded] = useState(false);
+  const [selfCaptureUseApproved, setSelfCaptureUseApproved] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -88,6 +93,12 @@ export function CaptureLab() {
   };
 
   const captureStill = () => {
+    if (!isValidSessionId(metadata.sessionId)) {
+      setCameraError(
+        'Use an 8–128 character setup session ID with letters, numbers, dashes, or underscores only.',
+      );
+      return;
+    }
     const video = videoRef.current;
     if (video === null || video.videoWidth === 0 || video.videoHeight === 0) {
       setCameraError('Start the camera and wait for a visible board before taking a still.');
@@ -105,8 +116,9 @@ export function CaptureLab() {
     setImageDataUrl(canvas.toDataURL('image/jpeg', 0.92));
     setCaptureRecordId(newCaptureId());
     setCapturedMetadata({ ...metadata });
-    // Require an explicit privacy confirmation for every newly captured still.
+    // Require explicit privacy and self-capture-use confirmations for every newly captured still.
     setFacesExcluded(false);
+    setSelfCaptureUseApproved(false);
     setCameraError(null);
   };
 
@@ -119,7 +131,10 @@ export function CaptureLab() {
     if (captureRecordId === null || capturedMetadata === null) return;
     const manifest = {
       captureId: captureRecordId,
-      consentVersion: 'LOCAL-CAPTURE-NOT-YET-SHARED',
+      sessionId: capturedMetadata.sessionId.trim(),
+      consentVersion: selfCaptureUseApproved
+        ? 'SELF-CAPTURE-DEVELOPMENT-V1'
+        : 'LOCAL-CAPTURE-NOT-YET-SHARED',
       boardModel: capturedMetadata.boardModel.trim() || 'Unknown standard steel-tip board',
       deviceModel: capturedMetadata.deviceModel.trim() || 'Browser camera',
       captureMode: 'still',
@@ -140,6 +155,10 @@ export function CaptureLab() {
 
   const update = <Key extends keyof CaptureMetadata>(key: Key, value: CaptureMetadata[Key]) => {
     setMetadata((current) => ({ ...current, [key]: value }));
+  };
+
+  const startNewSession = () => {
+    setMetadata((current) => ({ ...current, sessionId: newSessionId() }));
   };
 
   return (
@@ -234,6 +253,24 @@ export function CaptureLab() {
             <h2>Make the image useful later.</h2>
           </div>
           <label>
+            SESSION / SETUP GROUP
+            <input
+              value={metadata.sessionId}
+              onChange={(event) => update('sessionId', event.target.value)}
+            />
+            <small className="capture-input-note">
+              Keep this ID for one continuous phone/mount/lighting setup. Start a new one after a
+              meaningful setup change so training and testing can stay separate.
+            </small>
+          </label>
+          <button
+            className="text-button capture-new-session"
+            onClick={startNewSession}
+            type="button"
+          >
+            START A NEW SETUP SESSION
+          </button>
+          <label>
             CAPTURE TYPE
             <select
               value={metadata.captureMode}
@@ -299,9 +336,26 @@ export function CaptureLab() {
               I confirm this capture contains no faces, people, audio, or sensitive room details.
             </span>
           </label>
+          <label className="checkbox-label">
+            <input
+              checked={selfCaptureUseApproved}
+              type="checkbox"
+              onChange={(event) => setSelfCaptureUseApproved(event.target.checked)}
+            />
+            <span>
+              I own this board-focused capture or have permission to use it for Darts 180
+              development. I will not use this self-capture confirmation for someone else’s image.
+            </span>
+          </label>
           <button
             className="button primary"
-            disabled={!facesExcluded || imageDataUrl === null || capturedMetadata === null}
+            disabled={
+              !facesExcluded ||
+              !selfCaptureUseApproved ||
+              imageDataUrl === null ||
+              capturedMetadata === null ||
+              !isValidSessionId(capturedMetadata.sessionId)
+            }
             onClick={downloadManifest}
           >
             DOWNLOAD LOCAL MANIFEST
@@ -352,6 +406,18 @@ function newCaptureId(): string {
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `cap_${uuid.replaceAll('-', '').slice(0, 20)}`;
+}
+
+function newSessionId(): string {
+  const uuid =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `session_${uuid.replaceAll('-', '').slice(0, 20)}`;
+}
+
+function isValidSessionId(value: string): boolean {
+  return /^[a-zA-Z0-9_-]{8,128}$/.test(value.trim());
 }
 
 function captureImageFileName(captureId: string, captureIntent: CaptureMode): string {

@@ -1077,6 +1077,21 @@ h3 {
   gap: 9px;
 }
 
+.capture-input-note {
+  color: #80998d;
+  font-size: 0.63rem;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.capture-new-session {
+  justify-self: start;
+  margin: -3px 0 2px;
+  padding: 0;
+  font-size: 0.6rem;
+}
+
 .checkbox-label {
   grid-template-columns: 17px 1fr;
   align-items: start;
@@ -1219,6 +1234,38 @@ h3 {
   height: 100%;
   cursor: pointer;
   opacity: 0;
+}
+
+.annotation-profile-selector {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(230px, 0.55fr);
+  gap: 7px 15px;
+  align-items: center;
+  margin: 0 0 13px;
+  padding: 13px 15px;
+  color: #afc7bc;
+  border: 1px solid #355148;
+  border-radius: 12px;
+  background: #13211c;
+}
+
+.annotation-profile-selector span {
+  color: #8fdcc1;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.annotation-profile-selector select {
+  width: 100%;
+  min-height: 39px;
+}
+
+.annotation-profile-selector small {
+  grid-column: 2;
+  color: #91a79d;
+  font-size: 0.68rem;
+  line-height: 1.4;
 }
 
 .annotation-warning,
@@ -1700,8 +1747,13 @@ h3 {
     grid-template-columns: 1fr 1fr;
   }
 
-  .annotation-import-grid {
+  .annotation-import-grid,
+  .annotation-profile-selector {
     grid-template-columns: 1fr;
+  }
+
+  .annotation-profile-selector small {
+    grid-column: auto;
   }
 
   .annotation-empty-stage {

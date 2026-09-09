@@ -46,6 +46,39 @@ export const ANNOTATION_ANCHORS: readonly AnnotationAnchor[] = [
   },
 ] as const;
 
+/**
+ * The source-compatible landmarks for the five-point development detector. They are deliberately
+ * not the centres of D20/D6/D3/D11: each lies at the outer-double rim on a named segment boundary.
+ * These standard-frame positions are the DeepDarts source cal1–4 coordinates after the documented
+ * −9° adapter used by the isolated development engine.
+ */
+export const DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS: readonly AnnotationAnchor[] = [
+  {
+    id: 'cal1',
+    title: 'CAL 1 · D5 / D20 rim junction',
+    instruction: 'Click the outer-double rim junction between D5 and D20.',
+    canonical: { xMm: -26.594, yMm: -167.907 },
+  },
+  {
+    id: 'cal2',
+    title: 'CAL 2 · D17 / D3 rim junction',
+    instruction: 'Click the outer-double rim junction between D17 and D3.',
+    canonical: { xMm: 26.594, yMm: 167.907 },
+  },
+  {
+    id: 'cal3',
+    title: 'CAL 3 · D8 / D11 rim junction',
+    instruction: 'Click the outer-double rim junction between D8 and D11.',
+    canonical: { xMm: -167.907, yMm: 26.594 },
+  },
+  {
+    id: 'cal4',
+    title: 'CAL 4 · D13 / D6 rim junction',
+    instruction: 'Click the outer-double rim junction between D13 and D6.',
+    canonical: { xMm: 167.907, yMm: -26.594 },
+  },
+] as const;
+
 /** Row-major projective matrix mapping image pixels to canonical board millimetres. */
 export type Homography = readonly [
   number,

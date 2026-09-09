@@ -121,31 +121,48 @@ export is an intake aid, not sacred ground truth. A reviewer still applies conse
 redaction, independent labeling, duplicate checks, and dataset/split governance before it can train a
 future model.
 
+Before there is any model to make those suggestions, bootstrap real local throws through **Data Lab** and
+**Annotate** using the explicit **Five-point development model labels** scheme. That manual labeling is a
+controlled data-operation tool, not a normal Camera Play step. See
+[`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md).
+
 ## 6. Local training/export handoff
 
 `ml/src/darts180_vision/deepdarts_yolo_train.py` is a deliberate local-only recipe. It does not download
 data or base weights, call a hosted API, install an artifact into the web app, or deploy anything.
 
-On a dedicated ML machine, after supplying an actual local dataset and a local YOLOv8-compatible base
-checkpoint:
+On a dedicated ML machine, first compile approved browser-captured JPEG/annotation pairs into a
+session-disjoint five-point YOLO folder. The compiler is source-preserving: it rejects incorrect label
+schemes, unsafe paths, duplicates, missing session IDs, and fewer than three setup sessions.
+
+```bash
+cd ml
+PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
+  /secure/path/to/reviewed-capture-pairs \
+  --output-directory /secure/path/to/compiled-five-point-v1 \
+  --split-seed darts180-campaign-v1 \
+  --accepted-consent-version SELF-CAPTURE-DEVELOPMENT-V1
+```
+
+Then supply that locally compiled folder and a local YOLOv8-compatible base checkpoint to training:
 
 ```bash
 cd ml
 pip install -e '.[train,export,quality]'
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
-  /secure/path/to/extracted-deepdarts-export \
-  --base-model /secure/path/to/yolov8n.pt \
+  /secure/path/to/compiled-five-point-v1 \
+  --base-model /secure/path/to/approved-yolov8n.pt \
   --output-directory /secure/path/to/darts180-five-point-run \
-  --model-version deepdarts-local-dev-YYYY-MM-DD \
-  --training-data-id deepdarts-local-audit-YYYY-MM-DD \
-  --license-review-id deepdarts-ccby-review-YYYY-MM-DD \
+  --model-version darts180-local-dev-YYYY-MM-DD \
+  --training-data-id local-five-point-campaign-v1 \
+  --license-review-id local-self-capture-review-v1 \
   --hash-images
 ```
 
-The command runs the structural audit first; it refuses label-integrity issues, a changed numeric
-five-class mapping, or no dart-plus-four-anchor example. It exports a fixed-size raw ONNX graph without
-NMS, hashes it, inspects its single output name, and writes a **development-only** manifest beside the
-artifact. Raw media, labels, base checkpoints, experiment runs, and model bytes remain outside Git.
+Training runs the structural audit first; it refuses label-integrity issues, a changed numeric five-class
+mapping, or no dart-plus-four-anchor example. It exports a fixed-size raw ONNX graph without NMS, hashes
+it, inspects its single output name, and writes a **development-only** manifest beside the artifact. Raw
+media, labels, base checkpoints, experiment runs, and model bytes remain outside Git.
 
 A reviewer must then inspect the artifact, browser-load it on target devices, copy the two reviewed files
 into the static models folder, run the web contract tests, and make a separate code/review decision before

@@ -20,8 +20,10 @@ Before opening the camera:
 2. Frame the board only. Exclude people, faces, reflections, screens, documents, addresses, family
    photos, and other identifying room detail. Prefer a tight crop with a neutral background.
 3. Never record audio. Capture Lab requests `video` only.
-4. Do not represent a local export as approved training data. Its manifest is intentionally marked
-   `LOCAL-CAPTURE-NOT-YET-SHARED`, `unlabeled-v0`, and `unassigned`.
+4. Do not represent a local export as approved training data. It starts `unlabeled-v0` and
+   `unassigned`. A locally owned board-focused still receives `SELF-CAPTURE-DEVELOPMENT-V1` only
+   after the contributor explicitly confirms authority to use it for development; otherwise its
+   manifest stays `LOCAL-CAPTURE-NOT-YET-SHARED`.
 5. If a capture contains a person or sensitive detail, delete the local JPEG and JSON. Do not try to
    crop/redact it casually and do not transfer it to Darts 180.
 
@@ -30,7 +32,7 @@ replacement for consent and data review.
 
 ## 2. Capture a paired local artifact
 
-1. Open the deployed web prototype over HTTPS and choose **Capture Lab**. Camera access will not be
+1. Open the deployed web prototype over HTTPS and choose **DATA LAB**. Camera access will not be
    requested until **Start device camera** is pressed.
 2. Grant the browser's camera permission only if the scene meets the rules above. Use the rear camera
    where available; no microphone is requested.
@@ -42,11 +44,15 @@ replacement for consent and data review.
    - **Difficult or failure case** — glare, obstruction, extreme-but-safe angle, motion evidence, or
      another documented failure condition.
 5. Enter useful board and device notes plus estimated off-axis angle, distance, and lighting band.
+   Keep the displayed **session/setup group** ID for a continuous phone/mount/light setup. Start a
+   new session after a meaningful setup change; do not use a player's name as the ID.
 6. Select **Take board still**. The JPEG and the metadata snapshot are now paired. Editing the form
    afterward prepares the _next_ still and does not alter this one.
 7. Inspect the local preview. If it is unsafe or unusable, discard it locally and take a new still.
-8. Confirm the no-faces/no-sensitive-details attestation for this specific still. The confirmation is
-   reset for every new still.
+8. Confirm the no-faces/no-sensitive-details attestation for this specific still. If it is your own
+   board-focused capture, also confirm that you have authority to use it for Darts 180 development.
+   Both confirmations reset for every new still. Do **not** use the self-capture confirmation for
+   someone else's image.
 9. Download **both** files and retain their shared `captureId`:
    - `darts-180-<captureId>-<intent>.jpg`
    - `darts-180-<captureId>-manifest.json`
@@ -109,7 +115,7 @@ and human-review gates described in [the detection-engine specification](../03-d
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Browser says camera is unavailable                    | Use current Safari, Chrome, or Edge over HTTPS; verify browser/site permission; do not substitute an insecure upload. |
 | Preview is sideways, too dark, or blurry              | Stop, reframe/re-light/re-mount, and take a new still. Record a difficult case only if metadata says so.              |
-| Manifest download button is disabled                  | Take a still first, inspect it, then explicitly complete the privacy attestation.                                     |
+| Manifest download button is disabled                  | Take a still first, inspect it, then complete both privacy and self-capture-use attestations if they are true.        |
 | JSON validator rejects the manifest                   | Correct the context fields on the next still; do not edit identifiers or claim false conditions to force acceptance.  |
 | A face or sensitive detail was noticed after download | Securely delete the local pair and do not hand it off.                                                                |
 | Need a capture mode not in the form                   | Document the request with data operations; do not overload an existing category without an approved taxonomy update.  |

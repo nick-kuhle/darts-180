@@ -73,6 +73,31 @@ The static web Annotation Lab exports a matching nested sidecar for a locally im
 JPEG/manifest pair. Its four-anchor transform is a controlled human-labeling aid, not a substitute
 for independent annotations or adjudication; see `docs/runbooks/local-annotation.md`.
 
+## Build a local five-point data set from real throws
+
+For the first model built from Darts 180's own captures, choose **Five-point development model labels**
+in the web Annotation Lab. Its four outer-double-rim junctions have a different meaning from the
+ordinary D20/D6/D3/D11 annotation profile; they match the development browser engine's `cal1`–`cal4`
+source frame exactly.
+
+Keep each approved JPEG and its exported annotation JSON together in a local folder outside this
+repository. Use a stable setup/session ID for one continuous phone/mount/light configuration, then
+compile only reviewed self-capture pairs:
+
+```bash
+PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
+  /secure/path/to/reviewed-capture-pairs \
+  --output-directory /secure/path/to/compiled-five-point-v1 \
+  --split-seed darts180-initial-campaign-v1 \
+  --accepted-consent-version SELF-CAPTURE-DEVELOPMENT-V1
+```
+
+The compiler checks privacy/consent markers, exact JPEG/sidecar pairing and dimensions, the required
+five-point annotation profile, clear tip labels, session-disjoint train/validation/test splits, duplicate
+JPEG bytes, and numeric YOLO labels. It never downloads, uploads, trains, or deploys. Read
+[`docs/19-build-the-first-camera-model.md`](../docs/19-build-the-first-camera-model.md) before starting
+a campaign.
+
 ## External YOLO research intake
 
 `darts180_vision.deepdarts_yolo_audit` performs an aggregate-only structural intake audit of a
@@ -97,20 +122,20 @@ report's local paths to Git.
 
 ## Editable five-point development training/export
 
-Once a **lawfully acquired local** DeepDarts-style export and a **local** YOLOv8-compatible base
-checkpoint are available, `darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX
-baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
+Once either a **locally compiled Darts 180 five-point set** or a lawfully acquired local
+DeepDarts-style export and a **local** YOLOv8-compatible base checkpoint are available,
+`darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
 issues, or no dart-plus-four-anchor frame. It does not download data/weights, call Roboflow or another
 hosted inference service, copy output into `apps/web/public`, deploy, or make a production claim.
 
 ```bash
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
-  /secure/path/to/extracted-deepdarts-export \
-  --base-model /secure/path/to/yolov8n.pt \
+  /secure/path/to/compiled-five-point-v1 \
+  --base-model /secure/path/to/approved-yolov8n.pt \
   --output-directory /secure/path/to/darts180-five-point-run \
-  --model-version deepdarts-local-dev-YYYY-MM-DD \
-  --training-data-id deepdarts-local-audit-YYYY-MM-DD \
-  --license-review-id deepdarts-ccby-review-YYYY-MM-DD \
+  --model-version darts180-local-dev-YYYY-MM-DD \
+  --training-data-id local-five-point-campaign-v1 \
+  --license-review-id local-self-capture-review-v1 \
   --hash-images
 ```
 

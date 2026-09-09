@@ -4,8 +4,10 @@ import { decodeBoardPoint, formatZone, nearestWireMarginMm } from '@darts-180/ru
 
 import {
   ANNOTATION_ANCHORS,
+  DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
   mapImagePointToBoard,
   solveImageToBoardHomography,
+  type AnnotationAnchor,
   type CanonicalPoint,
   type Homography,
   type ImagePoint,
@@ -33,6 +35,34 @@ interface AnnotatedDart {
   wireMarginMm: number;
 }
 
+type AnnotationProfileId = 'standard-four-double-beds-v0' | 'deepdarts-five-point-v1';
+
+interface AnnotationProfile {
+  id: AnnotationProfileId;
+  title: string;
+  description: string;
+  annotationMethod: string;
+  anchors: readonly AnnotationAnchor[];
+}
+
+const ANNOTATION_PROFILES: readonly AnnotationProfile[] = [
+  {
+    id: 'standard-four-double-beds-v0',
+    title: 'Standard board geometry labels',
+    description: 'D20, D6, D3, and D11 double-bed centres for the general annotation workflow.',
+    annotationMethod: 'manual-four-double-bed-homography-v0',
+    anchors: ANNOTATION_ANCHORS,
+  },
+  {
+    id: 'deepdarts-five-point-v1',
+    title: 'Five-point development model labels',
+    description:
+      'Source-compatible cal1–cal4 outer-rim junctions plus dart entries for the editable development scorer.',
+    annotationMethod: 'deepdarts-four-cardinal-homography-v1',
+    anchors: DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
+  },
+];
+
 const EMPTY_ANCHORS: Array<ImagePoint | null> = [null, null, null, null];
 
 /**
@@ -43,11 +73,14 @@ export function AnnotationLab() {
   const imageRef = useRef<HTMLImageElement>(null);
   const [image, setImage] = useState<LocalImage | null>(null);
   const [manifest, setManifest] = useState<CaptureManifest | null>(null);
+  const [profileId, setProfileId] = useState<AnnotationProfileId>('standard-four-double-beds-v0');
   const [anchors, setAnchors] = useState<Array<ImagePoint | null>>(EMPTY_ANCHORS);
   const [activeAnchorIndex, setActiveAnchorIndex] = useState<number | null>(0);
   const [darts, setDarts] = useState<AnnotatedDart[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [privacyReviewed, setPrivacyReviewed] = useState(false);
+  const profile =
+    ANNOTATION_PROFILES.find((candidate) => candidate.id === profileId) ?? ANNOTATION_PROFILES[0]!;
 
   useEffect(() => {
     const url = image?.url;
@@ -58,12 +91,12 @@ export function AnnotationLab() {
 
   const homography = useMemo<Homography | null>(() => {
     const imagePoints = anchors.filter((point): point is ImagePoint => point !== null);
-    if (imagePoints.length !== ANNOTATION_ANCHORS.length) return null;
+    if (imagePoints.length !== profile.anchors.length) return null;
     return solveImageToBoardHomography(
       imagePoints,
-      ANNOTATION_ANCHORS.map((anchor) => anchor.canonical),
+      profile.anchors.map((anchor) => anchor.canonical),
     );
-  }, [anchors]);
+  }, [anchors, profile]);
 
   const imageMatchesManifest =
     image !== null && manifest !== null && manifest.imageFile === image.fileName;
@@ -75,7 +108,7 @@ export function AnnotationLab() {
     darts.length > 0 &&
     privacyReviewed;
   const activeAnchor =
-    activeAnchorIndex === null ? null : (ANNOTATION_ANCHORS[activeAnchorIndex] ?? null);
+    activeAnchorIndex === null ? null : (profile.anchors[activeAnchorIndex] ?? null);
 
   const resetAnnotation = () => {
     setAnchors([...EMPTY_ANCHORS]);
@@ -190,9 +223,10 @@ export function AnnotationLab() {
       capture: manifest,
       image: { file: image.fileName, width: image.width, height: image.height },
       board: {
-        annotationMethod: 'manual-four-double-bed-homography-v0',
+        annotationMethod: profile.annotationMethod,
+        annotationProfile: profile.id,
         imageToBoardHomography: homography.map((value) => round(value, 10)),
-        anchors: ANNOTATION_ANCHORS.map((anchor, index) => {
+        anchors: profile.anchors.map((anchor, index) => {
           const point = anchors[index] ?? null;
           return {
             id: anchor.id,
@@ -225,8 +259,9 @@ export function AnnotationLab() {
             <em>Do not invent certainty.</em>
           </h1>
           <p className="lede">
-            Pair one locally stored board JPEG with its matching Capture Lab manifest, calibrate
-            four known double beds, then click visible dart entry points. Nothing is uploaded.
+            Pair one locally stored board JPEG with its matching Capture Lab manifest, choose the
+            label scheme, set its four known board anchors, then click visible dart entry points.
+            Nothing is uploaded.
           </p>
         </div>
         <aside className="privacy-card annotation-privacy-card">
@@ -261,6 +296,24 @@ export function AnnotationLab() {
           />
         </label>
       </div>
+
+      <label className="annotation-profile-selector">
+        <span>LABEL SCHEME</span>
+        <select
+          value={profileId}
+          onChange={(event) => {
+            setProfileId(event.target.value as AnnotationProfileId);
+            resetAnnotation();
+          }}
+        >
+          {ANNOTATION_PROFILES.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.title}
+            </option>
+          ))}
+        </select>
+        <small>{profile.description}</small>
+      </label>
 
       {image !== null && manifest !== null && !imageMatchesManifest && (
         <p className="annotation-warning" role="alert">
@@ -314,7 +367,7 @@ export function AnnotationLab() {
                 point === null || image.width === 0 || image.height === 0 ? null : (
                   <span
                     className={`annotation-marker anchor-marker anchor-${index}`}
-                    key={ANNOTATION_ANCHORS[index]?.id ?? index}
+                    key={profile.anchors[index]?.id ?? index}
                     style={{
                       left: `${(point.x / image.width) * 100}%`,
                       top: `${(point.y / image.height) * 100}%`,
@@ -339,8 +392,9 @@ export function AnnotationLab() {
             </button>
           )}
           <p className="annotation-canvas-hint">
-            Anchor sequence: D20 at 12 o’clock, D6 at 3, D3 at 6, D11 at 9. Click the center of the
-            named double bed—not an arbitrary outside edge.
+            {profile.id === 'deepdarts-five-point-v1'
+              ? 'Five-point order: CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6. Click each outer-double rim junction—not a double-bed centre.'
+              : 'Standard order: D20 at 12 o’clock, D6 at 3, D3 at 6, D11 at 9. Click the centre of the named double bed—not an arbitrary outside edge.'}
           </p>
         </section>
 
@@ -350,7 +404,7 @@ export function AnnotationLab() {
             <h2>Reposition rather than guess.</h2>
           </div>
           <div className="anchor-list">
-            {ANNOTATION_ANCHORS.map((anchor, index) => {
+            {profile.anchors.map((anchor, index) => {
               const set = anchors[index] !== null;
               return (
                 <button

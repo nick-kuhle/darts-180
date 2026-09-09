@@ -55,8 +55,9 @@ Stop the session and escalate if:
 
 ## Required manifest facts
 
-`captureId`, consent version, board model, device model, capture mode, off-axis degrees, distance,
-lighting band, `containsFaces: false`, timestamp; see `ml/data/manifest.schema.json`.
+`captureId`, pseudonymous `sessionId`/setup group, consent version, board model, device model, capture
+mode, off-axis degrees, distance, lighting band, `containsFaces: false`, timestamp; see
+`ml/data/manifest.schema.json`.
 
 ## Label QA sampling
 

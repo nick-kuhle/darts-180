@@ -17,6 +17,7 @@ class DataContractTests(unittest.TestCase):
     def test_accepts_a_minimal_private_capture_manifest(self) -> None:
         manifest = {
             "captureId": "cap_example_0001",
+            "sessionId": "session_example_01",
             "consentVersion": "LOCAL-CAPTURE-NOT-YET-SHARED",
             "boardModel": "Standard board",
             "deviceModel": "Phone camera",
@@ -48,6 +49,24 @@ class DataContractTests(unittest.TestCase):
         }
         self.assertTrue(
             any(issue.path == "containsFaces" for issue in validate_capture_manifest(manifest))
+        )
+
+    def test_rejects_an_invalid_optional_session_group_id(self) -> None:
+        manifest = {
+            "captureId": "cap_example_0001",
+            "sessionId": "not a safe session id",
+            "consentVersion": "v1",
+            "boardModel": "board",
+            "deviceModel": "phone",
+            "captureMode": "still",
+            "offAxisDegrees": 20,
+            "distanceMm": 900,
+            "lightingBand": "normal",
+            "containsFaces": False,
+            "createdAt": "2026-09-08T00:00:00Z",
+        }
+        self.assertTrue(
+            any(issue.path == "sessionId" for issue in validate_capture_manifest(manifest))
         )
 
     def test_rejects_dart_label_that_disagrees_with_canonical_geometry(self) -> None:

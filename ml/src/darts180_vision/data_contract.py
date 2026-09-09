@@ -54,6 +54,16 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
                 "Must be an 8–128 character pseudonymous ID using letters, numbers, _ or -.",
             )
         )
+    session_id = value.get("sessionId")
+    if session_id is not None and (
+        not isinstance(session_id, str) or not _CAPTURE_ID_PATTERN.fullmatch(session_id)
+    ):
+        issues.append(
+            ValidationIssue(
+                "sessionId",
+                "When supplied, must be an 8–128 character pseudonymous setup/session ID.",
+            )
+        )
     for field in ("consentVersion", "boardModel", "deviceModel", "createdAt"):
         if field in value and not _is_non_empty_string(value.get(field)):
             issues.append(ValidationIssue(field, "Must be a non-empty string."))

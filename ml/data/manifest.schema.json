@@ -17,6 +17,7 @@
   ],
   "properties": {
     "captureId": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,128}$" },
+    "sessionId": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{8,128}$" },
     "consentVersion": { "type": "string", "minLength": 1 },
     "boardModel": { "type": "string", "minLength": 1 },
     "deviceModel": { "type": "string", "minLength": 1 },
