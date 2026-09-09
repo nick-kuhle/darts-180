@@ -61,8 +61,15 @@ function request(method: string, headers: Record<string, string> = {}, body?: Bo
   return new Request(`${SAME_ORIGIN}/api/capture-ingest`, { method, headers, body });
 }
 
-test('default API export uses Vercel’s Web Fetch Function contract', async () => {
+test('default API export uses Vercel’s Web Fetch Function contract and reports unconfigured storage without a crash', async () => {
   assert.equal(typeof captureIngestFunction.fetch, 'function');
+  const status = await captureIngestFunction.fetch(request('GET'));
+  assert.equal(status.status, 503);
+  assert.deepEqual(await status.json(), {
+    configured: false,
+    maxImageBytes: 3_500_000,
+    maxJsonBytes: 196_608,
+  });
   const response = await captureIngestFunction.fetch(request('PATCH'));
   assert.equal(response.status, 405);
 });
