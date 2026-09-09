@@ -6,4 +6,6 @@ export interface CameraTurnProposal {
   confidence: number;
   wireMarginMm: number;
   source: 'auto' | 'corrected' | 'manual';
+  /** A learned or diagnostic proposal may fill a card but still require player review. */
+  disposition?: 'auto-score' | 'review';
 }

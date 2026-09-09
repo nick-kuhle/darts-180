@@ -115,8 +115,10 @@ crash, upload/consent errors, API event rejection, and sync backlog.
 
 ## 9. Rollback rules
 
-- Feature flags independently control model artifact, auto-accept threshold, capture mode, quality
-  gate, and upload pathway.
+- Feature flags may select a reviewed immutable model-release package, disable camera proposals, or
+  control separately consented research upload. They must **not** independently relax auto-record,
+  quality, pose, wire, posterior, or temporal thresholds outside that package's hash-bound manifest
+  and attestation.
 - A correction spike, high-severity wrong auto-accept, privacy defect, native crash loop, or severe
   slice regression is sufficient to disable automatic proposals remotely.
 - Model rollback retains raw local game events; it does not rewrite past confirmed scores.

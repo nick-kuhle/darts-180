@@ -29,11 +29,14 @@ jobs:
         run: PYTHONPATH=ml/src python -m unittest discover -s ml/tests -v
 
   native-geometry:
-    name: Rust geometry parity seed
+    name: Rust geometry and policy parity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path native/vision-core/Cargo.toml -- --check
       - run: cargo test --manifest-path native/vision-core/Cargo.toml
 
   security-baseline:

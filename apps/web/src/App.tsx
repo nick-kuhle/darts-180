@@ -13,15 +13,14 @@ import {
 import { useMemo, useState } from 'react';
 
 import { AnnotationLab } from './components/AnnotationLab';
-import { CameraScoringLab } from './components/CameraScoringLab';
-import { SimpleCameraPlay } from './components/SimpleCameraPlay';
+import { VisionDiagnostics } from './components/VisionDiagnostics';
+import { LearnedCameraPlay } from './components/LearnedCameraPlay';
 import { CaptureLab } from './components/CaptureLab';
 import type { CameraTurnProposal } from './lib/cameraProposal';
 import { Dartboard, type DartboardMarker } from './components/Dartboard';
 
 type GameMode = 'x01' | 'cricket';
 type DraftSource = 'auto' | 'manual' | 'corrected';
-type CameraScenario = 'ready' | 'too-far' | 'too-oblique';
 
 interface DartDraft {
   slot: 1 | 2 | 3;
@@ -29,6 +28,7 @@ interface DartDraft {
   source: DraftSource;
   confidence: number;
   wireMarginMm: number;
+  requiresReview: boolean;
   filled: boolean;
 }
 
@@ -53,19 +53,6 @@ const QUICK_ZONES: readonly DartZone[] = [
   makeZone('MISS'),
 ];
 
-const CAMERA_TURNS: readonly (readonly Omit<DartDraft, 'slot' | 'filled'>[])[] = [
-  [
-    { zone: makeZone('T', 20), source: 'auto', confidence: 0.995, wireMarginMm: 4.2 },
-    { zone: makeZone('S', 20), source: 'auto', confidence: 0.87, wireMarginMm: 0.8 },
-    { zone: makeZone('D', 20), source: 'auto', confidence: 0.982, wireMarginMm: 3.1 },
-  ],
-  [
-    { zone: makeZone('T', 19), source: 'auto', confidence: 0.991, wireMarginMm: 3.7 },
-    { zone: makeZone('T', 20), source: 'auto', confidence: 0.994, wireMarginMm: 2.8 },
-    { zone: makeZone('S', 5), source: 'auto', confidence: 0.72, wireMarginMm: 0.4 },
-  ],
-];
-
 function blankDrafts(): DartDraft[] {
   return [1, 2, 3].map((slot) => ({
     slot: slot as 1 | 2 | 3,
@@ -73,6 +60,7 @@ function blankDrafts(): DartDraft[] {
     source: 'manual',
     confidence: 0,
     wireMarginMm: 0,
+    requiresReview: false,
     filled: false,
   }));
 }
@@ -94,11 +82,9 @@ export function App() {
   const [cricket, setCricket] = useState<CricketState>(newCricketGame);
   const [drafts, setDrafts] = useState<DartDraft[]>(blankDrafts);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [cameraScenario, setCameraScenario] = useState<CameraScenario>('ready');
-  const [cameraTurnIndex, setCameraTurnIndex] = useState(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [notice, setNotice] = useState(
-    'Choose a DartCard, then tap the board. Or use the camera simulation to test the review flow.',
+    'Choose a DartCard, then tap the board. Camera Play uses a separate browser-local learned vision path when an approved model is installed.',
   );
 
   const gameComplete = mode === 'x01' ? x01.winnerId !== undefined : cricket.winnerId !== undefined;
@@ -143,6 +129,7 @@ export function App() {
               source: draft.source === 'auto' ? 'corrected' : 'manual',
               confidence: 1,
               wireMarginMm: 99,
+              requiresReview: false,
               filled: true,
             }
           : draft,
@@ -171,30 +158,6 @@ export function App() {
     setNotice(`Dart ${slot + 1} cleared. Tap the board or choose a quick score to replace it.`);
   };
 
-  const simulateCameraTurn = () => {
-    if (cameraScenario !== 'ready') {
-      setNotice(
-        cameraScenario === 'too-far'
-          ? 'Camera guard: move closer—the board is too small to score safely.'
-          : 'Camera guard: move nearer the centreline—the view is too oblique.',
-      );
-      return;
-    }
-    const source = CAMERA_TURNS[cameraTurnIndex % CAMERA_TURNS.length] ?? CAMERA_TURNS[0]!;
-    setDrafts(
-      source.map((draft, index) => ({
-        ...draft,
-        slot: (index + 1) as 1 | 2 | 3,
-        filled: true,
-      })),
-    );
-    setSelectedSlot(null);
-    setCameraTurnIndex((value) => value + 1);
-    setNotice(
-      'Camera proposal loaded. Green cards are safe candidates; amber cards should be reviewed before confirmation.',
-    );
-  };
-
   const addCameraProposal = (proposal: CameraTurnProposal): number | null => {
     if (gameComplete) {
       setNotice('This game is finished. Start a new game before recording another dart.');
@@ -216,6 +179,7 @@ export function App() {
               source: proposal.source,
               confidence: proposal.confidence,
               wireMarginMm: proposal.wireMarginMm,
+              requiresReview: proposal.disposition === 'review',
               filled: true,
             }
           : draft,
@@ -223,7 +187,7 @@ export function App() {
     );
     setSelectedSlot(null);
     setNotice(
-      `Dart ${target + 1} proposed as ${formatZone(proposal.zone)} from the local camera field test. Review or correct it before confirming the visit.`,
+      `Dart ${target + 1} proposed as ${formatZone(proposal.zone)} by browser-local learned vision. Review or correct it before confirming the visit.`,
     );
     return target + 1;
   };
@@ -427,8 +391,9 @@ export function App() {
                 <div className="dart-cards">
                   {drafts.map((draft, index) => {
                     const needsReview =
-                      draft.source === 'auto' &&
-                      (draft.confidence < 0.97 || draft.wireMarginMm < 1.5);
+                      draft.requiresReview ||
+                      (draft.source === 'auto' &&
+                        (draft.confidence < 0.97 || draft.wireMarginMm < 1.5));
                     const label = !draft.filled
                       ? 'ADD DART'
                       : draft.source === 'corrected'
@@ -479,42 +444,15 @@ export function App() {
 
                 <div className="camera-lab">
                   <div>
-                    <p className="eyebrow">SIMULATED REVIEW STATES</p>
-                    <h3>Test the confidence flow.</h3>
-                  </div>
-                  <div
-                    className="camera-scenarios"
-                    role="group"
-                    aria-label="Camera quality scenario"
-                  >
-                    <button
-                      className={cameraScenario === 'ready' ? 'active' : ''}
-                      onClick={() => setCameraScenario('ready')}
-                    >
-                      READY
-                    </button>
-                    <button
-                      className={cameraScenario === 'too-far' ? 'active' : ''}
-                      onClick={() => setCameraScenario('too-far')}
-                    >
-                      TOO FAR
-                    </button>
-                    <button
-                      className={cameraScenario === 'too-oblique' ? 'active' : ''}
-                      onClick={() => setCameraScenario('too-oblique')}
-                    >
-                      OBLIQUE
-                    </button>
+                    <p className="eyebrow">CAMERA EVIDENCE</p>
+                    <h3>Use the learned camera path.</h3>
                   </div>
                   <p>
-                    {cameraScenario === 'ready'
-                      ? 'Board 780 px · 20° off-axis · quality gate passed.'
-                      : cameraScenario === 'too-far'
-                        ? 'Board 300 px · quality gate blocks a fabricated score.'
-                        : '60° off-axis · guide asks player to move closer to centerline.'}
+                    Camera proposals are generated only in Camera Play when a verified local model
+                    is installed. Manual board input remains available for correction and recovery.
                   </p>
-                  <button className="button secondary" onClick={simulateCameraTurn}>
-                    SIMULATE CAMERA RESULT
+                  <button className="button secondary" onClick={() => setWorkspace('camera')}>
+                    OPEN CAMERA PLAY
                   </button>
                 </div>
 
@@ -584,7 +522,7 @@ export function App() {
           </section>
         </section>
       ) : workspace === 'camera' ? (
-        <SimpleCameraPlay
+        <LearnedCameraPlay
           activePlayerName={activePlayer?.playerId ?? 'Player'}
           availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
           gameComplete={gameComplete}
@@ -601,11 +539,7 @@ export function App() {
               ← BACK TO CAMERA PLAY
             </button>
           </div>
-          <CameraScoringLab
-            availableSlots={gameComplete ? 0 : drafts.filter((draft) => !draft.filled).length}
-            onAddProposal={addCameraProposal}
-            onOpenReview={() => setWorkspace('play')}
-          />
+          <VisionDiagnostics onReturnToCamera={() => setWorkspace('camera')} />
         </>
       ) : workspace === 'capture' ? (
         <CaptureLab />
@@ -615,9 +549,10 @@ export function App() {
 
       <footer className="shell footer">
         <p>
-          <strong>Darts 180 prototype.</strong> Camera Play is a browser-local red/green color-fit
-          and visual-change field test, not trained or proven production auto-scoring. It keeps
-          ordinary score correction available for ambiguous darts.
+          <strong>Darts 180 prototype.</strong> Camera Play now has a browser-local learned-vision
+          runtime path with deterministic scoring and review gates. The checked-in release has no
+          trained, integrity-verified model artifact yet, so it deliberately records no live score;
+          ordinary score correction remains available for ambiguity and recovery.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →

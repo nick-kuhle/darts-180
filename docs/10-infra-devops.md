@@ -73,10 +73,12 @@ Every pull request:
 5. dependency/secret scan;
 6. API contract fixture test;
 7. preview build/smoke test when mobile native changes;
-8. code-owner review for protected directories.
+8. code-owner review for protected directories; and
+9. schema-v2 model-package verification when `apps/web/public/models` or learned-runtime contracts change.
 
-Every model release adds dataset/model lineage check, frozen evaluation report, artifact checksum,
-and approval gate. Every infrastructure change runs plan/review and has a rollback procedure.
+Every model release adds dataset/model lineage check, frozen evaluation report, ONNX and public-attestation
+checksums, exact manifest/attestation policy binding, and an approval gate. Every infrastructure change runs
+plan/review and has a rollback procedure.
 
 ## 6. Secrets and access
 

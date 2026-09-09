@@ -91,7 +91,7 @@ remove path.
 | Attacker changes score event / cheats online | unfair game, trust loss              | authenticated append-only events, per-game roles, server sequence, signed/attested device data only where justified |
 | Replayed API requests                        | duplicated darts                     | UUID idempotency key + event ID + server uniqueness                                                                 |
 | Exposed object URL                           | media disclosure                     | private object store, short presigned URLs, audit, key rotation                                                     |
-| Model artifact tampering                     | unsafe/incorrect scoring             | signed/checksummed artifacts, registry approval, staged rollout/rollback                                            |
+| Model artifact tampering                     | unsafe/incorrect scoring             | immutable checksummed artifact, hash-bound public attestation/policy, registry approval, staged rollout/rollback    |
 | AI overconfidence                            | wrong score silently accepted        | quality gate, calibrated confidence, review UI, provenance                                                          |
 | Dependency compromise                        | client/server compromise             | lockfiles, SBOM, dependency review/scanning, release signing                                                        |
 | Lost phone                                   | local history/possibly clips exposed | OS encryption, app lock/biometrics option, short media retention, remote account/session revoke                     |
