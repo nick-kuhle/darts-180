@@ -95,6 +95,7 @@ def generate_synthetic_scene(rng: Random, index: int) -> tuple[np.ndarray, dict[
             "boardModel": "synthetic-standard-steel-tip",
             "deviceModel": "synthetic-camera",
             "captureMode": "synthetic",
+            "admissionStatus": "synthetic-not-real-world-evaluation",
             "offAxisDegrees": round(_off_axis_from_quad(destination_corners), 2),
             "distanceMm": 900,
             "lightingBand": "normal",

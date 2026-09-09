@@ -1,31 +1,47 @@
 /**
  * Small, dependency-free policy layer for the private Data Lab intake Function.
  *
- * Keep this separate from the Vercel Blob call so the allow-list, size limits, IDs, and document
- * pairing rules can be exercised without a storage credential or a deployed Function.
+ * Keep this separate from the Vercel Blob call so the access-mode allow-list, size limits, IDs,
+ * consent provenance, and document-pairing rules can be exercised without a storage credential or
+ * a deployed Function.
  */
 
+import {
+  DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
+  DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
+} from '../lib/captureConsent';
 import {
   MAX_CAPTURE_IMAGE_BYTES,
   MAX_CAPTURE_JSON_BYTES,
   type CaptureVaultAssetKind,
 } from '../lib/captureVault';
 
-export const CAPTURE_BLOB_PREFIX = 'darts180/capture-lab/v1';
+/** New records use a separate immutable prefix from the earlier owner-only collector. */
+export const CAPTURE_BLOB_PREFIX = 'darts180/capture-lab/v2';
+
 /**
- * Deliberate server-side acknowledgement that this narrow write endpoint sits behind Vercel
- * Deployment Protection for one owner. It is an access-mode flag, not a browser credential.
+ * Explicitly permits the consent-gated development Lab to receive same-origin browser submissions.
+ * This is deliberately not authentication: it is suitable only for a small, manually screened
+ * development corpus with private storage and no automatic training admission.
+ */
+export const DEVELOPMENT_CONSENT_ACCESS_MODE = 'development-consent-v1';
+
+/**
+ * Retained as a more restricted deployment option for an operator who later enables edge protection.
+ * It has the same private-write contract, but is not the mode requested for current development.
  */
 export const VERCEL_PROTECTED_OWNER_ACCESS_MODE = 'vercel-protected-owner-v1';
+
+export type CaptureIngestAccessMode =
+  typeof DEVELOPMENT_CONSENT_ACCESS_MODE | typeof VERCEL_PROTECTED_OWNER_ACCESS_MODE;
 
 const CAPTURE_ID = /^cap_[A-Fa-f0-9]{32}$/;
 const SESSION_ID = /^session_[A-Fa-f0-9]{32}$/;
 const RECORD_ID = /^record_[A-Fa-f0-9]{32}$/;
 const IMAGE_FILE = /^[A-Za-z0-9_.-]+\.jpe?g$/i;
-const COMPLETED_DATA_LAB_CONSENT = 'SELF-CAPTURE-DEVELOPMENT-V1';
 
 export interface CaptureIngestEnvironment {
-  ownerAccessMode: string | undefined;
+  accessMode: string | undefined;
   blobStoreId: string | undefined;
 }
 
@@ -49,10 +65,22 @@ export class CaptureIngestPolicyError extends Error {
   }
 }
 
+/** Return an exact, allow-listed deployment mode; whitespace and lookalikes fail closed. */
+export function resolveCaptureIngestAccessMode(
+  environment: CaptureIngestEnvironment,
+): CaptureIngestAccessMode | null {
+  switch (environment.accessMode) {
+    case DEVELOPMENT_CONSENT_ACCESS_MODE:
+    case VERCEL_PROTECTED_OWNER_ACCESS_MODE:
+      return environment.accessMode;
+    default:
+      return null;
+  }
+}
+
 export function isCaptureIngestConfigured(environment: CaptureIngestEnvironment): boolean {
   return (
-    environment.ownerAccessMode === VERCEL_PROTECTED_OWNER_ACCESS_MODE &&
-    Boolean(environment.blobStoreId?.trim())
+    resolveCaptureIngestAccessMode(environment) !== null && Boolean(environment.blobStoreId?.trim())
   );
 }
 
@@ -144,20 +172,23 @@ function validateCaptureDocument(
   } catch {
     throw new CaptureIngestPolicyError('Capture metadata must be valid UTF-8 JSON.');
   }
-  if (!isRecord(value))
+  if (!isRecord(value)) {
     throw new CaptureIngestPolicyError('Capture metadata must be a JSON object.');
+  }
 
   const capture = kind === 'manifest' ? value : value.capture;
   if (!isRecord(capture) || capture.captureId !== captureId) {
     throw new CaptureIngestPolicyError('Capture metadata does not match this private capture ID.');
   }
   if (
-    capture.consentVersion !== COMPLETED_DATA_LAB_CONSENT ||
+    capture.consentVersion !== DEVELOPMENT_DATA_LAB_CONSENT_VERSION ||
+    !isIsoTimestamp(capture.consentAcceptedAt) ||
+    capture.admissionStatus !== DEVELOPMENT_DATA_LAB_ADMISSION_STATUS ||
     capture.containsFaces !== false ||
     capture.imageMime !== 'image/jpeg'
   ) {
     throw new CaptureIngestPolicyError(
-      'Capture metadata must attest to a reviewed, board-only JPEG for development use.',
+      'Capture metadata must attest to a consented, board-only JPEG awaiting development review.',
     );
   }
   if (capture.captureMode !== 'still') {
@@ -202,6 +233,14 @@ function validateCaptureDocument(
 
 function isPseudonymousId(value: unknown): value is string {
   return typeof value === 'string' && SESSION_ID.test(value);
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 64) return false;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return false;
+  }
+  return Number.isFinite(Date.parse(value));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

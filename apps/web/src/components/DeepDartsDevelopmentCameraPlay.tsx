@@ -721,6 +721,7 @@ function DevelopmentModelState({
   model: DeepDartsDevelopmentModelManifest;
   backend: 'webgpu' | 'wasm' | null;
 }) {
+  const syntheticOnly = model.provenance.trainingDataKind === 'synthetic-only';
   return (
     <section className="learned-model-state is-runnable development-model-state">
       <small>LOCAL DEVELOPMENT MODEL</small>
@@ -728,6 +729,11 @@ function DevelopmentModelState({
       <span>
         EDITABLE ONLY · {backend === null ? 'WAITING FOR RUNTIME' : backend.toUpperCase()}
       </span>
+      {syntheticOnly && (
+        <span className="development-synthetic-warning">
+          SYNTHETIC BOOTSTRAP ONLY · NOT VALIDATED ON REAL THROWS
+        </span>
+      )}
     </section>
   );
 }

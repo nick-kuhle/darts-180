@@ -60,18 +60,41 @@ PYTHONPATH=src python -m darts180_vision.synthetic --output /tmp/darts-180-synth
 ```
 
 The generator varies dart count, ring/wedge, board scale, simple perspective, and backgrounds. It
-is for pipeline tests and augmentation only; it can never be used to claim real-world accuracy or
-as sacred evaluation data. `data_contract.py` validates capture metadata and that each label agrees
-with canonical score geometry. Validate either a Capture Lab manifest or a nested labeled sidecar
-before it enters a handoff queue:
+marks every sidecar `SYNTHETIC-NO-USER-DATA` plus `synthetic-not-real-world-evaluation`; it can never
+be used to claim real-world accuracy or as sacred evaluation data. `data_contract.py` validates capture
+metadata and that each label agrees with canonical score geometry. Validate either a Data Lab manifest
+or a nested labeled sidecar before it enters a handoff queue:
 
 ```bash
 PYTHONPATH=src python -m darts180_vision.data_contract path/to/manifest-or-sidecar.json
 ```
 
-The static web Annotation Lab exports a matching nested sidecar for a locally imported Capture Lab
-JPEG/manifest pair. Its four-anchor transform is a controlled human-labeling aid, not a substitute
+The web Data Lab creates a matching nested sidecar only after its required entry agreement and
+per-still/label review. Its four-anchor transform is a controlled human-labeling aid, not a substitute
 for independent annotations or adjudication; see `docs/runbooks/local-annotation.md`.
+
+## Fully synthetic five-point bootstrap
+
+For a reproducible initial detector experiment, build a standard numeric YOLO dataset from fully
+simulated board scenes and throws **outside this repository**:
+
+```bash
+PYTHONPATH=src python -m darts180_vision.synthetic_five_point_dataset \
+  --output-directory /secure/path/to/darts180-synthetic-fivepoint-v1 \
+  --count 300 \
+  --seed 20260908
+```
+
+It generates known five-point labels (class `0` dart entry, `1`–`4` fixed landmarks), output-only
+JPEGs/labels, and an aggregate provenance/audit report. It does not use a raw external archive,
+contact an API, or manufacture a model artifact. Its `train`/`val`/`test` partitions are all synthetic;
+use them only for controlled bootstrap/pretraining checks and keep them completely separate from
+real-device testing. The builder rejects a repository output path so a raw synthetic archive cannot be
+committed accidentally.
+
+A photorealistic-looking AI-generated board image has no trustworthy tip/landmark ground truth merely
+because it was generated. Do not add one to supervised training until it has explicit synthetic
+provenance and separately reviewed, geometry-consistent labels. Do not relabel it as real capture.
 
 ## Build a local five-point data set from real throws
 
@@ -89,12 +112,14 @@ PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
   /secure/path/to/reviewed-capture-pairs \
   --output-directory /secure/path/to/compiled-five-point-v1 \
   --split-seed darts180-initial-campaign-v1 \
-  --accepted-consent-version SELF-CAPTURE-DEVELOPMENT-V1
+  --accepted-consent-version DEVELOPMENT-DATA-LAB-CONSENT-V1
 ```
 
-The compiler checks privacy/consent markers, exact JPEG/sidecar pairing and dimensions, the required
-five-point annotation profile, clear tip labels, session-disjoint train/validation/test splits, duplicate
-JPEG bytes, and numeric YOLO labels. It never downloads, uploads, trains, or deploys. Read
+The compiler checks privacy/consent markers (including the recorded Data Lab consent timestamp and
+unreviewed status), exact JPEG/sidecar pairing and dimensions, the required five-point annotation profile,
+clear tip labels, session-disjoint train/validation/test splits, duplicate JPEG bytes, and numeric YOLO
+labels. It never downloads, uploads, trains, or deploys. A completed private Data Lab save is not
+automatic training admission; conduct restricted privacy/provenance/label review first. Read
 [`docs/19-build-the-first-camera-model.md`](../docs/19-build-the-first-camera-model.md) before starting
 a campaign.
 
@@ -122,11 +147,17 @@ report's local paths to Git.
 
 ## Editable five-point development training/export
 
-Once either a **locally compiled Darts 180 five-point set** or a lawfully acquired local
-DeepDarts-style export and a **local** YOLOv8-compatible base checkpoint are available,
-`darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
+Once a **locally compiled Darts 180 five-point set**, the external-only **fully synthetic five-point
+bootstrap**, or a lawfully acquired local DeepDarts-style export and a **local** YOLOv8-compatible base
+checkpoint are available, `darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX
+baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
 issues, or no dart-plus-four-anchor frame. It does not download data/weights, call Roboflow or another
 hosted inference service, copy output into `apps/web/public`, deploy, or make a production claim.
+
+The trainer requires `--training-data-kind` for every experiment. When training from the synthetic
+bootstrap, use `--training-data-kind synthetic-only` and a data ID such as `synthetic-five-point-v1`; the
+trainer verifies the bootstrap report and writes that provenance into the browser manifest. A synthetic-only
+model is not real-world validation and cannot be installed as a production scoring model.
 
 ```bash
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
@@ -135,6 +166,7 @@ PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
   --output-directory /secure/path/to/darts180-five-point-run \
   --model-version darts180-local-dev-YYYY-MM-DD \
   --training-data-id local-five-point-campaign-v1 \
+  --training-data-kind real-reviewed \
   --license-review-id local-self-capture-review-v1 \
   --hash-images
 ```

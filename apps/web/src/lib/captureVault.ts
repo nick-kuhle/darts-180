@@ -1,9 +1,10 @@
 /**
- * Browser client for the protected private Data Lab intake route.
+ * Browser client for the consent-gated private Data Lab intake route.
  *
- * The owner-only Vercel-protected deployment authorizes the browser before this same-origin route
- * is reached. This module never contains, reads, or derives a Vercel Blob credential, collection
- * secret, or browser upload token.
+ * In the explicitly open development mode, the Data Lab screen records a contributor's agreement
+ * before camera controls appear. That UI agreement is provenance, not browser authentication. This
+ * module never contains, reads, or derives a Vercel Blob credential, collection secret, or browser
+ * upload token.
  */
 
 export const CAPTURE_INGEST_PATH = '/api/capture-ingest';

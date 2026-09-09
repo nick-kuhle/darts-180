@@ -19,6 +19,10 @@ _LIGHTING_BANDS = {"low", "normal", "bright", "mixed", "glare"}
 _SPLITS = {"unassigned", "train", "validation", "eval"}
 _CAPTURE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,128}$")
 _IMAGE_FILE_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+\.(jpg|jpeg)$")
+_DEVELOPMENT_DATA_LAB_CONSENT_VERSION = "DEVELOPMENT-DATA-LAB-CONSENT-V1"
+_DEVELOPMENT_DATA_LAB_ADMISSION_STATUS = "consented-development-unreviewed"
+_SYNTHETIC_CONSENT_VERSION = "SYNTHETIC-NO-USER-DATA"
+_SYNTHETIC_ADMISSION_STATUS = "synthetic-not-real-world-evaluation"
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,7 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
             issues.append(ValidationIssue(field, "Must be a non-empty string."))
     if not _is_iso_datetime(value.get("createdAt")):
         issues.append(ValidationIssue("createdAt", "Must be an ISO-8601 timestamp with timezone."))
+    _validate_provenance(value, issues)
     if value.get("captureMode") not in _CAPTURE_MODES:
         issues.append(ValidationIssue("captureMode", f"Must be one of {sorted(_CAPTURE_MODES)}."))
     if "captureIntent" in value and value["captureIntent"] not in _CAPTURE_INTENTS:
@@ -98,6 +103,43 @@ def validate_capture_manifest(value: Mapping[str, Any]) -> tuple[ValidationIssue
     _validate_number(value, "distanceMm", 200, 5000, issues)
     return tuple(issues)
 
+
+
+def _validate_provenance(value: Mapping[str, Any], issues: list[ValidationIssue]) -> None:
+    """Keep consented browser data and fully synthetic data distinguishable in every handoff."""
+    capture_mode = value.get("captureMode")
+    consent_version = value.get("consentVersion")
+    admission_status = value.get("admissionStatus")
+    if consent_version == _DEVELOPMENT_DATA_LAB_CONSENT_VERSION:
+        if not _is_iso_datetime(value.get("consentAcceptedAt")):
+            issues.append(
+                ValidationIssue(
+                    "consentAcceptedAt",
+                    "Development Data Lab consent requires an ISO-8601 acceptance timestamp with timezone.",
+                )
+            )
+        if admission_status != _DEVELOPMENT_DATA_LAB_ADMISSION_STATUS:
+            issues.append(
+                ValidationIssue(
+                    "admissionStatus",
+                    "New Data Lab browser records must remain consented-development-unreviewed until manual data review.",
+                )
+            )
+    if capture_mode == "synthetic":
+        if consent_version != _SYNTHETIC_CONSENT_VERSION:
+            issues.append(
+                ValidationIssue(
+                    "consentVersion",
+                    "Synthetic material must use SYNTHETIC-NO-USER-DATA provenance, never a human consent marker.",
+                )
+            )
+        if admission_status != _SYNTHETIC_ADMISSION_STATUS:
+            issues.append(
+                ValidationIssue(
+                    "admissionStatus",
+                    "Synthetic material must be marked synthetic-not-real-world-evaluation.",
+                )
+            )
 
 def validate_dart_label(
     value: Mapping[str, Any], *, tolerance_mm: float = 0.05

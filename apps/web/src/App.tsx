@@ -668,15 +668,15 @@ export function App() {
           <VisionDiagnostics onReturnToCamera={() => setWorkspace('camera')} />
         </>
       ) : (
-        <DataLab />
+        <DataLab onExit={() => setWorkspace('camera')} />
       )}
 
       <footer className="shell footer">
         <p>
           <strong>Darts 180 prototype.</strong> Live Scoring keeps camera inference in the browser
           and requires a real verified model before it can propose a score. Data Lab is a separate,
-          guided, explicit-save workflow for creating the private blank-board and dart-test examples
-          needed to build that first model.
+          consent-gated workflow that automatically saves completed private blank-board and
+          dart-test examples needed to build that first model.
         </p>
         <a href="https://github.com/nick-kuhle/darts-180" target="_blank" rel="noreferrer">
           Darts 180 source (private) →

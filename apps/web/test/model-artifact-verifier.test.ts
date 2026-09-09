@@ -137,6 +137,7 @@ async function createDevelopmentPackage(publicDirectory: string) {
     },
     provenance: {
       trainingDataId: 'test-data',
+      trainingDataKind: 'real-reviewed',
       licenseReviewId: 'test-license',
       trainedAt: null,
     },

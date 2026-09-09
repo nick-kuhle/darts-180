@@ -28,7 +28,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                 source,
                 output,
                 split_seed="darts180-campaign-one",
-                accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
             )
 
             self.assertTrue((output / "data.yaml").is_file())
@@ -64,7 +64,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                 source,
                 root / "compiled-yolo",
                 split_seed="darts180-blank-board-test",
-                accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
             )
 
             self.assertEqual(report["labelCounts"]["dartEntryPoint"], 2)
@@ -99,7 +99,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                     source,
                     root / "compiled-yolo",
                     split_seed="darts180-only-blank-boards",
-                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                    accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
                 )
 
     def test_rejects_empty_darts_when_a_photo_claims_to_be_a_dart_test(self) -> None:
@@ -116,7 +116,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                     source,
                     root / "compiled-yolo",
                     split_seed="darts180-empty-dart-test",
-                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                    accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
                 )
 
     def test_refuses_standard_annotation_profile_for_five_point_training(self) -> None:
@@ -138,7 +138,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                     source,
                     root / "compiled-yolo",
                     split_seed="darts180-campaign-one",
-                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                    accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
                 )
 
     def test_refuses_exact_duplicate_jpegs_before_any_split(self) -> None:
@@ -154,7 +154,7 @@ class LocalFivePointDatasetTests(unittest.TestCase):
                     source,
                     root / "compiled-yolo",
                     split_seed="darts180-campaign-one",
-                    accepted_consent_version="SELF-CAPTURE-DEVELOPMENT-V1",
+                    accepted_consent_version="DEVELOPMENT-DATA-LAB-CONSENT-V1",
                 )
 
 
@@ -189,7 +189,9 @@ def _write_pair(
         "capture": {
             "captureId": capture_id,
             "sessionId": session_id,
-            "consentVersion": "SELF-CAPTURE-DEVELOPMENT-V1",
+            "consentVersion": "DEVELOPMENT-DATA-LAB-CONSENT-V1",
+            "consentAcceptedAt": "2026-09-08T11:55:00.000Z",
+            "admissionStatus": "consented-development-unreviewed",
             "boardModel": "Standard board",
             "deviceModel": "Test camera",
             "captureMode": "still",

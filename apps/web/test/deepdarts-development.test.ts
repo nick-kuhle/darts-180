@@ -59,6 +59,7 @@ const developmentManifest: DeepDartsDevelopmentModelManifest = {
   },
   provenance: {
     trainingDataId: 'test-deepdarts-data',
+    trainingDataKind: 'real-reviewed',
     licenseReviewId: 'test-data-license-review',
     trainedAt: null,
   },
@@ -127,6 +128,21 @@ test('five-point development manifest is local, immutable in class roles, and de
         policy: { ...developmentManifest.policy, tipTrackStaleAfterMs: 200 },
       }),
     /must exceed/,
+  );
+  assert.throws(
+    () =>
+      parseDevelopmentModelManifest({
+        ...developmentManifest,
+        provenance: { ...developmentManifest.provenance, trainingDataKind: 'real-world-validated' },
+      }),
+    /trainingDataKind/,
+  );
+  assert.equal(
+    parseDevelopmentModelManifest({
+      ...developmentManifest,
+      provenance: { ...developmentManifest.provenance, trainingDataKind: 'synthetic-only' },
+    }).provenance.trainingDataKind,
+    'synthetic-only',
   );
 });
 

@@ -1,7 +1,7 @@
 # Data Lab manual labels: five-point bootstrap
 
-**Status:** owner-only development labeling aid<br />
-**Audience:** the protected Data Lab owner and authorized data operations<br />
+**Status:** consent-gated development labeling aid<br />
+**Audience:** an agreeing Data Lab contributor and authorized data operations<br />
 **Use only for:** an approved, board-focused static JPEG paired with its Data Lab manifest.
 
 The visible **DATA LAB** workspace turns manually tapped points into the source-compatible five-point
@@ -9,10 +9,11 @@ JSON sidecar needed by the first editable development scorer. It keeps the JPEG,
 manual labels in one guided flow instead of asking a collector to switch to an ordinary player screen.
 It uses a four-point projective transform and the deterministic canonical-board decoder. It does **not**
 discover dart tips, validate privacy from pixels, establish legal consent, or replace two-person
-annotation/adjudication. On the Vercel Deployment-Protected owner deployment, completing the label review
-automatically saves the matched record to private Blob; the Lab has no local-download, collection-key, or
-manual Save option. That narrow intake design is covered by
-[`20-private-capture-lab.md`](../20-private-capture-lab.md).
+annotation/adjudication. On the configured consent-gated development deployment, completing label review
+automatically saves the matched record to private Blob after the required entry agreement. The agreement
+records `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance time, and an unreviewed admission marker; it is
+not identity verification. The Lab has no local-download, collection-key, browser credential, or manual Save
+option. That narrow intake design is covered by [`20-private-capture-lab.md`](../20-private-capture-lab.md).
 
 Follow the [Data Lab capture and private intake runbook](capture-lab.md) and the
 [controlled field-capture runbook](field-capture.md) first.
@@ -67,8 +68,8 @@ the mapping or an expected result looks implausible.
 ## 3. Guided labeling sequence
 
 1. In the web prototype select **DATA LAB**, not **LIVE SCORING**.
-2. Take the exact board-focused JPEG in the Data Lab and complete its per-still safety/authority
-   confirmation. The integrated flow keeps the matching manifest automatically.
+2. Read and accept the Data Lab entry agreement only if it is true, then take the exact board-focused
+   JPEG and complete its per-still safety/authority confirmation. The integrated flow keeps the matching manifest automatically.
 3. Select **Next · tap the board points**. Tap the four named outer-rim junctions in the displayed
    order. The app marks them 1–4 and changes to **Board set** only when it can solve the mapping.
 4. For **Dart test**, tap each _visible physical dart entry point_ once. A **Blank board** record is
@@ -79,8 +80,8 @@ the mapping or an expected result looks implausible.
    a calculated zone as truth.
 6. Complete the per-label review statement and select **Complete review · Auto-save**. That final
    acknowledgement automatically saves the matched JPEG, manifest, and annotation sidecar to the
-   protected private collection. Keep the tab open until all three assets show saved; only a failed
-   asset exposes a retry.
+   private development collection. Keep the tab open until all three assets show saved; only a failed
+   asset exposes a retry. The private save remains `consented-development-unreviewed` pending data review.
 
 The output records original capture metadata, image dimensions/name, the image-to-board homography,
 fixed anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire

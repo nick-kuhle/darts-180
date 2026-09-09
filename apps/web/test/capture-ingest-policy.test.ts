@@ -2,11 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
+  DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
+} from '../src/lib/captureConsent.js';
+import {
   CAPTURE_BLOB_PREFIX,
   CaptureIngestPolicyError,
+  DEVELOPMENT_CONSENT_ACCESS_MODE,
   VERCEL_PROTECTED_OWNER_ACCESS_MODE,
   isCaptureIngestConfigured,
   normalizedContentType,
+  resolveCaptureIngestAccessMode,
   validateCaptureIngestAsset,
 } from '../src/server/captureIngestPolicy.js';
 
@@ -29,7 +35,9 @@ function captureManifest(captureIntent: 'empty-board' | 'static-dart' = 'static-
   return {
     captureId: CAPTURE_ID,
     sessionId: 'session_0123456789abcdef0123456789abcdef',
-    consentVersion: 'SELF-CAPTURE-DEVELOPMENT-V1',
+    consentVersion: DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
+    consentAcceptedAt: '2026-09-08T12:00:00.000Z',
+    admissionStatus: DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
     captureMode: 'still',
     captureIntent,
     containsFaces: false,
@@ -38,38 +46,52 @@ function captureManifest(captureIntent: 'empty-board' | 'static-dart' = 'static-
   };
 }
 
-test('private capture storage stays fail-closed unless protected owner mode and a Blob store are both configured', () => {
+test('private capture storage stays fail-closed unless an exact supported mode and Blob store are configured', () => {
   assert.equal(
     isCaptureIngestConfigured({
-      ownerAccessMode: undefined,
+      accessMode: undefined,
       blobStoreId: 'store_123',
     }),
     false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      ownerAccessMode: 'vercel-protected-owner-v0',
+      accessMode: 'development-consent-v0',
       blobStoreId: 'store_123',
     }),
     false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      accessMode: DEVELOPMENT_CONSENT_ACCESS_MODE,
       blobStoreId: '   ',
     }),
     false,
   );
   assert.equal(
     isCaptureIngestConfigured({
-      ownerAccessMode: ` ${VERCEL_PROTECTED_OWNER_ACCESS_MODE} `,
+      accessMode: ` ${DEVELOPMENT_CONSENT_ACCESS_MODE} `,
       blobStoreId: 'store_123',
     }),
     false,
   );
   assert.equal(
+    resolveCaptureIngestAccessMode({
+      accessMode: DEVELOPMENT_CONSENT_ACCESS_MODE,
+      blobStoreId: 'store_123',
+    }),
+    DEVELOPMENT_CONSENT_ACCESS_MODE,
+  );
+  assert.equal(
     isCaptureIngestConfigured({
-      ownerAccessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
+      accessMode: DEVELOPMENT_CONSENT_ACCESS_MODE,
+      blobStoreId: 'store_123',
+    }),
+    true,
+  );
+  assert.equal(
+    isCaptureIngestConfigured({
+      accessMode: VERCEL_PROTECTED_OWNER_ACCESS_MODE,
       blobStoreId: 'store_123',
     }),
     true,
@@ -118,7 +140,7 @@ test('intake accepts only bounded JPEGs and fixed private record paths', () => {
   );
 });
 
-test('manifest and sidecar assets must attest to the matching board-only capture', () => {
+test('manifest and sidecar assets must attest to matching board-only consent provenance', () => {
   const manifest = validateCaptureIngestAsset(
     metadata('manifest', 'application/json'),
     jsonBytes(captureManifest()),
@@ -158,15 +180,23 @@ test('manifest and sidecar assets must attest to the matching board-only capture
         metadata('manifest', 'application/json'),
         jsonBytes({ ...captureManifest(), containsFaces: true }),
       ),
-    /reviewed, board-only JPEG/,
+    /consented, board-only JPEG awaiting development review/,
   );
   assert.throws(
     () =>
       validateCaptureIngestAsset(
         metadata('manifest', 'application/json'),
-        jsonBytes({ ...captureManifest(), consentVersion: 'LOCAL-CAPTURE-NOT-YET-SHARED' }),
+        jsonBytes({ ...captureManifest(), consentAcceptedAt: 'later' }),
       ),
-    /reviewed, board-only JPEG/,
+    /consented, board-only JPEG awaiting development review/,
+  );
+  assert.throws(
+    () =>
+      validateCaptureIngestAsset(
+        metadata('manifest', 'application/json'),
+        jsonBytes({ ...captureManifest(), admissionStatus: 'approved-for-training' }),
+      ),
+    /consented, board-only JPEG awaiting development review/,
   );
   assert.throws(
     () =>

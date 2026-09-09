@@ -3,9 +3,11 @@ import { createHash } from 'node:crypto';
 
 import {
   CaptureIngestPolicyError,
+  DEVELOPMENT_CONSENT_ACCESS_MODE,
   type CaptureIngestEnvironment,
   isCaptureIngestConfigured,
   isCaptureVaultAssetKind,
+  resolveCaptureIngestAccessMode,
   validateCaptureIngestAsset,
 } from '../src/server/captureIngestPolicy';
 import { MAX_CAPTURE_IMAGE_BYTES, MAX_CAPTURE_JSON_BYTES } from '../src/lib/captureVault';
@@ -28,11 +30,13 @@ export interface CaptureIngestHandlerDependencies {
 }
 
 /**
- * Private owner-only intake for Data Lab's reviewed JPEG + JSON triplets.
+ * Private intake for Data Lab's reviewed JPEG + JSON triplets.
  *
- * This is deliberately a server upload rather than a browser-to-Blob token exchange: raw capture
- * bytes are size-limited and validated by one same-origin Function. Vercel Deployment Protection
- * supplies the owner gate before it runs; the browser gets no Blob credential, URL, or read capability.
+ * This remains a server upload rather than a browser-to-Blob token exchange: raw capture bytes are
+ * size-limited and validated by one same-origin Function. In `development-consent-v1`, any visitor
+ * who reaches the development app can submit after the UI agreement; that agreement is recorded as
+ * provenance, not treated as authentication. Every accepted record therefore remains private and
+ * pending manual screening before it can enter a training or evaluation set.
  */
 export function createCaptureIngestHandler({
   getEnvironment,
@@ -40,6 +44,7 @@ export function createCaptureIngestHandler({
 }: CaptureIngestHandlerDependencies): (request: Request) => Promise<Response> {
   return async function captureIngest(request: Request): Promise<Response> {
     const environment = getEnvironment();
+    const accessMode = resolveCaptureIngestAccessMode(environment);
     const configured = isCaptureIngestConfigured(environment);
     if (request.method === 'GET') {
       return json(
@@ -60,19 +65,20 @@ export function createCaptureIngestHandler({
         },
       );
     }
-    if (!configured) {
+    if (!configured || accessMode === null) {
       return json(
         {
           error:
-            'Private capture storage is not configured for this protected deployment. Capture remains disabled.',
+            'Private capture storage is not configured for this Data Lab deployment. Capture remains disabled.',
         },
         503,
       );
     }
-    // Vercel Deployment Protection authenticates the sole collector before this Function is reached.
-    // The same-origin check is a second boundary against cross-site browser writes; this deliberately
-    // narrow owner mode is not a substitute for application accounts in a wider tester program.
-    if (!isSameOriginBrowserRequest(request)) {
+
+    // Same-origin is a second boundary against cross-site browser writes. Development consent is
+    // deliberately not an identity or anti-abuse mechanism, so it additionally requires an Origin
+    // header from the browser. Neither check turns an open development collector into public auth.
+    if (!isSameOriginBrowserRequest(request, accessMode === DEVELOPMENT_CONSENT_ACCESS_MODE)) {
       return json({ error: 'Private capture saves must come from this Darts 180 site.' }, 403);
     }
 
@@ -167,7 +173,7 @@ export function createCaptureIngestHandler({
 
 const captureIngest = createCaptureIngestHandler({
   getEnvironment: () => ({
-    ownerAccessMode: process.env.DARTS180_CAPTURE_ACCESS_MODE,
+    accessMode: process.env.DARTS180_CAPTURE_ACCESS_MODE,
     // @vercel/blob resolves Vercel's rotating runtime OIDC token from the Function request context.
     // The store ID is the deliberate configuration signal; this route never handles a Blob credential.
     blobStoreId: process.env.BLOB_STORE_ID,
@@ -217,11 +223,11 @@ async function readBoundedBody(request: Request, maximumBytes: number): Promise<
   return bytes.buffer;
 }
 
-function isSameOriginBrowserRequest(request: Request): boolean {
+function isSameOriginBrowserRequest(request: Request, requireOrigin: boolean): boolean {
   const fetchSite = request.headers.get('sec-fetch-site');
   if (fetchSite === 'cross-site') return false;
   const origin = request.headers.get('origin');
-  if (origin === null) return true;
+  if (origin === null) return !requireOrigin;
   try {
     return new URL(origin).origin === new URL(request.url).origin;
   } catch {

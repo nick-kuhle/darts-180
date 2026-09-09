@@ -14,11 +14,13 @@ from darts180_vision.synthetic import generate_synthetic_dataset
 
 
 class DataContractTests(unittest.TestCase):
-    def test_accepts_a_minimal_private_capture_manifest(self) -> None:
+    def test_accepts_a_new_consent_gated_private_capture_manifest(self) -> None:
         manifest = {
             "captureId": "cap_example_0001",
             "sessionId": "session_example_01",
-            "consentVersion": "LOCAL-CAPTURE-NOT-YET-SHARED",
+            "consentVersion": "DEVELOPMENT-DATA-LAB-CONSENT-V1",
+            "consentAcceptedAt": "2026-09-08T00:00:00.000Z",
+            "admissionStatus": "consented-development-unreviewed",
             "boardModel": "Standard board",
             "deviceModel": "Phone camera",
             "captureMode": "still",
@@ -33,6 +35,23 @@ class DataContractTests(unittest.TestCase):
             "split": "unassigned",
         }
         self.assertEqual(validate_capture_manifest(manifest), ())
+
+    def test_consent_gated_manifest_requires_timestamp_and_unreviewed_admission(self) -> None:
+        manifest = {
+            "captureId": "cap_example_0001",
+            "consentVersion": "DEVELOPMENT-DATA-LAB-CONSENT-V1",
+            "admissionStatus": "approved-for-training",
+            "boardModel": "board",
+            "deviceModel": "phone",
+            "captureMode": "still",
+            "offAxisDegrees": 20,
+            "distanceMm": 900,
+            "lightingBand": "normal",
+            "containsFaces": False,
+            "createdAt": "2026-09-08T00:00:00Z",
+        }
+        paths = {issue.path for issue in validate_capture_manifest(manifest)}
+        self.assertEqual(paths, {"consentAcceptedAt", "admissionStatus"})
 
     def test_rejects_manifest_that_does_not_explicitly_exclude_faces(self) -> None:
         manifest = {
@@ -77,13 +96,14 @@ class DataContractTests(unittest.TestCase):
         }
         self.assertTrue(any(issue.path == "zone" for issue in validate_dart_label(label)))
 
-    def test_synthetic_generator_creates_geometry_consistent_sidecars(self) -> None:
+    def test_synthetic_generator_creates_geometry_consistent_sidecars_with_non_real_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             paths = generate_synthetic_dataset(output, count=3, seed=7)
             self.assertEqual(len(paths), 3)
             for label_path in paths:
                 data = json.loads(label_path.read_text(encoding="utf-8"))
+                self.assertEqual(data["capture"]["admissionStatus"], "synthetic-not-real-world-evaluation")
                 self.assertEqual(validate_capture_manifest(data["capture"]), ())
                 self.assertEqual(validate_capture_sidecar(data), ())
                 image = cv2.imread(str(output / data["image"]["file"]))

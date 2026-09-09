@@ -5,27 +5,27 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 
 ## Read in this order
 
-|   # | Document                                                                      | Question answered                                                     |
-| --: | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-|  00 | [Project charter](00-project-charter.md)                                      | Why Darts 180 exists, its boundaries, and the decisions already made  |
-|  01 | [Product requirements](01-product-requirements.md)                            | What a player must be able to do in each release slice                |
-|  02 | [System architecture](02-system-architecture.md)                              | Which seams allow cross-platform speed and native-scale performance   |
-|  03 | [Detection engine](03-detection-engine.md)                                    | How phone video becomes a conservative per-dart proposal              |
-|  04 | [ML/data/evaluation](04-ml-data-and-evaluation.md)                            | How models are trained, measured, and safely released                 |
-|  05 | [Game rules](05-game-rules.md)                                                | Exact X01/Cricket behavior and test standard                          |
-|  06 | [Mobile UX](06-mobile-ux.md)                                                  | Setup, DartCard review, accessibility, and recovery flows             |
-|  07 | [API/realtime](07-api-and-realtime.md)                                        | Event sync, protocol, and external-integration stance                 |
-|  08 | [Security/privacy](08-security-privacy.md)                                    | Camera/media/identity controls and governance                         |
-|  09 | [Quality/release](09-quality-release.md)                                      | Test pyramid, SLOs, model and app release gates                       |
-|  10 | [Infra/DevOps](10-infra-devops.md)                                            | Environments, CI/CD, local tools, rollout, operations                 |
-|  11 | [Roadmap/team](11-roadmap-and-team.md)                                        | Parallel workstreams, milestones, staffing, risk controls             |
-|  12 | [Web demo / Vercel](12-web-demo-and-vercel.md)                                | What can be shared today and how to deploy it safely                  |
-|  13 | [Current implementation status](13-current-implementation-status.md)          | What is complete, validated, deferred, and next                       |
-|  14 | [Browser camera field test](14-browser-camera-field-test.md)                  | How to conduct the local, fixed-camera real-board test safely         |
-|  17 | [Web model artifact contract](17-web-model-artifact-contract.md)              | Binding production browser/native model boundary                      |
-|  18 | [Editable five-point development scorer](18-development-five-point-scorer.md) | Real learned editable test scoring without weakening production gates |
-|  19 | [Build the first camera model](19-build-the-first-camera-model.md)            | How real throws become the first editable development model           |
-|  20 | [Guided Data Lab / private capture intake](20-private-capture-lab.md)         | How the app collects private blank-board and dart-test examples       |
+|   # | Document                                                                      | Question answered                                                      |
+| --: | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+|  00 | [Project charter](00-project-charter.md)                                      | Why Darts 180 exists, its boundaries, and the decisions already made   |
+|  01 | [Product requirements](01-product-requirements.md)                            | What a player must be able to do in each release slice                 |
+|  02 | [System architecture](02-system-architecture.md)                              | Which seams allow cross-platform speed and native-scale performance    |
+|  03 | [Detection engine](03-detection-engine.md)                                    | How phone video becomes a conservative per-dart proposal               |
+|  04 | [ML/data/evaluation](04-ml-data-and-evaluation.md)                            | How models are trained, measured, and safely released                  |
+|  05 | [Game rules](05-game-rules.md)                                                | Exact X01/Cricket behavior and test standard                           |
+|  06 | [Mobile UX](06-mobile-ux.md)                                                  | Setup, DartCard review, accessibility, and recovery flows              |
+|  07 | [API/realtime](07-api-and-realtime.md)                                        | Event sync, protocol, and external-integration stance                  |
+|  08 | [Security/privacy](08-security-privacy.md)                                    | Camera/media/identity controls and governance                          |
+|  09 | [Quality/release](09-quality-release.md)                                      | Test pyramid, SLOs, model and app release gates                        |
+|  10 | [Infra/DevOps](10-infra-devops.md)                                            | Environments, CI/CD, local tools, rollout, operations                  |
+|  11 | [Roadmap/team](11-roadmap-and-team.md)                                        | Parallel workstreams, milestones, staffing, risk controls              |
+|  12 | [Web demo / Vercel](12-web-demo-and-vercel.md)                                | What can be shared today and how to deploy it safely                   |
+|  13 | [Current implementation status](13-current-implementation-status.md)          | What is complete, validated, deferred, and next                        |
+|  14 | [Browser camera field test](14-browser-camera-field-test.md)                  | How to conduct the local, fixed-camera real-board test safely          |
+|  17 | [Web model artifact contract](17-web-model-artifact-contract.md)              | Binding production browser/native model boundary                       |
+|  18 | [Editable five-point development scorer](18-development-five-point-scorer.md) | Real learned editable test scoring without weakening production gates  |
+|  19 | [Build the first camera model](19-build-the-first-camera-model.md)            | Synthetic bootstrap plus real throws for an editable development model |
+|  20 | [Guided Data Lab / private capture intake](20-private-capture-lab.md)         | Consent-gated private blank-board and dart-test collection             |
 
 ## Decision records
 

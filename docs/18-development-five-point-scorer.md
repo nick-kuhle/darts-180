@@ -122,9 +122,11 @@ redaction, independent labeling, duplicate checks, and dataset/split governance 
 future model.
 
 Before there is any model to make those suggestions, bootstrap real throws through the guided **Data Lab**
-using its explicit five-point rim-junction/tip labels. That manual labeling is a controlled data-operation
-tool, not a normal Live Scoring step. On the separately configured Deployment-Protected owner deployment,
-the completed review automatically saves the private record; it neither trains nor activates a model. See
+using its explicit five-point rim-junction/tip labels. Its unchecked entry agreement records that completed
+board-only records are collected privately for product/model improvement; it is a controlled data-operation
+tool, not a normal Live Scoring step or user authentication. In the separately configured
+`development-consent-v1` deployment, completed review automatically saves a private record marked
+`consented-development-unreviewed`; it neither trains nor activates a model. See
 [`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) and
 [`20-private-capture-lab.md`](20-private-capture-lab.md).
 
@@ -143,7 +145,7 @@ PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
   /secure/path/to/reviewed-capture-pairs \
   --output-directory /secure/path/to/compiled-five-point-v1 \
   --split-seed darts180-campaign-v1 \
-  --accepted-consent-version SELF-CAPTURE-DEVELOPMENT-V1
+  --accepted-consent-version DEVELOPMENT-DATA-LAB-CONSENT-V1
 ```
 
 Then supply that locally compiled folder and a local YOLOv8-compatible base checkpoint to training:
@@ -157,6 +159,7 @@ PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
   --output-directory /secure/path/to/darts180-five-point-run \
   --model-version darts180-local-dev-YYYY-MM-DD \
   --training-data-id local-five-point-campaign-v1 \
+  --training-data-kind real-reviewed \
   --license-review-id local-self-capture-review-v1 \
   --hash-images
 ```

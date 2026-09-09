@@ -15,6 +15,10 @@ export type DeepDartsClassId = (typeof DEEPDARTS_CLASS_IDS)[keyof typeof DEEPDAR
 
 export type DevelopmentInferenceBackend = 'webgpu' | 'wasm';
 
+/** Required artifact provenance prevents a synthetic bootstrap from masquerading as real-device evidence. */
+export type DevelopmentTrainingDataKind =
+  'synthetic-only' | 'real-reviewed' | 'mixed-synthetic-and-real';
+
 export interface DevelopmentDetectionPolicy {
   /** Raw YOLO class-score floor before class-aware NMS. This is not calibrated score accuracy. */
   minDetectionConfidence: number;
@@ -63,6 +67,7 @@ export interface DeepDartsDevelopmentModelManifest {
   policy: DevelopmentDetectionPolicy;
   provenance: {
     trainingDataId: string;
+    trainingDataKind: DevelopmentTrainingDataKind;
     licenseReviewId: string;
     trainedAt: string | null;
   };

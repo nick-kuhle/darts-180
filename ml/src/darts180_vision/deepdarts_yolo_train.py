@@ -1,9 +1,10 @@
 """Deliberate local training/export path for Darts 180's editable five-point development scorer.
 
 This command never downloads data, calls hosted inference, copies an artifact into the web app, or
-marks a model production-ready. It trains only from a caller-provided, lawfully acquired local
-DeepDarts-style YOLOv8 export after the repository's structural audit succeeds. Its output is an
-ONNX file plus a development-only manifest that can be consciously reviewed and installed later.
+marks a model production-ready. It trains only from a caller-provided local five-point YOLOv8 dataset
+after the repository's structural audit succeeds. The caller must state whether the data is fully
+synthetic, reviewed real data, or a mixture; a synthetic bootstrap remains visibly synthetic in the
+resulting development-only manifest.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ from darts180_vision.deepdarts_yolo_audit import DatasetAuditError, audit_deepda
 _MANIFEST_SCHEMA_VERSION = 1
 _REQUIRED_NUMERIC_NAMES = ["0", "1", "2", "3", "4"]
 _DEFAULT_PUBLIC_ASSET_PATH = "/models/darts180-deepdarts-yolo-dev-v1.onnx"
+_TRAINING_DATA_KINDS = frozenset(
+    {"synthetic-only", "real-reviewed", "mixed-synthetic-and-real"}
+)
 
 
 class DevelopmentTrainingError(ValueError):
@@ -41,7 +45,7 @@ def validate_audit_for_development_training(report: dict[str, Any]) -> None:
     data_yaml = metadata.get("dataYaml")
     if not isinstance(data_yaml, dict) or data_yaml.get("names") != _REQUIRED_NUMERIC_NAMES:
         raise DevelopmentTrainingError(
-            "The local data.yaml must preserve the reviewed numeric DeepDarts class order 0 through 4."
+            "The local data.yaml must preserve the reviewed numeric five-point class order 0 through 4."
         )
     if candidate.get("numericExportShapeMatchesExpected") is not True:
         raise DevelopmentTrainingError(
@@ -67,6 +71,7 @@ def build_development_manifest(
     output_tensor_name: str,
     public_asset_path: str,
     training_data_id: str,
+    training_data_kind: str,
     license_review_id: str,
     trained_at: str,
     image_size: int,
@@ -95,6 +100,7 @@ def build_development_manifest(
         raise DevelopmentTrainingError("image_size must be between 256 and 2048.")
     if not training_data_id.strip() or not license_review_id.strip():
         raise DevelopmentTrainingError("training_data_id and license_review_id are required.")
+    _validate_training_data_kind(training_data_kind)
 
     return {
         "schemaVersion": _MANIFEST_SCHEMA_VERSION,
@@ -138,11 +144,51 @@ def build_development_manifest(
         },
         "provenance": {
             "trainingDataId": training_data_id,
+            "trainingDataKind": training_data_kind,
             "licenseReviewId": license_review_id,
             "trainedAt": trained_at,
         },
     }
 
+
+
+def _validate_training_data_kind(value: str) -> None:
+    if value not in _TRAINING_DATA_KINDS:
+        allowed = ", ".join(sorted(_TRAINING_DATA_KINDS))
+        raise DevelopmentTrainingError(f"training_data_kind must be one of: {allowed}.")
+
+
+def validate_dataset_provenance(root: Path, training_data_kind: str) -> None:
+    """Bind the repository's synthetic bootstrap report to an honest artifact provenance field."""
+    _validate_training_data_kind(training_data_kind)
+    synthetic_report = root / "darts180-synthetic-fivepoint-bootstrap.json"
+    if synthetic_report.is_file():
+        try:
+            report = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise DevelopmentTrainingError(
+                "Could not read the synthetic bootstrap provenance report."
+            ) from error
+        provenance = report.get("syntheticProvenance") if isinstance(report, dict) else None
+        if not isinstance(provenance, dict):
+            raise DevelopmentTrainingError("Synthetic bootstrap report has no usable provenance object.")
+        if (
+            provenance.get("consentVersion") != "SYNTHETIC-NO-USER-DATA"
+            or provenance.get("admissionStatus") != "synthetic-not-real-world-evaluation"
+            or provenance.get("realWorldEvaluationEligible") is not False
+        ):
+            raise DevelopmentTrainingError(
+                "Synthetic bootstrap provenance is incomplete; do not train from an ambiguously labeled corpus."
+            )
+        if training_data_kind != "synthetic-only":
+            raise DevelopmentTrainingError(
+                "A synthetic bootstrap dataset must produce a synthetic-only development manifest; "
+                "do not present it as reviewed real or mixed data."
+            )
+    elif training_data_kind == "synthetic-only":
+        raise DevelopmentTrainingError(
+            "synthetic-only training requires the generated synthetic bootstrap provenance report in dataset_root."
+        )
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -203,6 +249,7 @@ def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
         shutil.rmtree(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
+    validate_dataset_provenance(root, args.training_data_kind)
     audit = audit_deepdarts_yolov8_export(root, hash_images=args.hash_images)
     validate_audit_for_development_training(audit)
     audit_path = output_directory / "dataset-audit.json"
@@ -264,6 +311,7 @@ def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
         output_tensor_name=onnx_output_name(artifact_path),
         public_asset_path=args.public_asset_path,
         training_data_id=args.training_data_id,
+        training_data_kind=args.training_data_kind,
         license_review_id=args.license_review_id,
         trained_at=trained_at,
         image_size=args.image_size,
@@ -283,8 +331,17 @@ def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
         "onnxSha256": model_sha256,
         "manifestPath": str(manifest_path),
         "modelVersion": args.model_version,
+        "trainingDataKind": args.training_data_kind,
         "trainedAt": trained_at,
         "nextRequiredSteps": [
+            *(
+                [
+                    "This synthetic-only artifact is not real-world validated; do not present it as a scoring-performance result.",
+                    "Collect and evaluate on held-out consented real throws before relying on any result.",
+                ]
+                if args.training_data_kind == "synthetic-only"
+                else []
+            ),
             "Run the browser contract tests and inspect ONNX Runtime initialization on target phones.",
             "Install only the reviewed ONNX plus manifest into the web public models directory.",
             "Validate the four-anchor orientation transform on held-out real throws before relying on results.",
@@ -299,11 +356,11 @@ def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Train and export an editable, local-only DeepDarts five-point development model; never deploys it."
+            "Train and export an editable, local-only five-point development model; never deploys it."
         )
     )
     parser.add_argument(
-        "dataset_root", type=Path, help="Lawfully acquired local YOLO export containing data.yaml."
+        "dataset_root", type=Path, help="Local numeric five-point YOLO dataset containing data.yaml."
     )
     parser.add_argument(
         "--base-model",
@@ -322,6 +379,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--training-data-id", required=True, help="Reviewed local data/provenance identifier."
+    )
+    parser.add_argument(
+        "--training-data-kind",
+        required=True,
+        choices=sorted(_TRAINING_DATA_KINDS),
+        help="Required source class; synthetic-only artifacts remain visibly unvalidated on real throws.",
     )
     parser.add_argument(
         "--license-review-id", required=True, help="Licence/IP review record identifier."

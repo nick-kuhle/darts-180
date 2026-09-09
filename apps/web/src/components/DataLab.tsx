@@ -12,6 +12,11 @@ import {
 } from '../lib/annotationGeometry';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 import {
+  DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
+  DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
+  type DevelopmentDataLabConsent,
+} from '../lib/captureConsent';
+import {
   getCaptureVaultStatus,
   uploadPrivateCaptureAsset,
   type CaptureVaultAssetKind,
@@ -33,10 +38,9 @@ interface CaptureMetadata {
   lightingBand: LightingBand;
 }
 
-interface CaptureManifest {
+interface CaptureManifest extends DevelopmentDataLabConsent {
   captureId: string;
   sessionId: string;
-  consentVersion: 'LOCAL-CAPTURE-NOT-YET-SHARED' | 'SELF-CAPTURE-DEVELOPMENT-V1';
   boardModel: string;
   deviceModel: string;
   captureMode: 'still';
@@ -105,9 +109,10 @@ const TARGET_JPEG_BYTES = 3_200_000;
  * The deliberately separate collection route. Normal Live Scoring never enters this component,
  * asks for anchors, or uploads media. Data Lab makes a consented first-model sample in one short
  * sequence: choose a kind, photograph it, tap its known points, then automatically save the reviewed
- * matched record to the protected private collection.
+ * matched record to private development storage. A required entry agreement records consent provenance;
+ * it is not authentication and every record still needs manual data-operations review before training.
  */
-export function DataLab() {
+export function DataLab({ onExit }: { onExit: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -115,6 +120,8 @@ export function DataLab() {
   const automaticUploadAttemptedRecordRef = useRef<string | null>(null);
   const uploadInFlightRef = useRef(false);
 
+  const [entryConsentChecked, setEntryConsentChecked] = useState(false);
+  const [dataLabConsent, setDataLabConsent] = useState<DevelopmentDataLabConsent | null>(null);
   const [step, setStep] = useState<DataLabStep>('capture');
   const [metadata, setMetadata] = useState<CaptureMetadata>(initialMetadata);
   const [cameraActive, setCameraActive] = useState(false);
@@ -162,8 +169,8 @@ export function DataLab() {
   }, []);
 
   useEffect(() => {
-    void refreshVaultStatus();
-  }, [refreshVaultStatus]);
+    if (dataLabConsent !== null) void refreshVaultStatus();
+  }, [dataLabConsent, refreshVaultStatus]);
 
   const resetAnnotation = useCallback(() => {
     setAnchors([...EMPTY_ANCHORS]);
@@ -174,6 +181,12 @@ export function DataLab() {
   }, []);
 
   const startCamera = async () => {
+    if (dataLabConsent === null) {
+      setCameraError(
+        'Read and accept the Data Lab development collection notice before using the camera.',
+      );
+      return;
+    }
     if (vaultAvailability !== 'ready') {
       setCameraError(messageForCollectionAvailability(vaultAvailability));
       return;
@@ -213,6 +226,12 @@ export function DataLab() {
   };
 
   const captureStill = async () => {
+    if (dataLabConsent === null) {
+      setCameraError(
+        'Read and accept the Data Lab development collection notice before taking a photo.',
+      );
+      return;
+    }
     if (vaultAvailability !== 'ready') {
       setCameraError(messageForCollectionAvailability(vaultAvailability));
       return;
@@ -237,7 +256,9 @@ export function DataLab() {
       const manifest: CaptureManifest = {
         captureId,
         sessionId: metadata.sessionId.trim(),
-        consentVersion: 'LOCAL-CAPTURE-NOT-YET-SHARED',
+        consentVersion: dataLabConsent.consentVersion,
+        consentAcceptedAt: dataLabConsent.consentAcceptedAt,
+        admissionStatus: dataLabConsent.admissionStatus,
         boardModel: metadata.boardModel.trim() || 'Standard dartboard',
         deviceModel: metadata.deviceModel.trim() || 'Browser rear camera',
         captureMode: 'still',
@@ -276,14 +297,6 @@ export function DataLab() {
 
   const continueToLabels = () => {
     if (captured === null || !privacyConfirmed || !rightsConfirmed) return;
-    setCaptured((current) =>
-      current === null
-        ? null
-        : {
-            ...current,
-            manifest: { ...current.manifest, consentVersion: 'SELF-CAPTURE-DEVELOPMENT-V1' },
-          },
-    );
     resetAnnotation();
     setStep('label');
   };
@@ -493,6 +506,26 @@ export function DataLab() {
   const allAssetsSaved = Object.values(assetStates).every((state) => state === 'saved');
   const anyAssetSaving = Object.values(assetStates).some((state) => state === 'saving');
 
+  const acceptEntryConsent = () => {
+    if (!entryConsentChecked) return;
+    setDataLabConsent({
+      consentVersion: DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
+      consentAcceptedAt: new Date().toISOString(),
+      admissionStatus: DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
+    });
+  };
+
+  if (dataLabConsent === null) {
+    return (
+      <DataLabConsentGate
+        checked={entryConsentChecked}
+        onChecked={setEntryConsentChecked}
+        onContinue={acceptEntryConsent}
+        onExit={onExit}
+      />
+    );
+  }
+
   return (
     <section className="data-lab shell">
       <header className="data-lab-intro">
@@ -504,17 +537,17 @@ export function DataLab() {
             <em>One honest photo at a time.</em>
           </h1>
           <p className="lede">
-            Live Scoring is for playing. This private Lab is the separate, simple place to collect a
-            blank board or a real dart test picture for the first camera model.
+            Live Scoring is for playing. This consented development Lab is the separate, simple
+            place to collect a blank board or a real dart-test picture for the first camera model.
           </p>
         </div>
         <aside className="data-lab-privacy-card">
-          <span>PRIVATE BY DEFAULT</span>
-          <strong>No audio. Save only after review.</strong>
+          <span>PRIVATE DEVELOPMENT COLLECTION</span>
+          <strong>No audio. Automatic save only after review.</strong>
           <p>
             Keep people and personal room details out of frame. A photo stays in this tab until you
-            complete the label review; then its matched record saves automatically to the protected
-            private collection.
+            complete label review; then its matched record saves automatically to private storage
+            and remains pending manual data review.
           </p>
         </aside>
       </header>
@@ -617,6 +650,97 @@ export function DataLab() {
   );
 }
 
+function DataLabConsentGate({
+  checked,
+  onChecked,
+  onContinue,
+  onExit,
+}: {
+  checked: boolean;
+  onChecked: (checked: boolean) => void;
+  onContinue: () => void;
+  onExit: () => void;
+}) {
+  return (
+    <section className="data-lab data-lab-consent shell">
+      <div className="data-lab-consent-card">
+        <header className="data-lab-consent-intro">
+          <p className="eyebrow">DARTS 180 · DATA LAB</p>
+          <h1>
+            Help improve camera scoring.
+            <br />
+            <em>Read this before opening the camera.</em>
+          </h1>
+          <p className="lede">
+            Data Lab is a development data-collection tool, not ordinary gameplay. It is the only
+            place in Darts 180 where a completed board photo and its manual labels can be collected.
+          </p>
+        </header>
+
+        <section className="data-lab-consent-notice" aria-labelledby="data-lab-consent-title">
+          <div>
+            <p className="eyebrow">DEVELOPMENT COLLECTION NOTICE</p>
+            <h2 id="data-lab-consent-title">What happens if you continue</h2>
+          </div>
+          <div className="data-lab-consent-copy">
+            <p>
+              For every photo you choose to complete and review, Darts 180 automatically collects a
+              board-focused JPEG, your manual board/tip labels, and limited setup metadata such as a
+              pseudonymous setup ID, board/camera notes, estimated angle/distance, and lighting.
+            </p>
+            <p>
+              Those records are stored privately for Darts 180 development and camera-scoring model
+              improvement. They are not publicly displayed or made available from this app. They are
+              held for manual privacy, quality, provenance, and training/evaluation review before
+              any possible dataset use.
+            </p>
+            <ul>
+              <li>
+                Frame only the dartboard and darts—no people, faces, voices, audio, or sensitive
+                details.
+              </li>
+              <li>Submit only a photo you own or have clear permission to use for this purpose.</li>
+              <li>Do not use the Lab if you do not agree to this automatic private collection.</li>
+            </ul>
+          </div>
+          <label className="checkbox-label data-lab-consent-check">
+            <input
+              checked={checked}
+              type="checkbox"
+              aria-describedby="data-lab-consent-boundary"
+              onChange={(event) => onChecked(event.target.checked)}
+            />
+            <span>
+              I understand and agree that completed board-only Data Lab records and related labels/
+              metadata will be collected privately for Darts 180 product and model improvement. I
+              will not include people, faces, audio, sensitive material, or content I lack
+              permission to submit.
+            </span>
+          </label>
+          <p className="data-lab-consent-boundary" id="data-lab-consent-boundary">
+            This checkbox records the version and time of this agreement with each completed record.
+            It does not authenticate or identify you, verify image rights, or make an open
+            development intake safe for unreviewed training data.
+          </p>
+          <div className="data-lab-consent-actions">
+            <button className="button ghost" onClick={onExit} type="button">
+              ← BACK TO LIVE SCORING
+            </button>
+            <button
+              className="button primary"
+              disabled={!checked}
+              onClick={onContinue}
+              type="button"
+            >
+              CONTINUE TO DATA LAB
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function CaptureStep({
   cameraActive,
   cameraError,
@@ -682,7 +806,7 @@ function CaptureStep({
         {!collectionReady && (
           <section className="data-lab-collection-readiness" aria-live="polite">
             <div>
-              <p className="eyebrow">PROTECTED PRIVATE COLLECTION</p>
+              <p className="eyebrow">PRIVATE COLLECTION STATUS</p>
               <strong>{privateStorageHeading(vaultAvailability, false)}</strong>
               <p>{privateStorageDescription(vaultAvailability)}</p>
             </div>
@@ -1147,12 +1271,13 @@ function SaveStep({
                 ? '4 board points · 0 dart tips'
                 : `4 board points · ${annotation.darts.length} dart tip${annotation.darts.length === 1 ? '' : 's'}`}
             </span>
-            <span>Consent: self-capture development</span>
+            <span>Consent: development collection · review pending</span>
           </div>
         </div>
         <p className="data-lab-save-summary-note">
-          Your completed acknowledgement began a private save of the JPEG, consent-backed manifest,
-          and annotation sidecar together. This does not train, activate, or claim a camera model.
+          Your completed review begins an automatic private save of the JPEG, consent-backed
+          manifest, and annotation sidecar together. This record is not automatically used for
+          training, does not activate a model, and does not claim camera accuracy.
         </p>
       </section>
 
@@ -1160,7 +1285,7 @@ function SaveStep({
         <article className="data-lab-save-option private">
           <div className="data-lab-save-option-head">
             <div>
-              <p className="eyebrow">PROTECTED PRIVATE COLLECTION</p>
+              <p className="eyebrow">PRIVATE DEVELOPMENT COLLECTION</p>
               <h2>{privateStorageHeading(vaultAvailability, allAssetsSaved)}</h2>
             </div>
             <span className={`data-lab-storage-state ${vaultAvailability}`}>
@@ -1422,9 +1547,9 @@ function privateStorageHeading(
 ): string {
   if (allAssetsSaved) return 'Saved privately.';
   if (availability === 'ready') return 'Saving this reviewed record privately.';
-  if (availability === 'checking') return 'Checking the protected private collection…';
+  if (availability === 'checking') return 'Checking the private development collection…';
   if (availability === 'not-configured') return 'Private collection setup is incomplete.';
-  return 'The protected private collection is unavailable.';
+  return 'The private development collection is unavailable.';
 }
 
 function privateStorageLabel(
@@ -1443,20 +1568,20 @@ function privateStorageDescription(availability: CaptureVaultAvailability): stri
     return 'The JPEG and both JSON records go through the same-origin guarded intake Function into a private Blob store. The app never exposes a Blob credential or public image link.';
   }
   if (availability === 'checking') {
-    return 'Checking whether this protected deployment can reach its private collection. Camera capture stays disabled until that check succeeds.';
+    return 'Checking whether this deployment can reach its private collection. Camera capture stays disabled until that check succeeds.';
   }
   if (availability === 'not-configured') {
-    return 'This deployment is fail-closed until its private Blob store and protected owner-access mode are configured. Camera capture stays disabled; no record can be saved here.';
+    return 'This deployment is fail-closed until its private Blob store and development-consent access mode are configured. Camera capture stays disabled; no record can be saved here.';
   }
-  return 'This page cannot reach the protected private intake Function. Camera capture stays disabled until the deployment and its private collection are available.';
+  return 'This page cannot reach the private intake Function. Camera capture stays disabled until the deployment and its private collection are available.';
 }
 
 function messageForCollectionAvailability(availability: CaptureVaultAvailability): string {
   if (availability === 'checking') {
-    return 'Checking the protected private collection. Wait for it to be ready before using the camera.';
+    return 'Checking the private development collection. Wait for it to be ready before using the camera.';
   }
   if (availability === 'not-configured') {
-    return 'Private collection setup is incomplete on this protected deployment. Camera capture is disabled.';
+    return 'Private collection setup is incomplete on this deployment. Camera capture is disabled.';
   }
-  return 'The protected private collection is unavailable. Camera capture is disabled until it is reachable.';
+  return 'The private development collection is unavailable. Camera capture is disabled until it is reachable.';
 }

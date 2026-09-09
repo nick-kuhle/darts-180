@@ -4,6 +4,7 @@ import {
   DEEPDARTS_CLASS_IDS,
   type DeepDartsDevelopmentModelManifest,
   type DevelopmentDetectionPolicy,
+  type DevelopmentTrainingDataKind,
 } from './types';
 
 /**
@@ -205,9 +206,23 @@ function readProvenance(value: unknown): DeepDartsDevelopmentModelManifest['prov
   if (!isRecord(value)) throw new Error('Development model provenance is required.');
   return {
     trainingDataId: requiredString(value.trainingDataId, 'provenance.trainingDataId'),
+    trainingDataKind: readTrainingDataKind(value.trainingDataKind),
     licenseReviewId: requiredString(value.licenseReviewId, 'provenance.licenseReviewId'),
     trainedAt: nullableIsoTimestamp(value.trainedAt, 'provenance.trainedAt'),
   };
+}
+
+function readTrainingDataKind(value: unknown): DevelopmentTrainingDataKind {
+  if (
+    value !== 'synthetic-only' &&
+    value !== 'real-reviewed' &&
+    value !== 'mixed-synthetic-and-real'
+  ) {
+    throw new Error(
+      'provenance.trainingDataKind must state synthetic-only, real-reviewed, or mixed-synthetic-and-real.',
+    );
+  }
+  return value;
 }
 
 function requiredAssetPath(value: unknown, name: string): string {
