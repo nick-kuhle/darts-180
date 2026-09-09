@@ -73,6 +73,28 @@ The static web Annotation Lab exports a matching nested sidecar for a locally im
 JPEG/manifest pair. Its four-anchor transform is a controlled human-labeling aid, not a substitute
 for independent annotations or adjudication; see `docs/runbooks/local-annotation.md`.
 
+## External YOLO research intake
+
+`darts180_vision.deepdarts_yolo_audit` performs an aggregate-only structural intake audit of a
+**locally extracted** DeepDarts YOLOv8 export. It does not download from Roboflow, use an API key,
+train a model, generate an artifact, or change a browser manifest. It checks the numeric class map,
+paired image/label counts, YOLO row validity, anchor/dart co-occurrence, representative relative
+image/label pairs covering all declared classes, and simple cross-split leakage indicators.
+`--hash-images` additionally detects byte-identical images across split boundaries and can take time
+on a large archive.
+
+```bash
+PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_audit \
+  /secure/path/to/extracted-deepdarts-export \
+  --hash-images \
+  --output /tmp/deepdarts-yolov8-v2-audit.json
+```
+
+This is a research intake tool, not an approval gate. Read
+[`docs/research/2026-09-deepdarts-yolov8-candidate.md`](../docs/research/2026-09-deepdarts-yolov8-candidate.md)
+before using the candidate. Do not add the ZIP, raw images, labels, weights, an API token, or the
+report's local paths to Git.
+
 ## Data boundaries
 
 - `data/raw/` — encrypted, access-controlled source captures; gitignored.

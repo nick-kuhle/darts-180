@@ -3,9 +3,11 @@
 **Snapshot date:** 2026-09-08 (America/Los_Angeles)
 **Product name:** Darts 180 — working name; trademark and commercial legal clearance remain required
 **Repository:** `https://github.com/nick-kuhle/darts-180.git` (private)
-**Verified base:** `origin/main` at `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6` (reported PR #11 merge)
-**Active delivery branch:** `feat/web-first-learned-autoscoring`
-**Delivery PR:** [#12 — draft](https://github.com/nick-kuhle/darts-180/pull/12)
+**Reported product base:** `0e4fbe24b51584f8c8317c3f07cda1550ae9b4d6` (PR #11 merge); this
+workspace currently has no configured `origin`, so retained remote refs are not treated as fresh verification
+**Active product-delivery branch:** `feat/web-first-learned-autoscoring`
+**Delivery PR:** [#12 — ready for review](https://github.com/nick-kuhle/darts-180/pull/12)
+**Active research branch:** `research/deepdarts-yolov8-evaluation` (local, non-production, not deployed)
 **Delivery order:** web app first; native mobile reuse follows only after web evidence
 
 This document separates code that exists, code that is safe to deploy, and claims that evidence does **not**
@@ -23,6 +25,13 @@ The production route has therefore been replaced architecturally with a **web-fi
 The retired color/connected-component scorer, its Camera Play components, and its scoring modules have been
 removed from the web application. Its history remains documented only as a failure record; it must never be
 reintroduced to make live scoring appear to work.
+
+A DeepDarts YOLOv8 v2 public-data lead is now conditionally admitted for isolated research intake. Its official
+source dataset metadata identifies CC BY 4.0, and its likely five-class structure is one dart point plus four
+ordered board-calibration anchors. It remains a data-only candidate: the class mapping needs visual confirmation,
+no weights or browser artifact have been acquired, its four-anchor output cannot be silently substituted for the
+nine-landmark production contract, and no live behavior changes. See
+[`research/2026-09-deepdarts-yolov8-candidate.md`](research/2026-09-deepdarts-yolov8-candidate.md).
 
 ## Delivered in the active branch, not yet merged/deployed
 

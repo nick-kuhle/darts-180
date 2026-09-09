@@ -199,6 +199,17 @@ together. A production package also carries a separately hashed public attestati
 bind the ONNX hash, contract, provenance/evaluation IDs, timestamp, and approval ID; CI and the Worker verify
 that binding before deployment and production inference.
 
+### 4.3.2 External four-anchor research candidate
+
+DeepDarts YOLOv8 v2 is under isolated research intake because its likely five classes encode a dart point
+and four ordered calibration anchors. Four non-collinear ordered anchors can solve a homography, so the method
+is relevant to automatic board geometry. It is not compatible with this fixed production contract: it lacks the
+nine named/redundant landmarks, quality outputs, uncertainty fields, temporal semantics, and evidence package
+required above. Do not pad the missing landmarks, rename numeric labels silently, or route it through the
+public model manifest. The candidate may inform clean-room pretraining, relabeling, or a later explicitly
+reviewed contract only after visual mapping, leakage, browser, and field-evaluation gates pass. See the
+[dated research intake](research/2026-09-deepdarts-yolov8-candidate.md).
+
 ### 4.4 Dart entry-point model
 
 **Do not train only an image → 0..60 score classifier.** It cannot generalize cleanly across board

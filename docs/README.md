@@ -40,6 +40,7 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 ## External research
 
 - [Market landscape, dated 2026-09-06](research/2026-09-market-landscape.md)
+- [DeepDarts YOLOv8 v2 candidate intake, dated 2026-09-08](research/2026-09-deepdarts-yolov8-candidate.md)
 - [OpenAPI v0](openapi.yaml)
 
 ## Documentation rules
