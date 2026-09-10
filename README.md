@@ -192,6 +192,9 @@ Start here, in order:
 9. [`docs/14-browser-camera-field-test.md`](docs/14-browser-camera-field-test.md) and
    [`docs/15-browser-dart-field-remediation.md`](docs/15-browser-dart-field-remediation.md) — the
    future model-release field protocol and the archived browser failure history.
+10. [`docs/21-private-github-actions-model-build.md`](docs/21-private-github-actions-model-build.md) —
+    manual-only private Blob retrieval, aggregate review, and development-model build path for a
+    protected GitHub Actions environment.
 
 Market research is time-stamped and intentionally separate in
 [`docs/research/2026-09-market-landscape.md`](docs/research/2026-09-market-landscape.md); the

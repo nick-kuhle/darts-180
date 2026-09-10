@@ -44,7 +44,8 @@ and tester workflow.
 | Private collection boundary   | Live Scoring has no browser download/export loop for evidence. Data Lab is the only contributor collection path: after consent and completed review, it saves a bounded JPEG/manifest/annotations triplet through the same-origin Function to private Blob.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | A restricted storage operator must still review private records before any local training handoff. The collector is not automatic model training, authentication, or proof of label quality.                                                                                                                                             |
 | Guided own-throw bootstrap    | The visible app separates **Live Scoring** from one consent-gated **Data Lab**. An unchecked entry agreement explains automatic private collection for product/model improvement; its version/time and `consented-development-unreviewed` status join each completed board-only record. After per-still and label review, Data Lab automatically saves the JPEG/manifest/sidecar trio through a credential-free same-origin private Blob Function. The deployed private collector is configured and has received the first real captures. `local_five_point_dataset.py` checks pairs/dimensions/profile/consent, accepts explicit blank-board anchor-only records, rejects duplicates, and creates session-disjoint numeric YOLO splits.                                                                            | The initial roughly 16 captures across 3 sessions meet a workflow dry run, not a broadly useful camera-model dataset. The agreement is not application authentication, identity verification, independent review, or automated training admission; manual Data Lab steps are collection tooling only, never a normal Live Scoring setup. |
 | Data Lab learned label review | After a held still is captured, Data Lab loads only the optional same-origin, hash-verified five-point development manifest and runs one Worker-owned inference pass over that still; the per-still privacy/rights confirmation still gates the review and private save. Its adapter can prefill only declared class-1–4 anchors above the manifest floor and class-0 tips mapped through a complete learned pose. Markers remain editable: anchors/tips can be moved, false tips removed, and missed tips added; the existing review checkbox remains the explicit confirmation before the automatic private save. Stale/cancelled requests dispose the Worker and cannot update a retaken still. The sidecar records final point sources plus a versioned model/SHA/data-kind/backend audit hint when a pass ran. | No package is currently installed, so the code transparently enters the pre-existing manual path rather than deriving anchors/tips from board geometry, image thresholds, or metadata. Browser-side source metadata is an audit clue only; restricted review remains the trust boundary before data admission.                           |
-| Training handoff              | `mixed_five_point_dataset.py` can now re-audit and mix restricted-operator-reviewed real compiled data with procedural synthetic training scenes while preserving real-only validation/test splits and explicit non-automatic-admission provenance. `deepdarts_yolo_train.py` requires that mixed report when creating a `mixed-synthetic-and-real` development manifest, audits the compiled export, trains from a supplied local YOLO checkpoint, exports raw ONNX, hashes it, and writes a development-only manifest.                                                                                                                                                                                                                                                                                            | It has not run because this workspace has no approved retrieval of the private real pairs, no full varied corpus, and no locally licensed base checkpoint. It deliberately cannot read Blob, download data/weights, install a model into the web app, or deploy.                                                                         |
+| Training handoff              | `mixed_five_point_dataset.py` can re-audit and mix restricted-operator-reviewed real compiled data with procedural synthetic training scenes while preserving real-only validation/test splits and explicit non-automatic-admission provenance. `deepdarts_yolo_train.py` requires that mixed report when creating a `mixed-synthetic-and-real` development manifest, audits the compiled export, trains from a supplied local YOLO checkpoint, exports raw ONNX, hashes it, and writes a development-only manifest.                                                                                                                                                                                                                                                                                                | No model has run or been installed. The user must still approve exact private records, validate their labels, provide a lawful hash-locked starting checkpoint, and review aggregate data/phone behavior before any artifact installation.                                                                                               |
+| Private Actions handoff       | `.github/workflows/private-development-model.yml` is manual-only and protected-environment scoped. It uses an exact secret record-ID allow-list and direct private Blob `get()` calls for only the expected JPEG/manifest/annotation triplets—never a public Vercel read route or a store-wide list. Raw data and all intermediate model material remain in a temporary runner directory; an always-run cleanup removes it. The artifact contains only an aggregate review record and, after a separate `train` dispatch with a reviewed checkpoint URL/SHA/licence ID, the development ONNX plus its manifest.                                                                                                                                                                                                     | It has not been dispatched, no Blob secret/record allow-list has been configured, no raw records have left private storage, and no model/checkpoint has been downloaded. This GitHub Actions option does not change the private Data Lab browser surface or authorize deployment.                                                        |
 | CI artifact verification      | `verify:model-artifact` continues to verify production packages and now also hashes a present optional five-point development ONNX/manifest without weakening production checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Hash integrity says nothing about accuracy, provenance approval, real-device compatibility, or production readiness.                                                                                                                                                                                                                     |
 
 ## Current artifact and deployment status
@@ -66,11 +67,11 @@ The revised local change has passed the following as of this snapshot:
 
 ```text
 npm run verify
-# Prettier; 33-document link check; all TypeScript workspace typechecks;
+# Prettier; 34-document link check; all TypeScript workspace typechecks;
 # unavailable-production-model verifier; 49 web + 25 rules + 6 vision-session + 2 API tests;
-# Vite production build
+# 7 private-Blob handoff Node tests + 2 aggregate-summary Python tests; Vite production build
 
-cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v   # 37 tests
+cd ml && PYTHONPATH=src python3 -m unittest discover -s tests -v   # 39 tests
 npm audit --omit=dev --audit-level=high
 # no high/critical findings; npm still reports 10 moderate transitive uuid findings through Expo/xcode
 ```
@@ -82,7 +83,9 @@ appear once. No forced `npm audit fix` is planned without a compatibility review
 proposed a breaking Expo downgrade for the existing moderate advisory chain. Ruff is not installed in this
 validation environment, so its full-tree check was not rerun here; prior whole-tree output has only
 pre-existing unrelated items (`hashlib` unused in `synthetic_five_point_dataset.py` and two `SIM117`
-suggestions in existing test files). No Python implementation changed in this label-review update.
+suggestions in existing test files). This update adds a dependency-free aggregate-only Python review-summary
+writer plus two focused tests; its raw-record retrieval boundary is covered by seven Node tests without a
+Blob credential or network call.
 
 The browser tests cover development-manifest rejection, raw YOLO layout decoding/stretch-coordinate
 restoration/class-aware NMS, the source-compatible rim-anchor orientation arithmetic, real-detector-only
@@ -92,9 +95,12 @@ and the Data Lab private-intake fail-closed exact-mode/store configuration, cons
 provenance, same-origin credential-free request, bounded body, immutable private-write, automatic-review-save
 regression, learned-still lifecycle/cancellation wiring, and sanitized-error boundaries. The Python tests cover development manifest creation, audit gates,
 session ID validation, local JPEG/sidecar-to-YOLO compilation with duplicate/wrong-profile rejection, explicit
-blank-board anchors, corpus-wide dart-label requirements, and the external-only synthetic five-point builder—
-without requiring GPU libraries. Rust/native code is unchanged; Cargo is not available in this environment for
-an additional native check.
+blank-board anchors, corpus-wide dart-label requirements, the external-only synthetic five-point builder,
+and aggregate review-summary refusal of synthetic evaluation contamination. The new Node tests prove that the
+private retrieval accepts only an exact allow-list and the three fixed asset paths, rejects mismatched
+provenance/oversized assets/repository output, and removes a failed partial staging directory—without a Blob
+credential or network call. Rust/native code is unchanged; Cargo is not available in this environment for an
+additional native check.
 
 ## Explicit non-claims
 
@@ -112,14 +118,18 @@ an additional native check.
 
 ## Next gates, in order
 
-1. **Screen and compile the first private bootstrap batch.** A restricted operator retrieves the matching
-   private pairs into a protected local workspace, screens privacy/quality/labels, and compiles the roughly
-   16 captures from three setup sessions. Do not send credentials, raw archives, or media in chat/Git.
-2. **Build and mix the synthetic bootstrap separately.** Generate the external-only procedural five-point
-   dataset, then use `mixed_five_point_dataset.py` to place synthetic scenes in training only while retaining
-   real-only validation/test sessions. Do not call synthetic metrics real-device evidence.
-3. **Train/export and inspect an editable development artifact.** Supply a locally licensed base checkpoint,
-   run the local audit/training recipe, and inspect ONNX input/output names/shapes, SHA-256, model size, and
+1. **Run the protected data-preparation handoff.** Configure the `private-model-build` GitHub Environment
+   with a private Blob credential and an exact owner-approved `record_...` allow-list, then manually dispatch
+   `Private development model build` in `prepare` mode. It compiles the roughly 16 approved captures from
+   three setup sessions and creates only a short-lived aggregate review record. Do not send credentials, raw
+   archives, or media in chat/Git, and do not add a public Blob reader.
+2. **Review and mix without contaminating the real exam.** The workflow deterministically generates the
+   external-only procedural five-point bootstrap and uses `mixed_five_point_dataset.py` to place synthetic
+   scenes in training only while retaining real-only validation/test sessions. Do not call synthetic metrics
+   real-device evidence.
+3. **Train/export and inspect an editable development artifact.** After the aggregate preparation result is
+   accepted, supply a lawfully reviewed, hash-locked direct HTTPS checkpoint with a non-secret licence review
+   ID and manually dispatch `train` mode. Inspect ONNX input/output names/shapes, SHA-256, model size, and
    actual device initialization. The first model may make only editable suggestions.
 4. **Install and phone-test only the development package.** Place the reviewed ONNX + schema-1 manifest through
    the controlled deployment workflow, run full verification, then use the existing Vercel project for an

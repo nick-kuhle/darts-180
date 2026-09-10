@@ -211,6 +211,18 @@ optional Camera Play development package. The resulting app path emits editable 
 [`docs/18-development-five-point-scorer.md`](../docs/18-development-five-point-scorer.md) for the exact
 browser contract and local correction-evidence workflow.
 
+## Protected GitHub Actions option
+
+When the data owner is using the Vercel/GitHub web interfaces rather than a dedicated desktop ML
+machine, `.github/workflows/private-development-model.yml` provides a manual-only alternative. It
+requires a protected GitHub Environment with a private Blob credential and an **exact owner-approved
+record-ID allow-list**; it does not add a browser Blob-reader route or enumerate all contributor records.
+Raw triplets and intermediate data stay in the ephemeral runner workspace, while the seven-day Action
+artifact contains only an aggregate review record and, after a separately approved training run, the
+review-only ONNX plus its manifest. Follow
+[`docs/21-private-github-actions-model-build.md`](../docs/21-private-github-actions-model-build.md)
+for the required secret setup, checkpoint review, cleanup policy, and installation boundary.
+
 ## Data boundaries
 
 - `data/raw/` — encrypted, access-controlled source captures; gitignored.
