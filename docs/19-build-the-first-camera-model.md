@@ -1,6 +1,6 @@
 # Build the first camera model: synthetic bootstrap plus real throws
 
-**Snapshot date:** 2026-09-08 (America/Los_Angeles)<br />
+**Snapshot date:** 2026-09-09 (America/Los_Angeles)<br />
 **Audience:** a Darts 180 owner/tester building the first real development scorer<br />
 **Purpose:** begin with fully labeled simulated scenes, then turn consented, board-only real throws into
 an honestly evaluated local training set—without pretending the current app has a model already
@@ -109,7 +109,17 @@ can honestly provide ground truth.
    is visible, and you own the board-focused capture or have permission to use it for Darts 180
    development. The entry agreement has already written `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its
    acceptance timestamp, and `consented-development-unreviewed` status into this record's metadata.
-5. Tap these four **outer-double-rim junctions** in the displayed order:
+5. After **Take this photo**, Data Lab automatically starts one local pass when a verified five-point
+   development package is installed. Once the per-still checks are complete, choose
+   **Next · Review camera suggestions** to see any genuine detector evidence: CAL 1 D5/D20, CAL 2
+   D17/D3, CAL 3 D8/D11, CAL 4 D13/D6, and visible class-0 dart tips. If the package is absent,
+   invalid, unsupported by the browser, or cannot produce a complete safe learned pose, the Lab
+   plainly keeps the manual path instead of deriving points from image geometry or defaults.
+6. Review every marker. Keep a correct marker as shown, or select its row and tap the exact location
+   to move it; remove a false tip and add any missed visible tip. A **Blank board** intentionally
+   withholds tips. For a **Dart test**, every final tip must be a clearly visible physical entry—not
+   the flight, shaft end, or a guessed hidden point. If you need to label manually, use these four
+   outer-double-rim junctions in the displayed order:
 
    | Model point | Physical point to tap                            |
    | ----------- | ------------------------------------------------ |
@@ -118,11 +128,7 @@ can honestly provide ground truth.
    | CAL 3       | the outer-double rim junction between D8 and D11 |
    | CAL 4       | the outer-double rim junction between D13 and D6 |
 
-6. For a **Dart test**, tap each clearly visible physical dart entry tip—not the flight, shaft end,
-   or a guessed hidden point. The shown deterministic score is a check on your manual point, not a
-   camera prediction. A **Blank board** intentionally stops after the four board points; do not add
-   an invented dart label.
-7. Recheck the label statement and choose **Complete review · Auto-save**. On the configured
+7. Recheck the label statement and choose **Confirm review · Auto-save**. On the configured
    consent-gated development deployment, that completed review automatically saves the matched trio
    to private Blob. The Lab keeps its camera disabled until the exact `development-consent-v1`/
    private-store setup in [`20-private-capture-lab.md`](20-private-capture-lab.md) is ready; it has
@@ -172,7 +178,28 @@ image, and a source/output directory that overlaps the repository. It makes a se
 `train`/`val`/`test` layout, numeric class IDs `0` through `4`, a traceability report, and a structural
 audit. It does not train, download, upload, or deploy anything.
 
-### 5. Train a real local development model
+### 5. Mix approved real throws with procedural simulated scenes
+
+After a restricted operator has screened the private records, compile the real pairs and generate the
+procedural bootstrap outside the repository. Then create a mixed development dataset:
+
+```bash
+cd ml
+PYTHONPATH=src python -m darts180_vision.mixed_five_point_dataset \
+  --real-dataset-root /secure/darts180/compiled-five-point-v1 \
+  --synthetic-dataset-root /secure/darts180/synthetic-five-point-v1 \
+  --output-directory /secure/darts180/mixed-five-point-v1 \
+  --mix-id darts180-mixed-dev-v1 \
+  --real-review-id private-capture-review-v1 \
+  --synthetic-review-id procedural-renderer-review-v1
+```
+
+The mixer uses real + synthetic examples for `train`, but retains **real-only** `val` and `test`
+sessions. It re-audits class mapping, JPEG/label pairing, and cross-source duplicate bytes, records
+source-report hashes and explicit review IDs, and refuses automatic training admission. It neither
+reads Vercel Blob nor makes generated scenes count as real-camera evaluation.
+
+### 6. Train a mixed local development model
 
 A vision engineer then supplies a **locally licensed** YOLOv8-compatible starting checkpoint. This command
 does not download one automatically:
@@ -181,13 +208,13 @@ does not download one automatically:
 cd ml
 pip install -e '.[train,export,quality]'
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
-  /secure/darts180/compiled-five-point-v1 \
+  /secure/darts180/mixed-five-point-v1 \
   --base-model /secure/models/approved-yolov8n.pt \
-  --output-directory /secure/darts180/first-five-point-run \
-  --model-version darts180-local-dev-YYYY-MM-DD \
-  --training-data-id local-five-point-campaign-v1 \
-  --training-data-kind real-reviewed \
-  --license-review-id local-self-capture-review-v1 \
+  --output-directory /secure/darts180/first-mixed-five-point-run \
+  --model-version darts180-mixed-dev-YYYY-MM-DD \
+  --training-data-id darts180-mixed-dev-v1 \
+  --training-data-kind mixed-synthetic-and-real \
+  --license-review-id local-self-capture-and-procedural-review-v1 \
   --hash-images
 ```
 
@@ -198,10 +225,11 @@ suggestions**. It still never becomes production auto-recording from this workfl
 
 ## What happens after the first model works
 
-The model suggests a score; you either choose **Confirm as shown** or correct the DartCard. If you opt in,
-the browser can download a local JPEG/JSON evidence pair after your review. That is a useful way to focus
-later collection on mistakes, but it is not automatically a valid training label. Screen, label, deduplicate,
-and split it properly before it enters the next training run.
+The model suggests a score; you either choose **Confirm as shown** or correct the DartCard. For this
+consent-gated development program, collect any later training examples through **Data Lab** instead of a
+Live Scoring download/export path. A completed Data Lab review automatically saves its matching private
+JPEG/manifest/annotations trio, but it is still not automatically a valid training label. A restricted
+operator must screen, deduplicate, split, and approve it before the next training run.
 
 Keep an untouched set of whole sessions as the exam for each new model. Never move a model's own training
 pictures into that exam just to get a nicer number.

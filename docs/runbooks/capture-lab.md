@@ -7,9 +7,11 @@ entry agreement and final review.
 
 Data Lab is the separate development workspace in the Darts 180 web app. It is **not** production
 auto-scoring, automated consent review, a truth machine, an identity system, or a general-purpose
-upload service. It creates one board-focused JPEG, capture manifest, and five-point manual-label
-sidecar. Once the contributor completes final label review, the matched trio saves automatically
-through the same-origin private Vercel intake. There is no download, collection-key entry, browser
+upload service. It creates one board-focused JPEG, capture manifest, and five-point reviewed-label
+sidecar. When a verified local five-point development package is installed, the Lab can prefill
+editable detector suggestions for the held still; otherwise it deliberately keeps the manual path.
+Once the contributor completes final label review, the matched trio saves automatically through the
+same-origin private Vercel intake. There is no download, collection-key entry, browser
 credential, or manual Save button.
 
 Use it only after the setup in [guided private Data Lab intake](../20-private-capture-lab.md) is
@@ -59,15 +61,21 @@ has screened them.
 6. Inspect the still. If it is unsafe or unusable, select **Discard and retake**. Otherwise complete
    both per-still confirmations: board-only/no sensitive detail, and authority to use the photo for
    Darts 180 development. Both reset for every new photo.
-7. Tap the four shown outer-rim junctions in exact order: CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11,
-   CAL 4 D13/D6. For a dart test, tap only clearly visible physical dart entry tips. A blank-board
-   record intentionally has no dart tip.
-8. Recheck the label statement and select **Complete review · Auto-save**. This starts the automatic
+7. After **Take this photo**, the held still automatically receives one local pass if a verified
+   five-point development model is installed. After the per-still checks, select
+   **Next · Review camera suggestions** to see any prefilled four named anchors plus up to three
+   visible class-0 tips. A missing/invalid model, unsupported browser, or incomplete learned pose says
+   **Manual labeling ready** rather than inventing a point.
+8. Review every marker. Keep a correct marker, or select an anchor/tip row and tap the image to move
+   it. Remove a false tip; add every missed clearly visible physical entry tip. For manual anchors use
+   CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6. A blank-board record intentionally has no
+   dart tip.
+9. Recheck the label statement and select **Confirm review · Auto-save**. This starts the automatic
    private save. Keep the tab open while the Board JPEG, Capture manifest, and Annotation sidecar each
    change to **Saved**.
-9. Stop/revoke camera permission when finished if desired.
+10. Stop/revoke camera permission when finished if desired.
 
-The Lab sends nothing until step 8. It does not replace later privacy screening, provenance review,
+The Lab sends nothing until step 9. It does not replace later privacy screening, provenance review,
 de-identification, duplicate control, annotation QA, or training admission.
 
 ## 3. Failed saves, sensitive captures, and retention
@@ -126,6 +134,7 @@ for faces, prove consent/rights, validate stated measurements, or establish anno
 | Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over the direct HTTPS URL; verify browser/site permission. Do not substitute an insecure upload.                |
 | Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, and take a new still. Do not force a low-quality label.                                                            |
 | Next button is disabled                           | Take and inspect a still, then complete both per-still privacy/authority confirmations only when true.                                              |
-| Complete review is disabled                       | Place all four named rim junctions, add a visible dart tip for a dart test, then complete the label review statement.                               |
+| Manual labeling ready                             | No verified local model result was safe or available. Complete the manual review; do not infer a hidden camera prediction.                          |
+| Confirm review is disabled                        | Finish all four named rim junctions, keep/add a visible dart tip for a dart test, then complete the explicit review statement.                      |
 | A private save fails                              | Keep the tab open, inspect the deployment/connection, then retry only the unsaved file. Inspect private Blob before creating a duplicate record.    |
 | A face or sensitive detail was noticed after save | Delete the complete private record through the restricted storage process; do not train or share it.                                                |

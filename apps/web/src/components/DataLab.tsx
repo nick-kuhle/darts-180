@@ -12,6 +12,19 @@ import {
 } from '../lib/annotationGeometry';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 import {
+  buildDataLabLearnedSuggestions,
+  type DataLabPointSource,
+} from '../lib/developmentVision/dataLabSuggestions';
+import { loadDevelopmentModelManifest } from '../lib/developmentVision/modelManifest';
+import {
+  DevelopmentWebInferenceClient,
+  getDevelopmentBrowserVisionSupport,
+} from '../lib/developmentVision/webInferenceClient';
+import type {
+  DeepDartsDevelopmentModelManifest,
+  DevelopmentInferenceBackend,
+} from '../lib/developmentVision/types';
+import {
   DEVELOPMENT_DATA_LAB_ADMISSION_STATUS,
   DEVELOPMENT_DATA_LAB_CONSENT_VERSION,
   type DevelopmentDataLabConsent,
@@ -70,7 +83,35 @@ interface AnnotatedDart {
   boardPoint: CanonicalPoint;
   zone: DartZone;
   wireMarginMm: number;
+  source: DataLabPointSource;
+  modelConfidence: number | null;
 }
+
+interface LearnedSuggestionProvenance {
+  modelId: DeepDartsDevelopmentModelManifest['modelId'];
+  modelVersion: string;
+  modelSha256: string;
+  trainingDataId: string;
+  trainingDataKind: DeepDartsDevelopmentModelManifest['provenance']['trainingDataKind'];
+  backend: DevelopmentInferenceBackend;
+}
+
+type DataLabSuggestionState =
+  | { kind: 'idle' }
+  | { kind: 'analysing' }
+  | {
+      kind: 'ready';
+      anchorCount: number;
+      dartCount: number;
+      /** Tips are never prefilled unless the four learned anchors form this valid pose. */
+      hasCompletePose: boolean;
+      omittedDartDetectionCount: number;
+      modelVersion: string;
+      trainingDataKind: DeepDartsDevelopmentModelManifest['provenance']['trainingDataKind'];
+      backend: DevelopmentInferenceBackend;
+    }
+  | { kind: 'manual-required'; message: string }
+  | { kind: 'failed'; message: string };
 
 interface AnnotationSidecar {
   schemaVersion: 1;
@@ -84,6 +125,7 @@ interface AnnotationSidecar {
       id: string;
       canonicalPointMm: [number, number];
       imagePointPx: [number, number] | null;
+      labelSource: DataLabPointSource | null;
     }>;
   };
   darts: Array<{
@@ -93,10 +135,18 @@ interface AnnotationSidecar {
     zone: DartZone;
     visibility: 'clear';
     wireMarginMm: number;
+    labelSource: DataLabPointSource;
+    modelConfidence: number | null;
   }>;
+  annotationProvenance: {
+    schemaVersion: 1;
+    reviewMethod: 'manual-review-v1' | 'learned-suggestion-human-review-v1';
+    learnedSuggestion: LearnedSuggestionProvenance | null;
+  };
 }
 
 const EMPTY_ANCHORS: Array<ImagePoint | null> = [null, null, null, null];
+const EMPTY_ANCHOR_SOURCES: Array<DataLabPointSource | null> = [null, null, null, null];
 const INITIAL_ASSET_STATES: Record<CaptureVaultAssetKind, AssetSaveState> = {
   image: 'idle',
   manifest: 'idle',
@@ -108,8 +158,8 @@ const TARGET_JPEG_BYTES = 3_200_000;
 /**
  * The deliberately separate collection route. Normal Live Scoring never enters this component,
  * asks for anchors, or uploads media. Data Lab makes a consented first-model sample in one short
- * sequence: choose a kind, photograph it, tap its known points, then automatically save the reviewed
- * matched record to private development storage. A required entry agreement records consent provenance;
+ * sequence: choose a kind, photograph it, review a genuine local-model suggestion when one is installed
+ * (or label it manually), then automatically save the reviewed matched record to private development storage. A required entry agreement records consent provenance;
  * it is not authentication and every record still needs manual data-operations review before training.
  */
 export function DataLab({ onExit }: { onExit: () => void }) {
@@ -119,6 +169,15 @@ export function DataLab({ onExit }: { onExit: () => void }) {
   const automaticSaveStartedRef = useRef(false);
   const automaticUploadAttemptedRecordRef = useRef<string | null>(null);
   const uploadInFlightRef = useRef(false);
+  const suggestionRequestRef = useRef(0);
+  const suggestionClientRef = useRef<DevelopmentWebInferenceClient | null>(null);
+
+  const cancelLearnedSuggestion = useCallback(() => {
+    suggestionRequestRef.current += 1;
+    const client = suggestionClientRef.current;
+    suggestionClientRef.current = null;
+    if (client !== null) void client.dispose();
+  }, []);
 
   const [entryConsentChecked, setEntryConsentChecked] = useState(false);
   const [dataLabConsent, setDataLabConsent] = useState<DevelopmentDataLabConsent | null>(null);
@@ -130,8 +189,14 @@ export function DataLab({ onExit }: { onExit: () => void }) {
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [anchors, setAnchors] = useState<Array<ImagePoint | null>>(EMPTY_ANCHORS);
+  const [anchorSources, setAnchorSources] =
+    useState<Array<DataLabPointSource | null>>(EMPTY_ANCHOR_SOURCES);
   const [activeAnchorIndex, setActiveAnchorIndex] = useState<number | null>(0);
+  const [activeDartId, setActiveDartId] = useState<string | null>(null);
   const [darts, setDarts] = useState<AnnotatedDart[]>([]);
+  const [suggestionState, setSuggestionState] = useState<DataLabSuggestionState>({ kind: 'idle' });
+  const [learnedSuggestionProvenance, setLearnedSuggestionProvenance] =
+    useState<LearnedSuggestionProvenance | null>(null);
   const [annotationReviewed, setAnnotationReviewed] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [vaultAvailability, setVaultAvailability] = useState<CaptureVaultAvailability>('checking');
@@ -148,6 +213,8 @@ export function DataLab({ onExit }: { onExit: () => void }) {
   }, []);
 
   useEffect(() => releaseCamera, [releaseCamera]);
+
+  useEffect(() => cancelLearnedSuggestion, [cancelLearnedSuggestion]);
 
   useEffect(() => {
     const url = captured?.imageUrl;
@@ -173,12 +240,17 @@ export function DataLab({ onExit }: { onExit: () => void }) {
   }, [dataLabConsent, refreshVaultStatus]);
 
   const resetAnnotation = useCallback(() => {
+    cancelLearnedSuggestion();
     setAnchors([...EMPTY_ANCHORS]);
+    setAnchorSources([...EMPTY_ANCHOR_SOURCES]);
     setActiveAnchorIndex(0);
+    setActiveDartId(null);
     setDarts([]);
+    setSuggestionState({ kind: 'idle' });
+    setLearnedSuggestionProvenance(null);
     setAnnotationReviewed(false);
     setAnnotationError(null);
-  }, []);
+  }, [cancelLearnedSuggestion]);
 
   const startCamera = async () => {
     if (dataLabConsent === null) {
@@ -273,13 +345,14 @@ export function DataLab({ onExit }: { onExit: () => void }) {
         labelsVersion: 'unlabeled-v0',
         split: 'unassigned',
       };
-      setCaptured({
+      const still: CapturedStill = {
         imageBlob: snapshot.blob,
         imageUrl: URL.createObjectURL(snapshot.blob),
         width: snapshot.width,
         height: snapshot.height,
         manifest,
-      });
+      };
+      setCaptured(still);
       automaticSaveStartedRef.current = false;
       automaticUploadAttemptedRecordRef.current = null;
       setPrivacyConfirmed(false);
@@ -290,14 +363,138 @@ export function DataLab({ onExit }: { onExit: () => void }) {
       resetAnnotation();
       releaseCamera();
       setCameraError(null);
+      // The pass begins for every newly captured still and remains entirely local. It does not
+      // advance past the per-still privacy/rights check or save anything without review.
+      void runLearnedSuggestions(still);
     } catch (error) {
       setCameraError(messageForSnapshotError(error));
     }
   };
 
+  const runLearnedSuggestions = useCallback(
+    async (still: CapturedStill | null = captured) => {
+      if (still === null) return;
+
+      cancelLearnedSuggestion();
+      const requestId = suggestionRequestRef.current + 1;
+      suggestionRequestRef.current = requestId;
+      const isCurrentRequest = () => suggestionRequestRef.current === requestId;
+      // A deliberate retry replaces the point set, rather than allowing an asynchronous inference
+      // result to silently merge with a person's edits.
+      setAnchors([...EMPTY_ANCHORS]);
+      setAnchorSources([...EMPTY_ANCHOR_SOURCES]);
+      setActiveAnchorIndex(0);
+      setActiveDartId(null);
+      setDarts([]);
+      setAnnotationReviewed(false);
+      setAnnotationError(null);
+      setLearnedSuggestionProvenance(null);
+      setSuggestionState({ kind: 'analysing' });
+
+      const continueManually = (message: string) => {
+        if (!isCurrentRequest()) return;
+        setSuggestionState({ kind: 'manual-required', message });
+      };
+
+      const support = getDevelopmentBrowserVisionSupport();
+      if (!support.supported) {
+        continueManually(
+          `This browser cannot run the local learned suggestion pass. ${support.reasons.join(' ')}`,
+        );
+        return;
+      }
+
+      const loaded = await loadDevelopmentModelManifest();
+      if (!isCurrentRequest()) return;
+      if (loaded.manifest === null) {
+        continueManually(
+          loaded.message ??
+            'No verified local development model is installed on this deployment yet. Add the labels manually for this bootstrap record.',
+        );
+        return;
+      }
+
+      const client = new DevelopmentWebInferenceClient();
+      suggestionClientRef.current = client;
+      try {
+        const backend = await client.initialize(loaded.manifest);
+        if (!isCurrentRequest()) return;
+        const bitmap = await createImageBitmap(still.imageBlob);
+        if (!isCurrentRequest()) {
+          bitmap.close();
+          return;
+        }
+        const inference = await client.infer(bitmap, still.width, still.height, performance.now());
+        if (!isCurrentRequest()) return;
+
+        const suggestions = buildDataLabLearnedSuggestions(inference, loaded.manifest);
+        const suggestedAnchors = suggestions.anchors.map(
+          (suggestion) => suggestion?.imagePoint ?? null,
+        );
+        const suggestedAnchorSources = suggestions.anchors.map((suggestion) =>
+          suggestion === null ? null : 'learned-suggestion',
+        );
+        // A blank-board record must stay a blank-board record even if the detector has a false dart
+        // positive. Dart candidates are never converted into labels for that capture intent.
+        const suggestedDarts =
+          still.manifest.captureIntent === 'empty-board' ? [] : suggestions.darts;
+        const omittedDartDetectionCount =
+          suggestions.omittedDartDetectionCount +
+          (still.manifest.captureIntent === 'empty-board' ? suggestions.darts.length : 0);
+
+        const firstMissingAnchor = suggestedAnchors.findIndex((point) => point === null);
+        setAnchors(suggestedAnchors);
+        setAnchorSources(suggestedAnchorSources);
+        setActiveAnchorIndex(firstMissingAnchor === -1 ? null : firstMissingAnchor);
+        setActiveDartId(null);
+        setDarts(
+          suggestedDarts.map((dart) => ({
+            id: `dart_${newOpaqueHex()}`,
+            imagePoint: dart.imagePoint,
+            boardPoint: dart.boardPoint,
+            zone: dart.zone,
+            wireMarginMm: dart.wireMarginMm,
+            source: 'learned-suggestion',
+            modelConfidence: dart.confidence,
+          })),
+        );
+        setLearnedSuggestionProvenance({
+          modelId: loaded.manifest.modelId,
+          modelVersion: loaded.manifest.modelVersion,
+          modelSha256: loaded.manifest.sha256,
+          trainingDataId: loaded.manifest.provenance.trainingDataId,
+          trainingDataKind: loaded.manifest.provenance.trainingDataKind,
+          backend,
+        });
+        setSuggestionState({
+          kind: 'ready',
+          anchorCount: suggestedAnchors.filter((point) => point !== null).length,
+          dartCount: suggestedDarts.length,
+          hasCompletePose: suggestions.pose !== null,
+          omittedDartDetectionCount,
+          modelVersion: loaded.manifest.modelVersion,
+          trainingDataKind: loaded.manifest.provenance.trainingDataKind,
+          backend,
+        });
+      } catch (error) {
+        if (isCurrentRequest()) {
+          setSuggestionState({ kind: 'failed', message: messageForLearnedSuggestionError(error) });
+        }
+      } finally {
+        if (suggestionClientRef.current === client) suggestionClientRef.current = null;
+        await client.dispose();
+      }
+    },
+    [cancelLearnedSuggestion, captured],
+  );
+
   const continueToLabels = () => {
     if (captured === null || !privacyConfirmed || !rightsConfirmed) return;
-    resetAnnotation();
+    if (suggestionState.kind === 'idle') {
+      void runLearnedSuggestions(captured);
+      return;
+    }
+    if (suggestionState.kind === 'analysing') return;
     setStep('label');
   };
 
@@ -350,15 +547,26 @@ export function DataLab({ onExit }: { onExit: () => void }) {
 
     if (activeAnchorIndex !== null) {
       const selected = activeAnchorIndex;
-      setAnchors((current) => {
-        const next = current.map((anchor, index) => (index === selected ? point : anchor));
-        const nextEmpty = next.findIndex((anchor) => anchor === null);
-        setActiveAnchorIndex(nextEmpty === -1 ? null : nextEmpty);
-        return next;
+      const nextAnchors = anchors.map((anchor, index) => (index === selected ? point : anchor));
+      const nextAnchorSources = anchorSources.map((source, index) => {
+        if (index !== selected) return source;
+        return anchors[index] === null ? 'human-added' : 'human-adjusted';
       });
-      setDarts([]);
+      const nextHomography = solveHomographyForAnchors(nextAnchors);
+      const nextEmpty = nextAnchors.findIndex((anchor) => anchor === null);
+      setAnchors(nextAnchors);
+      setAnchorSources(nextAnchorSources);
+      setActiveAnchorIndex(nextEmpty === -1 ? null : nextEmpty);
+      setActiveDartId(null);
+      // Existing tip pixels remain useful after an anchor correction. Recalculate their deterministic
+      // board locations instead of asking the collector to recreate every label from scratch.
+      setDarts((current) => remapDartsAfterAnchorChange(current, nextHomography));
       setAnnotationReviewed(false);
-      setAnnotationError(null);
+      setAnnotationError(
+        nextHomography === null && darts.length > 0
+          ? 'Those board points no longer form a safe map, so the dart labels were removed. Reposition the board points and add visible tips again.'
+          : null,
+      );
       return;
     }
 
@@ -375,16 +583,39 @@ export function DataLab({ onExit }: { onExit: () => void }) {
       setActiveAnchorIndex(0);
       return;
     }
-    if (darts.length >= 3) {
-      setAnnotationError(
-        'Label at most three visible darts in one visit. Remove one or take another still.',
-      );
-      return;
-    }
     const boardPoint = mapImagePointToBoard(point, homography);
     if (boardPoint === null) {
       setAnnotationError(
         'That tip could not be mapped safely. Recheck the four board guide points.',
+      );
+      return;
+    }
+
+    if (activeDartId !== null) {
+      setDarts((current) =>
+        current.map((dart) =>
+          dart.id === activeDartId
+            ? {
+                ...dart,
+                imagePoint: point,
+                boardPoint,
+                zone: decodeBoardPoint(boardPoint),
+                wireMarginMm: nearestWireMarginMm(boardPoint),
+                source: 'human-adjusted',
+                modelConfidence: null,
+              }
+            : dart,
+        ),
+      );
+      setActiveDartId(null);
+      setAnnotationReviewed(false);
+      setAnnotationError(null);
+      return;
+    }
+
+    if (darts.length >= 3) {
+      setAnnotationError(
+        'Label at most three visible darts in one visit. Remove one or take another still.',
       );
       return;
     }
@@ -397,6 +628,8 @@ export function DataLab({ onExit }: { onExit: () => void }) {
         boardPoint,
         zone,
         wireMarginMm: nearestWireMarginMm(boardPoint),
+        source: 'human-added',
+        modelConfidence: null,
       },
     ]);
     setAnnotationReviewed(false);
@@ -405,8 +638,15 @@ export function DataLab({ onExit }: { onExit: () => void }) {
 
   const annotation = useMemo<AnnotationSidecar | null>(() => {
     if (captured === null || homography === null) return null;
-    return createAnnotationSidecar(captured, anchors, homography, darts);
-  }, [anchors, captured, darts, homography]);
+    return createAnnotationSidecar(
+      captured,
+      anchors,
+      anchorSources,
+      homography,
+      darts,
+      learnedSuggestionProvenance,
+    );
+  }, [anchorSources, anchors, captured, darts, homography, learnedSuggestionProvenance]);
 
   const uploadPrivateRecord = useCallback(async () => {
     if (
@@ -563,8 +803,8 @@ export function DataLab({ onExit }: { onExit: () => void }) {
         <li className={step === 'label' ? 'active' : step === 'save' ? 'done' : ''}>
           <span>2</span>
           <div>
-            <b>TAP KNOWN POINTS</b>
-            <small>Four board points, then tips</small>
+            <b>REVIEW POINTS</b>
+            <small>Camera suggestions or manual points</small>
           </div>
         </li>
         <li className={step === 'save' ? 'active' : ''}>
@@ -585,6 +825,7 @@ export function DataLab({ onExit }: { onExit: () => void }) {
           metadata={metadata}
           privacyConfirmed={privacyConfirmed}
           rightsConfirmed={rightsConfirmed}
+          suggestionState={suggestionState}
           videoRef={videoRef}
           onStartCamera={() => void startCamera()}
           onStopCamera={releaseCamera}
@@ -606,26 +847,60 @@ export function DataLab({ onExit }: { onExit: () => void }) {
           captured={captured}
           imageRef={imageRef}
           anchors={anchors}
+          anchorSources={anchorSources}
           activeAnchorIndex={activeAnchorIndex}
           activeAnchorInstruction={activeAnchor?.instruction ?? null}
+          activeDartId={activeDartId}
           darts={darts}
           homography={homography}
+          suggestionState={suggestionState}
           annotationReviewed={annotationReviewed}
           annotationError={annotationError}
           onAddImagePoint={addImagePoint}
           onSelectAnchor={(index) => {
             setActiveAnchorIndex(index);
-            setDarts([]);
+            setActiveDartId(null);
             setAnnotationReviewed(false);
             setAnnotationError(null);
+          }}
+          onSelectDart={(id) => {
+            setActiveAnchorIndex(null);
+            setActiveDartId(id);
+            setAnnotationReviewed(false);
+            setAnnotationError(null);
+          }}
+          onClearAnchor={(index) => {
+            const nextAnchors = anchors.map((anchor, anchorIndex) =>
+              anchorIndex === index ? null : anchor,
+            );
+            setAnchors(nextAnchors);
+            setAnchorSources((current) =>
+              current.map((source, anchorIndex) => (anchorIndex === index ? null : source)),
+            );
+            setActiveAnchorIndex(index);
+            setActiveDartId(null);
+            setDarts([]);
+            setAnnotationReviewed(false);
+            setAnnotationError(
+              darts.length > 0
+                ? 'Removing a board point also removed mapped dart labels. Re-add visible tips after all four anchors are set.'
+                : null,
+            );
           }}
           onReset={resetAnnotation}
           onRemoveDart={(id) => {
             setDarts((current) => current.filter((dart) => dart.id !== id));
+            setActiveDartId((current) => (current === id ? null : current));
             setAnnotationReviewed(false);
           }}
           onReviewed={setAnnotationReviewed}
-          onBack={() => setStep('capture')}
+          onRunLearnedSuggestions={() => void runLearnedSuggestions()}
+          onBack={() => {
+            // Preserve this still's completed suggestions and any edits if the collector only wants
+            // to re-read the per-still checklist. A new capture, reset, or explicit failed-run retry
+            // is the only path that replaces labels.
+            setStep('capture');
+          }}
           onContinue={enterSaveStep}
           canContinue={canFinishLabels}
         />
@@ -673,7 +948,8 @@ function DataLabConsentGate({
           </h1>
           <p className="lede">
             Data Lab is a development data-collection tool, not ordinary gameplay. It is the only
-            place in Darts 180 where a completed board photo and its manual labels can be collected.
+            place in Darts 180 where a completed board photo and its reviewed labels can be
+            collected.
           </p>
         </header>
 
@@ -685,8 +961,9 @@ function DataLabConsentGate({
           <div className="data-lab-consent-copy">
             <p>
               For every photo you choose to complete and review, Darts 180 automatically collects a
-              board-focused JPEG, your manual board/tip labels, and limited setup metadata such as a
-              pseudonymous setup ID, board/camera notes, estimated angle/distance, and lighting.
+              board-focused JPEG, your reviewed board/tip labels (including any corrected
+              local-model suggestions), and limited setup metadata such as a pseudonymous setup ID,
+              board/camera notes, estimated angle/distance, and lighting.
             </p>
             <p>
               Those records are stored privately for Darts 180 development and camera-scoring model
@@ -749,6 +1026,7 @@ function CaptureStep({
   metadata,
   privacyConfirmed,
   rightsConfirmed,
+  suggestionState,
   videoRef,
   onStartCamera,
   onStopCamera,
@@ -768,6 +1046,7 @@ function CaptureStep({
   metadata: CaptureMetadata;
   privacyConfirmed: boolean;
   rightsConfirmed: boolean;
+  suggestionState: DataLabSuggestionState;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onStartCamera: () => void;
   onStopCamera: () => void;
@@ -886,6 +1165,7 @@ function CaptureStep({
               <label className="checkbox-label">
                 <input
                   checked={privacyConfirmed}
+                  disabled={suggestionState.kind === 'analysing'}
                   type="checkbox"
                   onChange={(event) => onPrivacyConfirmed(event.target.checked)}
                 />
@@ -896,6 +1176,7 @@ function CaptureStep({
               <label className="checkbox-label">
                 <input
                   checked={rightsConfirmed}
+                  disabled={suggestionState.kind === 'analysing'}
                   type="checkbox"
                   onChange={(event) => onRightsConfirmed(event.target.checked)}
                 />
@@ -904,14 +1185,35 @@ function CaptureStep({
                   development.
                 </span>
               </label>
+              {suggestionState.kind === 'analysing' && (
+                <p className="data-lab-suggestion-pending" role="status">
+                  Checking this still with the verified local development model. The photo remains
+                  in this tab; no record is saved until you review it.
+                </p>
+              )}
+              {suggestionState.kind === 'ready' && (
+                <p className="data-lab-suggestion-pending ready" role="status">
+                  Local-model suggestions are ready to review. Nothing has been saved yet.
+                </p>
+              )}
+              {(suggestionState.kind === 'manual-required' ||
+                suggestionState.kind === 'failed') && (
+                <p className="data-lab-suggestion-pending unavailable" role="status">
+                  No learned suggestion was applied. {suggestionState.message}
+                </p>
+              )}
               <div className="data-lab-captured-actions">
                 <button
                   className="button primary"
-                  disabled={!privacyConfirmed || !rightsConfirmed}
+                  disabled={
+                    !privacyConfirmed || !rightsConfirmed || suggestionState.kind === 'analysing'
+                  }
                   onClick={onContinue}
                   type="button"
                 >
-                  NEXT · TAP THE BOARD POINTS
+                  {suggestionState.kind === 'analysing'
+                    ? 'READING LOCAL MODEL…'
+                    : 'NEXT · REVIEW CAMERA SUGGESTIONS'}
                 </button>
                 <button className="text-button" onClick={onRetake} type="button">
                   DISCARD AND RETAKE
@@ -1035,17 +1337,23 @@ function LabelStep({
   captured,
   imageRef,
   anchors,
+  anchorSources,
   activeAnchorIndex,
   activeAnchorInstruction,
+  activeDartId,
   darts,
   homography,
+  suggestionState,
   annotationReviewed,
   annotationError,
   onAddImagePoint,
   onSelectAnchor,
+  onSelectDart,
+  onClearAnchor,
   onReset,
   onRemoveDart,
   onReviewed,
+  onRunLearnedSuggestions,
   onBack,
   onContinue,
   canContinue,
@@ -1053,42 +1361,54 @@ function LabelStep({
   captured: CapturedStill;
   imageRef: React.RefObject<HTMLImageElement | null>;
   anchors: Array<ImagePoint | null>;
+  anchorSources: Array<DataLabPointSource | null>;
   activeAnchorIndex: number | null;
   activeAnchorInstruction: string | null;
+  activeDartId: string | null;
   darts: readonly AnnotatedDart[];
   homography: Homography | null;
+  suggestionState: DataLabSuggestionState;
   annotationReviewed: boolean;
   annotationError: string | null;
   onAddImagePoint: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onSelectAnchor: (index: number) => void;
+  onSelectDart: (id: string) => void;
+  onClearAnchor: (index: number) => void;
   onReset: () => void;
   onRemoveDart: (id: string) => void;
   onReviewed: (checked: boolean) => void;
+  onRunLearnedSuggestions: () => void;
   onBack: () => void;
   onContinue: () => void;
   canContinue: boolean;
 }) {
   const isBlankBoard = captured.manifest.captureIntent === 'empty-board';
+  const isAnalysing = suggestionState.kind === 'analysing';
+  const activeDartIndex = darts.findIndex((dart) => dart.id === activeDartId);
   const nextInstruction =
     activeAnchorInstruction ??
-    (isBlankBoard
-      ? 'All four board points are set. This blank-board example needs no dart tip.'
-      : 'All four board points are set. Tap each clearly visible physical dart tip.');
+    (activeDartIndex >= 0
+      ? `Tap the exact physical tip for dart ${activeDartIndex + 1}.`
+      : isBlankBoard
+        ? 'Review the four board points. This blank-board example needs no dart tip.'
+        : 'Review every visible dart tip, then add any the camera missed.');
   return (
     <div className="data-lab-label-layout">
       <section className="data-lab-label-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">STEP 2 · TAP THE KNOWN POINTS</p>
-            <h2>{nextInstruction}</h2>
+            <p className="eyebrow">STEP 2 · REVIEW THE POINTS</p>
+            <h2>{isAnalysing ? 'Reading the still with the local model…' : nextInstruction}</h2>
           </div>
           <span className={`camera-state ${homography !== null ? 'on' : ''}`}>
             {homography !== null ? 'BOARD SET' : `${anchors.filter(Boolean).length}/4 SET`}
           </span>
         </div>
+        <SuggestionNotice state={suggestionState} isBlankBoard={isBlankBoard} />
         <p className="data-lab-label-intro">
-          These are human labels for the first model—not camera guesses. Tap carefully; if you are
-          unsure, discard this example instead of inventing a point.
+          Keep correct camera suggestions or select a point row and tap the image to move it. Add
+          missed tips, remove false tips, and only confirm points you can see clearly. The model is
+          never treated as a final label on its own.
         </p>
         {annotationError !== null && (
           <p className="annotation-error" role="alert">
@@ -1097,19 +1417,22 @@ function LabelStep({
         )}
         <button
           className="annotation-image-surface data-lab-image-surface"
+          disabled={isAnalysing}
           type="button"
           onClick={onAddImagePoint}
           aria-label={nextInstruction}
         >
           <img
             ref={imageRef}
-            alt="Board still being labeled for the Darts 180 Data Lab"
+            alt="Board still being reviewed for the Darts 180 Data Lab"
             src={captured.imageUrl}
           />
           {anchors.map((point, index) =>
             point === null ? null : (
               <span
-                className={`annotation-marker anchor-marker anchor-${index}`}
+                className={`annotation-marker anchor-marker anchor-${index} ${
+                  anchorSources[index] === 'learned-suggestion' ? 'learned-suggestion' : ''
+                } ${activeAnchorIndex === index ? 'active' : ''}`}
                 key={DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS[index]?.id ?? index}
                 style={{
                   left: `${(point.x / captured.width) * 100}%`,
@@ -1122,7 +1445,9 @@ function LabelStep({
           )}
           {darts.map((dart, index) => (
             <span
-              className="annotation-marker dart-marker"
+              className={`annotation-marker dart-marker ${
+                dart.source === 'learned-suggestion' ? 'learned-suggestion' : ''
+              } ${activeDartId === dart.id ? 'active' : ''}`}
               key={dart.id}
               style={{
                 left: `${(dart.imagePoint.x / captured.width) * 100}%`,
@@ -1138,10 +1463,15 @@ function LabelStep({
           are outer-double rim junctions, not double-bed centres.
         </p>
         <div className="data-lab-label-bottom-actions">
-          <button className="text-button" onClick={onBack} type="button">
+          <button className="text-button" disabled={isAnalysing} onClick={onBack} type="button">
             ← BACK TO PHOTO
           </button>
-          <button className="button ghost compact" onClick={onReset} type="button">
+          <button
+            className="button ghost compact"
+            disabled={isAnalysing}
+            onClick={onReset}
+            type="button"
+          >
             RESET POINTS
           </button>
         </div>
@@ -1150,7 +1480,11 @@ function LabelStep({
       <aside className="data-lab-label-controls">
         <div>
           <p className="eyebrow">FOUR BOARD POINTS</p>
-          <h2>Tap each named junction.</h2>
+          <h2>
+            {suggestionState.kind === 'ready'
+              ? 'Review the suggested junctions.'
+              : 'Tap each named junction.'}
+          </h2>
         </div>
         <div className="anchor-list">
           {DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.map((anchor, index) => {
@@ -1158,41 +1492,83 @@ function LabelStep({
             return (
               <button
                 className={`anchor-row ${activeAnchorIndex === index ? 'active' : ''} ${set ? 'set' : ''}`}
+                disabled={isAnalysing}
                 key={anchor.id}
                 type="button"
                 onClick={() => onSelectAnchor(index)}
               >
                 <span>{index + 1}</span>
                 <strong>{anchor.title}</strong>
-                <small>{set ? 'Placed · tap to move' : anchor.instruction}</small>
+                <small>
+                  {anchorSourceDescription(anchorSources[index] ?? null, anchor.instruction)}
+                </small>
               </button>
             );
           })}
         </div>
+        {activeAnchorIndex !== null && anchors[activeAnchorIndex] !== null && (
+          <button
+            className="text-button data-lab-clear-anchor"
+            disabled={isAnalysing}
+            onClick={() => onClearAnchor(activeAnchorIndex)}
+            type="button"
+          >
+            CLEAR SELECTED BOARD POINT
+          </button>
+        )}
+        {suggestionState.kind === 'failed' && (
+          <section className="data-lab-suggestion-retry">
+            <p>
+              Retry only after a local model/device problem is corrected. A retry replaces the
+              current point set with a fresh learned result.
+            </p>
+            <button className="text-button" onClick={onRunLearnedSuggestions} type="button">
+              RETRY LOCAL MODEL · REPLACE POINTS
+            </button>
+          </section>
+        )}
         <section className="data-lab-label-result">
           <p className="eyebrow">{isBlankBoard ? 'BLANK BOARD LABEL' : 'DART TEST LABELS'}</p>
           {isBlankBoard ? (
             <p>
               {homography === null
-                ? 'Set all four board points to finish this blank-board example.'
+                ? 'Set or correct all four board points to finish this blank-board example.'
                 : 'Four board points are ready. Do not add a made-up dart tip.'}
             </p>
           ) : darts.length === 0 ? (
-            <p>Set the four board points, then tap every clearly visible physical dart tip.</p>
+            <p>
+              {homography === null
+                ? 'Set the four board points before adding a visible tip.'
+                : 'Review the image, then tap every clearly visible physical dart tip the camera missed.'}
+            </p>
           ) : (
             <div className="data-lab-dart-list">
               {darts.map((dart, index) => (
-                <article key={dart.id}>
+                <article className={activeDartId === dart.id ? 'active' : ''} key={dart.id}>
                   <span>DART {index + 1}</span>
                   <strong>{formatZone(dart.zone)}</strong>
-                  <small>{dart.wireMarginMm.toFixed(2)} mm from nearest wire</small>
-                  <button
-                    className="text-button danger-text"
-                    onClick={() => onRemoveDart(dart.id)}
-                    type="button"
-                  >
-                    REMOVE
-                  </button>
+                  <small>
+                    {dartSourceDescription(dart)} · {dart.wireMarginMm.toFixed(2)} mm from nearest
+                    wire
+                  </small>
+                  <div className="data-lab-dart-actions">
+                    <button
+                      className="text-button"
+                      disabled={isAnalysing}
+                      onClick={() => onSelectDart(dart.id)}
+                      type="button"
+                    >
+                      {activeDartId === dart.id ? 'TAP PHOTO TO MOVE' : 'MOVE'}
+                    </button>
+                    <button
+                      className="text-button danger-text"
+                      disabled={isAnalysing}
+                      onClick={() => onRemoveDart(dart.id)}
+                      type="button"
+                    >
+                      REMOVE
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -1201,26 +1577,111 @@ function LabelStep({
         <label className="checkbox-label data-lab-label-check">
           <input
             checked={annotationReviewed}
-            disabled={homography === null || (!isBlankBoard && darts.length === 0)}
+            disabled={isAnalysing || homography === null || (!isBlankBoard && darts.length === 0)}
             type="checkbox"
             onChange={(event) => onReviewed(event.target.checked)}
           />
           <span>
-            I rechecked this exact photo. Every selected point is visible and deliberate; uncertain
-            tips are excluded.
+            I reviewed this exact photo and its proposed points. Every selected point is visible and
+            deliberate; uncertain tips are excluded.
           </span>
         </label>
         <button
           className="button primary"
-          disabled={!canContinue}
+          disabled={isAnalysing || !canContinue}
           onClick={onContinue}
           type="button"
         >
-          COMPLETE REVIEW · AUTO-SAVE
+          CONFIRM REVIEW · AUTO-SAVE
         </button>
       </aside>
     </div>
   );
+}
+
+function SuggestionNotice({
+  state,
+  isBlankBoard,
+}: {
+  state: DataLabSuggestionState;
+  isBlankBoard: boolean;
+}) {
+  if (state.kind === 'analysing') {
+    return (
+      <section className="data-lab-suggestion-notice pending" aria-live="polite">
+        <p className="eyebrow">LOCAL MODEL CHECK</p>
+        <strong>Reading this captured still…</strong>
+        <p>
+          The JPEG stays on this device while the verified local development model prepares editable
+          suggestions.
+        </p>
+      </section>
+    );
+  }
+  if (state.kind === 'ready') {
+    const dartDescription = isBlankBoard
+      ? 'Dart candidates were intentionally withheld for this blank-board record.'
+      : !state.hasCompletePose
+        ? 'Dart-tip suggestions were withheld because the learned anchors did not form a safe complete board pose.'
+        : `${state.dartCount} visible dart tip${state.dartCount === 1 ? '' : 's'} suggested.`;
+    return (
+      <section className="data-lab-suggestion-notice ready" aria-live="polite">
+        <p className="eyebrow">EDITABLE LOCAL-MODEL SUGGESTIONS</p>
+        <strong>
+          {state.anchorCount}/4 board points and {dartDescription}
+        </strong>
+        <p>
+          {state.modelVersion} ran locally with {state.backend.toUpperCase()}.{' '}
+          {dataLabTrainingProvenanceNotice(state.trainingDataKind)}{' '}
+          {state.hasCompletePose
+            ? 'Keep correct markers, move or remove wrong ones, and add anything it missed before confirming.'
+            : 'Set or correct the remaining board points manually before adding any visible tips.'}
+          {state.omittedDartDetectionCount > 0
+            ? ` ${state.omittedDartDetectionCount} model dart candidate${
+                state.omittedDartDetectionCount === 1 ? ' was' : 's were'
+              } not turned into a label because the pose or record type was not safe.`
+            : ''}
+        </p>
+      </section>
+    );
+  }
+  if (state.kind === 'manual-required' || state.kind === 'failed') {
+    return (
+      <section className="data-lab-suggestion-notice unavailable" aria-live="polite">
+        <p className="eyebrow">MANUAL LABELING READY</p>
+        <strong>No learned suggestion was applied.</strong>
+        <p>{state.message}</p>
+      </section>
+    );
+  }
+  return null;
+}
+
+function dataLabTrainingProvenanceNotice(
+  trainingDataKind: DeepDartsDevelopmentModelManifest['provenance']['trainingDataKind'],
+): string {
+  if (trainingDataKind === 'synthetic-only') {
+    return 'It is a synthetic bootstrap model, not a real-world accuracy claim.';
+  }
+  if (trainingDataKind === 'mixed-synthetic-and-real') {
+    return 'It was trained with reviewed real and synthetic scenes, so every point still needs your review.';
+  }
+  return 'It was trained on reviewed development data, not released scoring evidence.';
+}
+
+function anchorSourceDescription(source: DataLabPointSource | null, fallback: string): string {
+  if (source === 'learned-suggestion') return 'Suggested locally · tap row, then image, to move';
+  if (source === 'human-adjusted') return 'Adjusted by you · tap to move again';
+  if (source === 'human-added') return 'Placed by you · tap to move';
+  return fallback;
+}
+
+function dartSourceDescription(dart: AnnotatedDart): string {
+  if (dart.source === 'learned-suggestion' && dart.modelConfidence !== null) {
+    return `Local model suggestion ${Math.round(dart.modelConfidence * 100)}%`;
+  }
+  if (dart.source === 'human-adjusted') return 'Adjusted by you';
+  return 'Added by you';
 }
 
 function SaveStep({
@@ -1381,8 +1842,10 @@ function initialMetadata(): CaptureMetadata {
 function createAnnotationSidecar(
   captured: CapturedStill,
   anchors: readonly (ImagePoint | null)[],
+  anchorSources: readonly (DataLabPointSource | null)[],
   homography: Homography,
   darts: readonly AnnotatedDart[],
+  learnedSuggestion: LearnedSuggestionProvenance | null,
 ): AnnotationSidecar {
   return {
     schemaVersion: 1,
@@ -1402,18 +1865,55 @@ function createAnnotationSidecar(
           id: anchor.id,
           canonicalPointMm: [anchor.canonical.xMm, anchor.canonical.yMm],
           imagePointPx: point === null ? null : [round(point.x, 2), round(point.y, 2)],
+          labelSource: anchorSources[index] ?? null,
         };
       }),
     },
     darts: darts.map((dart, index) => ({
-      dartTrackId: `manual-${captured.manifest.captureId}-dart-${index + 1}`,
+      dartTrackId: `reviewed-${captured.manifest.captureId}-dart-${index + 1}`,
       tipPixel: [round(dart.imagePoint.x, 2), round(dart.imagePoint.y, 2)],
       entryPointBoardMm: [round(dart.boardPoint.xMm, 3), round(dart.boardPoint.yMm, 3)],
       zone: dart.zone,
       visibility: 'clear',
       wireMarginMm: round(dart.wireMarginMm, 3),
+      labelSource: dart.source,
+      modelConfidence: dart.modelConfidence,
     })),
+    annotationProvenance: {
+      schemaVersion: 1,
+      reviewMethod:
+        learnedSuggestion === null ? 'manual-review-v1' : 'learned-suggestion-human-review-v1',
+      learnedSuggestion,
+    },
   };
+}
+
+function solveHomographyForAnchors(anchors: readonly (ImagePoint | null)[]): Homography | null {
+  const imagePoints = anchors.filter((point): point is ImagePoint => point !== null);
+  if (imagePoints.length !== DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.length) return null;
+  return solveImageToBoardHomography(
+    imagePoints,
+    DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.map((anchor) => anchor.canonical),
+  );
+}
+
+function remapDartsAfterAnchorChange(
+  darts: readonly AnnotatedDart[],
+  homography: Homography | null,
+): AnnotatedDart[] {
+  if (homography === null) return [];
+  return darts.flatMap((dart) => {
+    const boardPoint = mapImagePointToBoard(dart.imagePoint, homography);
+    if (boardPoint === null) return [];
+    return [
+      {
+        ...dart,
+        boardPoint,
+        zone: decodeBoardPoint(boardPoint),
+        wireMarginMm: nearestWireMarginMm(boardPoint),
+      },
+    ];
+  });
 }
 
 async function makeBoundedJpeg(
@@ -1516,6 +2016,13 @@ function round(value: number, decimalPlaces: number): number {
 function messageForSnapshotError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return 'The board still could not be taken. No photo was stored.';
+}
+
+function messageForLearnedSuggestionError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return `The verified local model could not make suggestions: ${error.message} Add the labels manually for this photo.`;
+  }
+  return 'The verified local model could not make suggestions for this photo. Add the labels manually instead.';
 }
 
 function messageForUploadError(error: unknown): string {

@@ -578,36 +578,6 @@ h3 {
   background: #86dcb7;
 }
 
-.development-evidence-review {
-  display: grid;
-  gap: 7px;
-  margin: 16px 0;
-  padding: 13px;
-  border: 1px solid #86692e;
-  border-radius: 12px;
-  background: #241f13;
-}
-
-.development-evidence-review small {
-  color: #f4c86f;
-  font-size: 0.57rem;
-  font-weight: 950;
-  letter-spacing: 0.1em;
-}
-
-.development-evidence-review p {
-  margin: 0;
-  color: #d7caa7;
-  font-size: 0.69rem;
-  line-height: 1.44;
-}
-
-.development-evidence-review .button {
-  min-height: 39px;
-  margin: 1px 0 0;
-  font-size: 0.6rem;
-}
-
 .notice {
   margin: 16px 0;
   padding: 12px 13px;
@@ -3107,50 +3077,12 @@ h3 {
   background: #17251c;
 }
 
-.development-model-state .development-synthetic-warning {
+.development-model-state .development-synthetic-warning,
+.development-model-state .development-mixed-warning {
   color: #f5cc83;
   font-size: 0.57rem;
   font-weight: 900;
   letter-spacing: 0.065em;
-}
-
-.development-evidence-toggle {
-  display: grid;
-  grid-template-columns: 17px minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
-  padding: 11px 12px;
-  color: #c9d8d0;
-  border: 1px solid #4e5139;
-  border-radius: 10px;
-  background: #1c2116;
-  cursor: pointer;
-}
-
-.development-evidence-toggle input {
-  width: 15px;
-  height: 15px;
-  margin: 2px 0 0;
-  accent-color: #f5c26a;
-}
-
-.development-evidence-toggle span,
-.development-evidence-toggle strong,
-.development-evidence-toggle small {
-  display: block;
-}
-
-.development-evidence-toggle strong {
-  color: #f0e1b8;
-  font-size: 0.65rem;
-  letter-spacing: 0.035em;
-}
-
-.development-evidence-toggle small {
-  margin-top: 3px;
-  color: #adad92;
-  font-size: 0.6rem;
-  line-height: 1.38;
 }
 
 .learned-camera-grid {
@@ -4139,6 +4071,85 @@ h3 {
   max-width: 46rem;
 }
 
+.data-lab-suggestion-pending {
+  margin: 10px 0 0;
+  color: #c7d8cf;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.data-lab-suggestion-pending.ready {
+  color: #a8ecc9;
+}
+
+.data-lab-suggestion-pending.unavailable {
+  color: #f0ca83;
+}
+
+.data-lab-suggestion-notice {
+  display: grid;
+  gap: 4px;
+  margin-top: 13px;
+  padding: 12px 13px;
+  border: 1px solid #4b6358;
+  border-radius: 11px;
+  background: #13231d;
+}
+
+.data-lab-suggestion-notice.pending {
+  border-color: #80612c;
+  background: #211d13;
+}
+
+.data-lab-suggestion-notice.ready {
+  border-color: #4e9272;
+  background: #132b20;
+}
+
+.data-lab-suggestion-notice.unavailable {
+  border-color: #80612c;
+  background: #211d13;
+}
+
+.data-lab-suggestion-notice .eyebrow {
+  margin: 0;
+  color: #98d9bc;
+}
+
+.data-lab-suggestion-notice.pending .eyebrow,
+.data-lab-suggestion-notice.unavailable .eyebrow {
+  color: #f0ca83;
+}
+
+.data-lab-suggestion-notice strong {
+  color: #eaf6ee;
+  font-size: 0.79rem;
+}
+
+.data-lab-suggestion-notice p:not(.eyebrow),
+.data-lab-suggestion-retry p {
+  margin: 0;
+  color: #b2c5bc;
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.data-lab-suggestion-retry {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid #80612c;
+  border-radius: 10px;
+  background: #211d13;
+}
+
+.data-lab-suggestion-retry .text-button,
+.data-lab-clear-anchor {
+  justify-self: start;
+  padding: 0;
+  font-size: 0.57rem;
+}
+
 .data-lab-image-surface {
   margin-top: 15px;
 }
@@ -4146,6 +4157,23 @@ h3 {
 .data-lab-image-surface:focus-visible {
   outline: 3px solid #ffbf5d;
   outline-offset: 3px;
+}
+
+.data-lab-image-surface:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.data-lab-image-surface .annotation-marker.learned-suggestion {
+  border-color: #c9ffdf;
+  box-shadow:
+    0 0 0 3px rgba(143, 220, 193, 0.24),
+    0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.data-lab-image-surface .annotation-marker.active {
+  outline: 3px solid #fff0ba;
+  outline-offset: 2px;
 }
 
 .data-lab-label-bottom-actions {
@@ -4193,6 +4221,11 @@ h3 {
   background: #101c17;
 }
 
+.data-lab-dart-list article.active {
+  border-color: #ffbf5d;
+  background: #292315;
+}
+
 .data-lab-dart-list span {
   color: #a0b8ad;
   font-size: 0.55rem;
@@ -4215,6 +4248,22 @@ h3 {
   grid-row: 1 / 3;
   grid-column: 2;
   font-size: 0.55rem;
+}
+
+.data-lab-dart-actions {
+  display: flex;
+  grid-row: 1 / 4;
+  grid-column: 2;
+  flex-direction: column;
+  align-items: end;
+  gap: 5px;
+}
+
+.data-lab-dart-actions .text-button {
+  grid-row: auto;
+  grid-column: auto;
+  padding: 0;
+  white-space: nowrap;
 }
 
 .data-lab-label-check {

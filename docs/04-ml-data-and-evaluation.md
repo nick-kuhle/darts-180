@@ -81,17 +81,18 @@ web **Data Lab** is a consent-gated small-scale development workflow. Before cam
 an unchecked notice explains that completed board-only JPEGs, labels, and limited setup metadata are
 collected privately for product/model improvement. It records a pseudonymous setup/session group,
 the consent version/time, and `consented-development-unreviewed`, then gates camera use until the
-same-origin private intake is ready. After per-still and label review, the matched JPEG/manifest/
-sidecar trio saves automatically through the guarded same-origin Function to private Blob; there is
-no Data Lab download, collection-key, browser credential, or manual-save route. The agreement is not
-authentication or automatic training admission. The local compiler rejects the wrong profile, accepts
-explicit blank-board anchor-only records, requires at least one real dart label overall, and preserves
-whole setup sessions in train/validation/test. In the separate five-point development Live Scoring
-path, a tester may opt in to hold a bounded local JPEG plus actual detector record in page memory, then
-explicitly download it only after confirming/correcting the DartCard. That separate export is a
-convenient intake bundle—not automatically consented, independently labeled, or ready to train. The
-Python `data_contract.py`, synthetic generator, and external-only synthetic five-point builder exercise
-the same metadata/geometry path.
+same-origin private intake is ready. After a held still is captured, Data Lab begins the optional
+verified local five-point model pass when it is actually installed; the per-still privacy/rights checks
+still gate review and saving. It may prefill only genuine learned anchors/tips; a missing package, failed
+run, or incomplete learned pose plainly keeps the manual labels rather than fabricating a point. After
+completed human label review, the matched JPEG/manifest/sidecar trio saves automatically through the
+guarded same-origin Function to private Blob; there is no Data Lab download, collection-key, browser
+credential, or manual-save route.
+Live Scoring has no browser-local evidence export route. The agreement is not authentication or automatic
+training admission. The local compiler rejects the wrong profile, accepts explicit blank-board anchor-only
+records, requires at least one real dart label overall, and preserves whole setup sessions in
+train/validation/test. The Python `data_contract.py`, synthetic generator, and external-only synthetic
+five-point builder exercise the same metadata/geometry path.
 See `ml/data/manifest.schema.json`, the [field capture runbook](runbooks/field-capture.md), the
 [guided private Data Lab intake](20-private-capture-lab.md), the
 [development scorer contract](18-development-five-point-scorer.md), and

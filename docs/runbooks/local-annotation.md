@@ -1,18 +1,21 @@
-# Data Lab manual labels: five-point bootstrap
+# Data Lab label review: five-point bootstrap
 
 **Status:** consent-gated development labeling aid<br />
 **Audience:** an agreeing Data Lab contributor and authorized data operations<br />
 **Use only for:** an approved, board-focused static JPEG paired with its Data Lab manifest.
 
-The visible **DATA LAB** workspace turns manually tapped points into the source-compatible five-point
-JSON sidecar needed by the first editable development scorer. It keeps the JPEG, capture manifest, and
-manual labels in one guided flow instead of asking a collector to switch to an ordinary player screen.
-It uses a four-point projective transform and the deterministic canonical-board decoder. It does **not**
-discover dart tips, validate privacy from pixels, establish legal consent, or replace two-person
-annotation/adjudication. On the configured consent-gated development deployment, completing label review
-automatically saves the matched record to private Blob after the required entry agreement. The agreement
-records `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance time, and an unreviewed admission marker; it is
-not identity verification. The Lab has no local-download, collection-key, browser credential, or manual Save
+The visible **DATA LAB** workspace turns reviewed points into the source-compatible five-point JSON
+sidecar needed by the first editable development scorer. It keeps the JPEG, capture manifest, and labels
+in one guided flow instead of asking a collector to switch to an ordinary player screen. When a genuine,
+verified local five-point development package is installed, it runs on the held still and may prefill
+editable semantic anchors and visible dart tips; no model/package failure stays plainly manual rather
+than deriving points from geometry or a pixel threshold. It uses a four-point projective transform and
+the deterministic canonical-board decoder only after final points exist. It does **not** validate privacy
+from pixels, establish legal consent, or replace two-person annotation/adjudication. On the configured
+consent-gated development deployment, completing label review automatically saves the matched record to
+private Blob after the required entry agreement. The agreement records
+`DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance time, and an unreviewed admission marker; it is not
+identity verification. The Lab has no local-download, collection-key, browser credential, or manual Save
 option. That narrow intake design is covered by [`20-private-capture-lab.md`](../20-private-capture-lab.md).
 
 Follow the [Data Lab capture and private intake runbook](capture-lab.md) and the
@@ -69,23 +72,30 @@ the mapping or an expected result looks implausible.
 
 1. In the web prototype select **DATA LAB**, not **LIVE SCORING**.
 2. Read and accept the Data Lab entry agreement only if it is true, then take the exact board-focused
-   JPEG and complete its per-still safety/authority confirmation. The integrated flow keeps the matching manifest automatically.
-3. Select **Next · tap the board points**. Tap the four named outer-rim junctions in the displayed
-   order. The app marks them 1–4 and changes to **Board set** only when it can solve the mapping.
-4. For **Dart test**, tap each _visible physical dart entry point_ once. A **Blank board** record is
-   correct with no dart point. The app derives canonical mm coordinates, scoring zone, score, and
-   nearest-wire margin only as a check on the manual click.
+   JPEG and complete its per-still safety/authority confirmation. The integrated flow keeps the matching
+   manifest automatically.
+3. Select **Next · Review camera suggestions**. If a verified local five-point package is installed,
+   its one local inference pass may prefill the four named outer-rim junctions and visible class-0 tips.
+   Keep a correct suggestion, or select a row and tap the image to move it. A missing/invalid package,
+   unsupported browser, or incomplete learned pose says **Manual labeling ready** and leaves no invented
+   marker.
+4. For manual/partial anchors, use the named outer-rim junctions in the displayed order. The app marks
+   them 1–4 and changes to **Board set** only when it can solve the mapping. For **Dart test**, keep/add
+   each _visible physical dart entry point_ once; remove false tips. A **Blank board** record is correct
+   with no dart point. The app derives canonical mm coordinates, scoring zone, score, and nearest-wire
+   margin only as a check on reviewed points.
 5. Review every label. A small wire margin is a warning to recheck and, for evaluation data, obtain
-   independent annotation. Remove a wrong/uncertain point or discard the photo rather than treating
-   a calculated zone as truth.
-6. Complete the per-label review statement and select **Complete review · Auto-save**. That final
-   acknowledgement automatically saves the matched JPEG, manifest, and annotation sidecar to the
-   private development collection. Keep the tab open until all three assets show saved; only a failed
-   asset exposes a retry. The private save remains `consented-development-unreviewed` pending data review.
+   independent annotation. Remove a wrong/uncertain point or discard the photo rather than treating a
+   calculated zone or a model output as truth.
+6. Complete the per-label review statement and select **Confirm review · Auto-save**. That final
+   acknowledgement automatically saves the matched JPEG, manifest, and annotation sidecar to the private
+   development collection. Keep the tab open until all three assets show saved; only a failed asset
+   exposes a retry. The private save remains `consented-development-unreviewed` pending data review.
 
 The output records original capture metadata, image dimensions/name, the image-to-board homography,
-fixed anchor profile/coordinates, clicked pixels, canonical entry points, deterministic zones, wire
-margins, and `manual-<captureId>-dart-N` tracking IDs. It records
+fixed anchor profile/coordinates, final image pixels, canonical entry points, deterministic zones, wire
+margins, and `reviewed-<captureId>-dart-N` tracking IDs. It also records per-point label sources and a
+versioned local-model audit hint when a genuine suggestion pass ran, alongside
 `deepdarts-four-cardinal-homography-v1` as annotation-method provenance. A blank-board sidecar has
 its four anchors and an empty `darts` list; a dart-test sidecar must have at least one clear tip.
 
@@ -117,10 +127,11 @@ splits, and duplicate bytes. The exact command is in
 
 ## 5. Limits and next engineering work
 
-This is intentionally a narrow bootstrap tool. It lacks image zoom/pan, landmark-model suggestions,
-anchor residual analysis, board-profile selection, automatic occlusion taxonomy, dual-label merge,
-and cryptographic image hashes. Those are planned annotation-platform work, not reasons to silently
-trust this version beyond its controlled static-image use case.
+This is intentionally a narrow bootstrap tool. It lacks image zoom/pan, anchor residual analysis,
+board-profile selection, automatic occlusion taxonomy, dual-label merge, and cryptographic image hashes.
+The optional learned suggestions are an editable development aid, not a replacement for those
+safeguards. These remain planned annotation-platform work, not reasons to silently trust this version
+beyond its controlled static-image use case.
 
 Synthetic scenes and the OpenCV baselines remain useful for unit tests and workflow rehearsal, but
 they cannot demonstrate real camera performance or replace consented device/board/angle-diverse

@@ -20,11 +20,16 @@ test('normal Live Scoring selects only learned runtime paths, never the retired 
     `${productionCamera}\n${developmentCamera}`,
     /cameraScoring|autoBoardFit|boardFit|startPlayReferenceCapture/,
   );
+  assert.doesNotMatch(
+    `${app}\n${developmentCamera}`,
+    /downloadCorrectedDevelopmentEvidence|DOWNLOAD REVIEWED TEST SAMPLES|Save local test evidence/,
+  );
 });
 
-test('the top-level app keeps manual labels in a consent-gated Data Lab with automatic private saving', () => {
+test('the top-level app keeps a consent-gated Data Lab with genuine optional learned suggestions and automatic private saving', () => {
   const app = source('../src/App.tsx');
   const lab = source('../src/components/DataLab.tsx');
+  const dataLabSuggestions = source('../src/lib/developmentVision/dataLabSuggestions.ts');
   const consent = source('../src/lib/captureConsent.ts');
   const developmentCamera = source('../src/components/DeepDartsDevelopmentCameraPlay.tsx');
   const styles = source('../src/styles.css');
@@ -46,9 +51,34 @@ test('the top-level app keeps manual labels in a consent-gated Data Lab with aut
   assert.match(consent, /DEVELOPMENT-DATA-LAB-CONSENT-V1/);
   assert.match(consent, /consented-development-unreviewed/);
   assert.match(developmentCamera, /trainingDataKind === 'synthetic-only'/);
+  assert.match(developmentCamera, /trainingDataKind === 'mixed-synthetic-and-real'/);
   assert.match(developmentCamera, /SYNTHETIC BOOTSTRAP ONLY · NOT VALIDATED ON REAL THROWS/);
-  assert.match(lab, /NEXT · TAP THE BOARD POINTS/);
-  assert.match(lab, /COMPLETE REVIEW · AUTO-SAVE/);
+  assert.match(developmentCamera, /REVIEWED REAL \+ SIMULATED TRAINING · CHECK EVERY SUGGESTION/);
+  assert.match(lab, /loadDevelopmentModelManifest/);
+  assert.match(lab, /DevelopmentWebInferenceClient/);
+  assert.match(lab, /getDevelopmentBrowserVisionSupport/);
+  assert.match(lab, /buildDataLabLearnedSuggestions/);
+  assert.match(lab, /hasCompletePose: suggestions\.pose !== null/);
+  assert.match(
+    lab,
+    /Dart-tip suggestions were withheld because the learned anchors did not form a safe complete board pose/,
+  );
+  const heldStillDeclaration = lab.indexOf('const still: CapturedStill');
+  const automaticSuggestionInvocation = lab.indexOf('void runLearnedSuggestions(still)');
+  assert.ok(
+    heldStillDeclaration >= 0 && automaticSuggestionInvocation > heldStillDeclaration,
+    'every successfully held still must begin the local suggestion pass before review',
+  );
+  assert.match(lab, /suggestionRequestRef/);
+  assert.match(lab, /suggestionClientRef/);
+  assert.match(lab, /No verified local development model is installed/);
+  assert.match(lab, /NEXT · REVIEW CAMERA SUGGESTIONS/);
+  assert.match(lab, /CONFIRM REVIEW · AUTO-SAVE/);
+  assert.match(lab, /RETRY LOCAL MODEL · REPLACE POINTS/);
+  assert.match(lab, /annotationProvenance/);
+  assert.match(dataLabSuggestions, /deriveDeepDartsDevelopmentPose/);
+  assert.match(dataLabSuggestions, /DEEPDARTS_CLASS_IDS\.dartEntryPoint/);
+  assert.doesNotMatch(dataLabSuggestions, /DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS/);
   assert.match(lab, /automaticSaveStartedRef\.current = true/);
   assert.match(lab, /automaticUploadAttemptedRecordRef/);
   assert.match(lab, /void uploadPrivateRecord\(\)/);

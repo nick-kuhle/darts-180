@@ -9,7 +9,6 @@ import {
   DeepDartsDevelopmentEngine,
   type DevelopmentVisionFrame,
 } from '../lib/developmentVision/engine';
-import { captureLocalDevelopmentEvidence } from '../lib/developmentVision/localEvidence';
 import type {
   DeepDartsDevelopmentModelManifest,
   DevelopmentScoreSuggestion,
@@ -106,7 +105,6 @@ export function DeepDartsDevelopmentCameraPlay({
     'Start the rear camera. Darts 180 will detect the standard board automatically.',
   );
   const [lastSuggestion, setLastSuggestion] = useState<DevelopmentScoreSuggestion | null>(null);
-  const [collectLocalEvidence, setCollectLocalEvidence] = useState(false);
 
   const browserSupport = useMemo(() => getDevelopmentBrowserVisionSupport(), []);
   const poseReady = latestFrame?.pose !== null && latestFrame?.pose !== undefined;
@@ -350,12 +348,6 @@ export function DeepDartsDevelopmentCameraPlay({
   const handleSuggestion = useCallback(
     (suggestion: DevelopmentScoreSuggestion): boolean => {
       setLastSuggestion(suggestion);
-      const frame = latestFrameRef.current;
-      const video = videoRef.current;
-      const developmentEvidence =
-        collectLocalEvidence && frame !== null && video !== null
-          ? captureLocalDevelopmentEvidence(video, model, suggestion, frame)
-          : undefined;
       const slot = onAddProposal({
         zone: suggestion.zone,
         confidence: suggestion.detectorConfidence,
@@ -363,9 +355,6 @@ export function DeepDartsDevelopmentCameraPlay({
         source: 'auto',
         disposition: 'review',
         developmentSuggestion: true,
-        ...(developmentEvidence === null || developmentEvidence === undefined
-          ? {}
-          : { developmentEvidence }),
       });
       if (slot === null) {
         setPhase('visit-complete');
@@ -377,7 +366,7 @@ export function DeepDartsDevelopmentCameraPlay({
       );
       return true;
     },
-    [collectLocalEvidence, model, onAddProposal],
+    [onAddProposal],
   );
 
   const analysePostImpact = useCallback(async () => {
@@ -647,20 +636,6 @@ export function DeepDartsDevelopmentCameraPlay({
           </div>
 
           <DevelopmentModelState model={model} backend={runtimeBackend} />
-          <label className="development-evidence-toggle">
-            <input
-              type="checkbox"
-              checked={collectLocalEvidence}
-              onChange={(event) => setCollectLocalEvidence(event.target.checked)}
-            />
-            <span>
-              <strong>Save local test evidence</strong>
-              <small>
-                Keep a JPEG and detector record in this page only; after you confirm or correct it,
-                export it manually from Score Review. Nothing uploads automatically.
-              </small>
-            </span>
-          </label>
           <DevelopmentBoardState frame={latestFrame} />
 
           <div className="learned-dart-cards">
@@ -722,6 +697,7 @@ function DevelopmentModelState({
   backend: 'webgpu' | 'wasm' | null;
 }) {
   const syntheticOnly = model.provenance.trainingDataKind === 'synthetic-only';
+  const mixedData = model.provenance.trainingDataKind === 'mixed-synthetic-and-real';
   return (
     <section className="learned-model-state is-runnable development-model-state">
       <small>LOCAL DEVELOPMENT MODEL</small>
@@ -732,6 +708,11 @@ function DevelopmentModelState({
       {syntheticOnly && (
         <span className="development-synthetic-warning">
           SYNTHETIC BOOTSTRAP ONLY · NOT VALIDATED ON REAL THROWS
+        </span>
+      )}
+      {mixedData && (
+        <span className="development-mixed-warning">
+          REVIEWED REAL + SIMULATED TRAINING · CHECK EVERY SUGGESTION
         </span>
       )}
     </section>

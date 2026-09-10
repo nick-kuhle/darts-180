@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { formatZone } from '@darts-180/rules';
 
+import { buildDataLabLearnedSuggestions } from '../src/lib/developmentVision/dataLabSuggestions.js';
 import {
   DEEPDARTS_SOURCE_TO_STANDARD_ROTATION_DEGREES,
   DeepDartsDevelopmentEngine,
@@ -11,11 +12,13 @@ import {
 } from '../src/lib/developmentVision/engine.js';
 import {
   isRunnableDevelopmentModelManifest,
+  loadDevelopmentModelManifest,
   parseDevelopmentModelManifest,
 } from '../src/lib/developmentVision/modelManifest.js';
 import type {
   DeepDartsDetection,
   DeepDartsDevelopmentModelManifest,
+  DeepDartsInferenceFrameResult,
 } from '../src/lib/developmentVision/types.js';
 import { decodeDeepDartsYoloOutput } from '../src/lib/developmentVision/yoloOutputDecoder.js';
 
@@ -98,7 +101,7 @@ function orientedAnchorDetections(): readonly DeepDartsDetection[] {
   });
 }
 
-test('five-point development manifest is local, immutable in class roles, and development-only', () => {
+test('five-point development manifest is local, immutable in class roles, development-only, and optional when absent', async () => {
   assert.equal(isRunnableDevelopmentModelManifest(developmentManifest), true);
   assert.deepEqual(parseDevelopmentModelManifest(developmentManifest), developmentManifest);
   assert.throws(
@@ -144,6 +147,25 @@ test('five-point development manifest is local, immutable in class roles, and de
     }).provenance.trainingDataKind,
     'synthetic-only',
   );
+
+  const absent = await loadDevelopmentModelManifest(
+    '/models/darts180-deepdarts-yolo-dev-v1.json',
+    async () => new Response(null, { status: 404 }),
+  );
+  assert.equal(absent.manifest, null);
+  assert.equal(absent.message, null);
+
+  let unexpectedFetch = false;
+  const remote = await loadDevelopmentModelManifest(
+    'https://invalid.example/model.json',
+    async () => {
+      unexpectedFetch = true;
+      return new Response(null, { status: 200 });
+    },
+  );
+  assert.equal(unexpectedFetch, false);
+  assert.equal(remote.manifest, null);
+  assert.match(remote.message ?? '', /invalid/);
 });
 
 test('raw YOLOv8 output decodes both exporter layouts, restores stretched source pixels, and NMSes per class', () => {
@@ -220,6 +242,70 @@ test('four semantic DeepDarts anchors create the rotated standard-board frame wi
     deriveDeepDartsDevelopmentPose(orientedAnchorDetections().slice(0, 3), developmentManifest),
     null,
   );
+});
+
+test('Data Lab suggestions preserve only learned anchor/tip evidence and withhold tips without a full learned pose', () => {
+  const dartPoint = standardToImage({ xMm: 0, yMm: -103 });
+  const completeInference: DeepDartsInferenceFrameResult = {
+    frameTimestampMs: 1_000,
+    detections: [...orientedAnchorDetections(), detection(0, dartPoint.xPx, dartPoint.yPx)],
+    inferenceMs: 8,
+    backend: 'wasm',
+  };
+  const complete = buildDataLabLearnedSuggestions(completeInference, developmentManifest);
+  assert.equal(complete.anchors.filter((anchor) => anchor !== null).length, 4);
+  assert.notEqual(complete.pose, null);
+  assert.equal(complete.darts.length, 1);
+  assert.equal(formatZone(complete.darts[0]!.zone), 'T20');
+  assert.equal(complete.omittedDartDetectionCount, 0);
+
+  const incomplete = buildDataLabLearnedSuggestions(
+    {
+      ...completeInference,
+      detections: [
+        ...orientedAnchorDetections().slice(0, 3),
+        detection(0, dartPoint.xPx, dartPoint.yPx),
+      ],
+    },
+    developmentManifest,
+  );
+  assert.equal(incomplete.anchors.filter((anchor) => anchor !== null).length, 3);
+  assert.equal(incomplete.pose, null);
+  assert.deepEqual(incomplete.darts, []);
+  assert.equal(incomplete.omittedDartDetectionCount, 1);
+
+  const belowDeclaredFloor = buildDataLabLearnedSuggestions(completeInference, {
+    ...developmentManifest,
+    policy: {
+      ...developmentManifest.policy,
+      minCalibrationConfidence: 0.96,
+      minDartConfidence: 0.96,
+    },
+  });
+  assert.deepEqual(belowDeclaredFloor.anchors, [null, null, null, null]);
+  assert.deepEqual(belowDeclaredFloor.darts, []);
+  assert.equal(belowDeclaredFloor.omittedDartDetectionCount, 0);
+
+  const fourModelTips = buildDataLabLearnedSuggestions(
+    {
+      ...completeInference,
+      detections: [
+        ...orientedAnchorDetections(),
+        ...[
+          { xMm: 0, yMm: -103 },
+          { xMm: 0, yMm: -60 },
+          { xMm: 25, yMm: -70 },
+          { xMm: -25, yMm: -70 },
+        ].map((point) => {
+          const image = standardToImage(point);
+          return detection(0, image.xPx, image.yPx);
+        }),
+      ],
+    },
+    developmentManifest,
+  );
+  assert.equal(fourModelTips.darts.length, 3);
+  assert.equal(fourModelTips.omittedDartDetectionCount, 1);
 });
 
 test('development engine requires genuine anchors plus a genuine class-0 dart and always emits an editable review suggestion', () => {

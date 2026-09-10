@@ -47,12 +47,15 @@ test('repository-root fallback has the same browser camera policy', () => {
   assert.match(csp, /script-src 'self' 'wasm-unsafe-eval'/);
 });
 
-test('both SPA fallbacks preserve the private same-origin API Function and do not loosen CSP for Blob', () => {
+test('both SPA fallbacks preserve private API/model paths and do not loosen CSP for Blob', () => {
   for (const relativePath of ['../vercel.json', '../../../vercel.json']) {
     const config = readConfig(relativePath);
     const fallback = config.rewrites?.[0];
     assert.equal(fallback?.destination, '/index.html');
+    // A missing optional development manifest must reach a real 404 instead of the SPA HTML,
+    // so Data Lab can honestly say that no local package is installed.
     assert.match(fallback?.source ?? '', /\?!api/);
+    assert.match(fallback?.source ?? '', /models/);
 
     const csp = headersFor(config)['Content-Security-Policy'] ?? '';
     assert.match(csp, /connect-src 'self'/);
