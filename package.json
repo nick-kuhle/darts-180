@@ -15,11 +15,12 @@
     "build:web": "npm run build --workspace=@darts-180/web",
     "dev:api": "npm run dev --workspace=@darts-180/api",
     "test": "npm run test --workspaces --if-present",
+    "test:private-model-handoff": "node --test ml/scripts/fetch-approved-private-captures.test.mjs && PYTHONPATH=ml/src python3 -m unittest ml/tests/test_private_model_build_summary.py -v",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:check": "node scripts/check-doc-links.mjs",
-    "verify": "npm run format:check && npm run docs:check && npm run typecheck && npm run verify:model-artifact --workspace=@darts-180/web && npm run test && npm run build:web"
+    "verify": "npm run format:check && npm run docs:check && npm run typecheck && npm run verify:model-artifact --workspace=@darts-180/web && npm run test && npm run test:private-model-handoff && npm run build:web"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

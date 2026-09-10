@@ -1,0 +1,344 @@
+name: Private development model build
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Prepare reviewed mixed data, or train a development-only artifact after checkpoint review.'
+        required: true
+        default: prepare
+        type: choice
+        options:
+          - prepare
+          - train
+      split_seed:
+        description: 'Non-secret, stable split seed. It is recorded only as a SHA-256 in the private compilation.'
+        required: true
+        default: darts180-initial-private-campaign-v1
+        type: string
+      real_review_id:
+        description: 'Non-secret operator record for privacy, provenance, and label review of the explicit record allow-list.'
+        required: true
+        default: owner-approved-datalab-2026-09-09
+        type: string
+      synthetic_review_id:
+        description: 'Non-secret operator record for the procedural synthetic generator and labels.'
+        required: true
+        default: procedural-renderer-review-v1
+        type: string
+      model_version:
+        description: 'Immutable development-only version when mode is train.'
+        required: true
+        default: darts180-mixed-dev-v1
+        type: string
+      checkpoint_license_review_id:
+        description: 'Required when mode is train: non-secret license/provenance review record for the starting checkpoint.'
+        required: false
+        type: string
+      checkpoint_url:
+        description: 'Required when mode is train: reviewed immutable HTTPS checkpoint URL with no query, fragment, or embedded credential.'
+        required: false
+        type: string
+      checkpoint_sha256:
+        description: 'Required when mode is train: lowercase SHA-256 for the exact reviewed checkpoint bytes.'
+        required: false
+        type: string
+      epochs:
+        description: 'Development experiment epochs when mode is train.'
+        required: true
+        default: '80'
+        type: string
+      batch:
+        description: 'Development experiment batch size when mode is train.'
+        required: true
+        default: '8'
+        type: string
+
+# Manual-only workflow: no push, pull_request, schedule, reusable-call, or deployment trigger.
+# Raw Blob records never become an Action artifact, a repository file, or a browser download.
+permissions:
+  contents: read
+
+concurrency:
+  group: private-development-model-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate private pairs and build review-only model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # Create this protected GitHub Environment before dispatching and put the two secrets there.
+    # Environment protection can require the data owner to approve each manual run.
+    environment: private-model-build
+    env:
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_INPUT: '1'
+      WANDB_MODE: disabled
+      COMET_DISABLE_AUTO_LOGGING: '1'
+      # Blob secrets are deliberately scoped to the one Node retrieval step below, rather than
+      # placed in this job-level environment inherited by checkout/setup/upload actions.
+      DARTS180_PRIVATE_ROOT: ${{ runner.temp }}/darts180-private-model-${{ github.run_id }}-${{ github.run_attempt }}
+      DARTS180_MODEL_ARTIFACT_ROOT: ${{ runner.temp }}/darts180-model-artifact-${{ github.run_id }}-${{ github.run_attempt }}
+      INPUT_MODE: ${{ inputs.mode }}
+      INPUT_SPLIT_SEED: ${{ inputs.split_seed }}
+      INPUT_REAL_REVIEW_ID: ${{ inputs.real_review_id }}
+      INPUT_SYNTHETIC_REVIEW_ID: ${{ inputs.synthetic_review_id }}
+      INPUT_MODEL_VERSION: ${{ inputs.model_version }}
+      INPUT_CHECKPOINT_LICENSE_REVIEW_ID: ${{ inputs.checkpoint_license_review_id }}
+      INPUT_CHECKPOINT_URL: ${{ inputs.checkpoint_url }}
+      INPUT_CHECKPOINT_SHA256: ${{ inputs.checkpoint_sha256 }}
+      INPUT_EPOCHS: ${{ inputs.epochs }}
+      INPUT_BATCH: ${{ inputs.batch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install controlled build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          python -m pip install --no-input -e 'ml[train,export]'
+
+      - name: Disable training telemetry before private retrieval
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ultralytics documents sync=False as its analytics/crash-report opt-out. Do this before
+          # any raw capture is retrieved, and keep all other experiment integrations disabled above.
+          python -c "from ultralytics import settings; settings.update({'sync': False})"
+
+      - name: Create private temporary workspaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          case "${DARTS180_PRIVATE_ROOT:?}" in
+            "${RUNNER_TEMP:?}"/darts180-private-model-*) ;;
+            *) echo "Private model workspace is outside the runner temporary directory." >&2; exit 1 ;;
+          esac
+          case "${DARTS180_MODEL_ARTIFACT_ROOT:?}" in
+            "${RUNNER_TEMP:?}"/darts180-model-artifact-*) ;;
+            *) echo "Model artifact workspace is outside the runner temporary directory." >&2; exit 1 ;;
+          esac
+          mkdir -m 700 -- "$DARTS180_PRIVATE_ROOT" "$DARTS180_MODEL_ARTIFACT_ROOT"
+
+      - name: Validate non-secret workflow inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export INPUT_MODE INPUT_SPLIT_SEED INPUT_REAL_REVIEW_ID INPUT_SYNTHETIC_REVIEW_ID
+          export INPUT_MODEL_VERSION INPUT_EPOCHS INPUT_BATCH
+          python - <<'PY'
+          import os
+          import re
+
+          if os.environ["INPUT_MODE"] not in {"prepare", "train"}:
+              raise SystemExit("Mode must be prepare or train.")
+          for name in (
+              "INPUT_SPLIT_SEED",
+              "INPUT_REAL_REVIEW_ID",
+              "INPUT_SYNTHETIC_REVIEW_ID",
+              "INPUT_MODEL_VERSION",
+          ):
+              if not re.fullmatch(r"[A-Za-z0-9._-]{3,160}", os.environ[name]):
+                  raise SystemExit(f"{name} must be a short non-secret identifier.")
+          for name, upper in (("INPUT_EPOCHS", 500), ("INPUT_BATCH", 64)):
+              value = os.environ[name]
+              if not value.isdecimal() or not 1 <= int(value) <= upper:
+                  raise SystemExit(f"{name} must be an integer from 1 to {upper}.")
+          PY
+
+      - name: Retrieve explicit approved private records
+        env:
+          DARTS180_BLOB_READ_WRITE_TOKEN: ${{ secrets.DARTS180_BLOB_READ_WRITE_TOKEN }}
+          DARTS180_APPROVED_RECORD_IDS: ${{ secrets.DARTS180_APPROVED_RECORD_IDS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${DARTS180_BLOB_READ_WRITE_TOKEN:-}" || -z "${DARTS180_APPROVED_RECORD_IDS:-}" ]]; then
+            echo "::error title=Protected configuration required::The private-model-build Environment needs both scoped secrets. No Blob request was made."
+            exit 1
+          fi
+          if ! node ml/scripts/fetch-approved-private-captures.mjs \
+            --output-directory "$DARTS180_PRIVATE_ROOT/ingested" \
+            > "$DARTS180_PRIVATE_ROOT/retrieval.json" \
+            2> "$DARTS180_PRIVATE_ROOT/retrieval.error"; then
+            echo "::error title=Private capture retrieval stopped::No raw capture data was exposed in this log or artifact. Check the exact approved-record allow-list and Blob secret in the protected Environment."
+            exit 1
+          fi
+
+      - name: Compile real records and prepare the mixed data set
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export PYTHONPATH=ml/src
+          run_private_step() {
+            local label="$1"
+            shift
+            if ! "$@" > "$DARTS180_PRIVATE_ROOT/${label}.json" 2> "$DARTS180_PRIVATE_ROOT/${label}.error"; then
+              echo "::error title=Private ${label} step stopped::No raw capture, record ID, or label detail was exposed. The temporary private workspace will be deleted."
+              exit 1
+            fi
+          }
+          run_private_step synthetic \
+            python -m darts180_vision.synthetic_five_point_dataset \
+            --output-directory "$DARTS180_PRIVATE_ROOT/synthetic" \
+            --count 300 \
+            --seed 20260909
+          run_private_step real-compilation \
+            python -m darts180_vision.local_five_point_dataset \
+            "$DARTS180_PRIVATE_ROOT/ingested" \
+            --output-directory "$DARTS180_PRIVATE_ROOT/real" \
+            --split-seed "$INPUT_SPLIT_SEED" \
+            --accepted-consent-version DEVELOPMENT-DATA-LAB-CONSENT-V1
+          run_private_step mixed \
+            python -m darts180_vision.mixed_five_point_dataset \
+            --real-dataset-root "$DARTS180_PRIVATE_ROOT/real" \
+            --synthetic-dataset-root "$DARTS180_PRIVATE_ROOT/synthetic" \
+            --output-directory "$DARTS180_PRIVATE_ROOT/mixed" \
+            --mix-id "$INPUT_MODEL_VERSION" \
+            --real-review-id "$INPUT_REAL_REVIEW_ID" \
+            --synthetic-review-id "$INPUT_SYNTHETIC_REVIEW_ID"
+          python ml/scripts/write_private_model_build_summary.py \
+            --retrieval "$DARTS180_PRIVATE_ROOT/retrieval.json" \
+            --real-compilation "$DARTS180_PRIVATE_ROOT/real/darts180-local-fivepoint-compilation.json" \
+            --synthetic-bootstrap "$DARTS180_PRIVATE_ROOT/synthetic/darts180-synthetic-fivepoint-bootstrap.json" \
+            --mixed-dataset "$DARTS180_PRIVATE_ROOT/mixed/darts180-mixed-fivepoint-dataset.json" \
+            --output "$DARTS180_MODEL_ARTIFACT_ROOT/review-summary.json"
+
+      - name: Download reviewed checkpoint
+        if: inputs.mode == 'train'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export CHECKPOINT_URL="$INPUT_CHECKPOINT_URL"
+          export CHECKPOINT_SHA256="$INPUT_CHECKPOINT_SHA256"
+          export CHECKPOINT_LICENSE_REVIEW_ID="$INPUT_CHECKPOINT_LICENSE_REVIEW_ID"
+          python - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlparse
+
+          url = os.environ["CHECKPOINT_URL"]
+          digest = os.environ["CHECKPOINT_SHA256"]
+          review_id = os.environ["CHECKPOINT_LICENSE_REVIEW_ID"]
+          parsed = urlparse(url)
+          if (
+              parsed.scheme != "https"
+              or not parsed.hostname
+              or parsed.username is not None
+              or parsed.password is not None
+              or parsed.query
+              or parsed.fragment
+          ):
+              raise SystemExit("Checkpoint URL must be a reviewed direct HTTPS URL without credentials, query parameters, or a fragment.")
+          if not re.fullmatch(r"[a-f0-9]{64}", digest):
+              raise SystemExit("Checkpoint SHA-256 must be exactly 64 lowercase hexadecimal characters.")
+          if not re.fullmatch(r"[A-Za-z0-9._-]{3,160}", review_id):
+              raise SystemExit("Checkpoint license review ID must be a short non-secret identifier.")
+          PY
+          effective_url="$(curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --max-filesize 524288000 \
+            --write-out '%{url_effective}' \
+            --output "$DARTS180_PRIVATE_ROOT/reviewed-base-model.pt" \
+            "$INPUT_CHECKPOINT_URL")"
+          export EFFECTIVE_CHECKPOINT_URL="$effective_url"
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          parsed = urlparse(os.environ["EFFECTIVE_CHECKPOINT_URL"])
+          if (
+              parsed.scheme != "https"
+              or not parsed.hostname
+              or parsed.username is not None
+              or parsed.password is not None
+              or parsed.query
+              or parsed.fragment
+          ):
+              raise SystemExit("Checkpoint redirects must also remain direct HTTPS URLs without credentials, query parameters, or a fragment.")
+          PY
+          printf '%s  %s\n' "$INPUT_CHECKPOINT_SHA256" "$DARTS180_PRIVATE_ROOT/reviewed-base-model.pt" | sha256sum --check --status
+
+      - name: Train and export review-only development artifact
+        if: inputs.mode == 'train'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export PYTHONPATH=ml/src
+          if ! python -m darts180_vision.deepdarts_yolo_train \
+            "$DARTS180_PRIVATE_ROOT/mixed" \
+            --base-model "$DARTS180_PRIVATE_ROOT/reviewed-base-model.pt" \
+            --output-directory "$DARTS180_PRIVATE_ROOT/training" \
+            --model-version "$INPUT_MODEL_VERSION" \
+            --training-data-id "$INPUT_MODEL_VERSION" \
+            --training-data-kind mixed-synthetic-and-real \
+            --license-review-id "$INPUT_CHECKPOINT_LICENSE_REVIEW_ID" \
+            --epochs "$INPUT_EPOCHS" \
+            --batch "$INPUT_BATCH" \
+            --workers 2 \
+            --device cpu \
+            --seed 180 \
+            --patience 20 \
+            --hash-images \
+            > "$DARTS180_PRIVATE_ROOT/training-command.json" \
+            2> "$DARTS180_PRIVATE_ROOT/training-command.error"; then
+            echo "::error title=Development model training stopped::No model was produced or installed. Private data remains excluded from logs and artifacts."
+            exit 1
+          fi
+          mkdir -m 700 -- "$DARTS180_MODEL_ARTIFACT_ROOT/models"
+          cp -- "$DARTS180_PRIVATE_ROOT/training/artifact/darts180-deepdarts-yolo-dev-v1.onnx" \
+            "$DARTS180_MODEL_ARTIFACT_ROOT/models/darts180-deepdarts-yolo-dev-v1.onnx"
+          cp -- "$DARTS180_PRIVATE_ROOT/training/artifact/darts180-deepdarts-yolo-dev-v1.json" \
+            "$DARTS180_MODEL_ARTIFACT_ROOT/models/darts180-deepdarts-yolo-dev-v1.json"
+          npx tsx -e "import { verifyWebModelArtifact } from './apps/web/scripts/verify-model-artifact.ts'; await verifyWebModelArtifact({ publicDirectory: process.env.DARTS180_MODEL_ARTIFACT_ROOT });"
+          python ml/scripts/write_private_model_build_summary.py \
+            --retrieval "$DARTS180_PRIVATE_ROOT/retrieval.json" \
+            --real-compilation "$DARTS180_PRIVATE_ROOT/real/darts180-local-fivepoint-compilation.json" \
+            --synthetic-bootstrap "$DARTS180_PRIVATE_ROOT/synthetic/darts180-synthetic-fivepoint-bootstrap.json" \
+            --mixed-dataset "$DARTS180_PRIVATE_ROOT/mixed/darts180-mixed-fivepoint-dataset.json" \
+            --training-summary "$DARTS180_PRIVATE_ROOT/training/training-summary.json" \
+            --development-manifest "$DARTS180_PRIVATE_ROOT/training/artifact/darts180-deepdarts-yolo-dev-v1.json" \
+            --output "$DARTS180_MODEL_ARTIFACT_ROOT/review-summary.json"
+
+      - name: Upload aggregate review record and optional model
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: darts180-private-model-build-${{ github.run_id }}
+          path: ${{ env.DARTS180_MODEL_ARTIFACT_ROOT }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove all private runner data
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for directory in "$DARTS180_PRIVATE_ROOT" "$DARTS180_MODEL_ARTIFACT_ROOT"; do
+            case "$directory" in
+              "${RUNNER_TEMP:?}"/darts180-private-model-*|"${RUNNER_TEMP:?}"/darts180-model-artifact-*)
+                rm -rf -- "$directory"
+                ;;
+              *)
+                echo "Refusing to delete a path outside the expected runner temporary workspaces." >&2
+                exit 1
+                ;;
+            esac
+          done
