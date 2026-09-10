@@ -109,7 +109,17 @@ can honestly provide ground truth.
    is visible, and you own the board-focused capture or have permission to use it for Darts 180
    development. The entry agreement has already written `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its
    acceptance timestamp, and `consented-development-unreviewed` status into this record's metadata.
-5. Tap these four **outer-double-rim junctions** in the displayed order:
+5. After **Take this photo**, Data Lab automatically starts one local pass when a verified five-point
+   development package is installed. Once the per-still checks are complete, choose
+   **Next · Review camera suggestions** to see any genuine detector evidence: CAL 1 D5/D20, CAL 2
+   D17/D3, CAL 3 D8/D11, CAL 4 D13/D6, and visible class-0 dart tips. If the package is absent,
+   invalid, unsupported by the browser, or cannot produce a complete safe learned pose, the Lab
+   plainly keeps the manual path instead of deriving points from image geometry or defaults.
+6. Review every marker. Keep a correct marker as shown, or select its row and tap the exact location
+   to move it; remove a false tip and add any missed visible tip. A **Blank board** intentionally
+   withholds tips. For a **Dart test**, every final tip must be a clearly visible physical entry—not
+   the flight, shaft end, or a guessed hidden point. If you need to label manually, use these four
+   outer-double-rim junctions in the displayed order:
 
    | Model point | Physical point to tap                            |
    | ----------- | ------------------------------------------------ |
@@ -118,11 +128,7 @@ can honestly provide ground truth.
    | CAL 3       | the outer-double rim junction between D8 and D11 |
    | CAL 4       | the outer-double rim junction between D13 and D6 |
 
-6. For a **Dart test**, tap each clearly visible physical dart entry tip—not the flight, shaft end,
-   or a guessed hidden point. The shown deterministic score is a check on your manual point, not a
-   camera prediction. A **Blank board** intentionally stops after the four board points; do not add
-   an invented dart label.
-7. Recheck the label statement and choose **Complete review · Auto-save**. On the configured
+7. Recheck the label statement and choose **Confirm review · Auto-save**. On the configured
    consent-gated development deployment, that completed review automatically saves the matched trio
    to private Blob. The Lab keeps its camera disabled until the exact `development-consent-v1`/
    private-store setup in [`20-private-capture-lab.md`](20-private-capture-lab.md) is ready; it has
