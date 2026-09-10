@@ -16,11 +16,6 @@ import { VisionDiagnostics } from './components/VisionDiagnostics';
 import { CameraPlayRouter } from './components/CameraPlayRouter';
 import { DataLab } from './components/DataLab';
 import type { CameraTurnProposal } from './lib/cameraProposal';
-import {
-  downloadCorrectedDevelopmentEvidence,
-  type CorrectedDevelopmentEvidenceSample,
-  type LocalDevelopmentEvidence,
-} from './lib/developmentVision/localEvidence';
 import { Dartboard, type DartboardMarker } from './components/Dartboard';
 
 type GameMode = 'x01' | 'cricket';
@@ -35,8 +30,6 @@ interface DartDraft {
   requiresReview: boolean;
   /** Development suggestions require an explicit human confirm/correction before visit confirmation. */
   developmentSuggestion: boolean;
-  /** Opt-in local JPEG + detector record, held in memory until the tester exports it. */
-  developmentEvidence?: LocalDevelopmentEvidence;
   filled: boolean;
 }
 
@@ -74,29 +67,6 @@ function blankDrafts(): DartDraft[] {
   }));
 }
 
-function reviewedDevelopmentEvidenceFromDrafts(
-  drafts: readonly DartDraft[],
-): CorrectedDevelopmentEvidenceSample[] {
-  return drafts.flatMap((draft) => {
-    if (
-      !draft.filled ||
-      draft.requiresReview ||
-      !draft.developmentSuggestion ||
-      draft.developmentEvidence === undefined
-    ) {
-      return [];
-    }
-    return [
-      {
-        slot: draft.slot,
-        finalZone: draft.zone,
-        reviewState: draft.source === 'corrected' ? 'corrected' : 'confirmed-as-predicted',
-        evidence: draft.developmentEvidence,
-      },
-    ];
-  });
-}
-
 function newX01Game(): X01State {
   return createX01State(['Alex', 'Jordan'], { startingScore: 501, outRule: 'double' });
 }
@@ -115,9 +85,6 @@ export function App() {
   const [drafts, setDrafts] = useState<DartDraft[]>(blankDrafts);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [developmentEvidenceArchive, setDevelopmentEvidenceArchive] = useState<
-    CorrectedDevelopmentEvidenceSample[]
-  >([]);
   const [notice, setNotice] = useState(
     'Choose a DartCard, then tap the board. Live Scoring uses a separate browser-local learned vision path when an approved model is installed.',
   );
@@ -132,17 +99,9 @@ export function App() {
     if (remaining === undefined || remaining > 170) return undefined;
     return findCheckoutRoutes(remaining, { limit: 1 })[0]?.notation;
   }, [remaining]);
-  const currentDevelopmentEvidence = useMemo(
-    () => reviewedDevelopmentEvidenceFromDrafts(drafts),
-    [drafts],
-  );
   const pendingDevelopmentReviewCount = drafts.filter(
     (draft) => draft.filled && draft.developmentSuggestion && draft.requiresReview,
   ).length;
-  const exportableDevelopmentEvidence = [
-    ...developmentEvidenceArchive,
-    ...currentDevelopmentEvidence,
-  ];
 
   const markers: DartboardMarker[] = drafts
     .filter((draft) => draft.filled)
@@ -221,14 +180,6 @@ export function App() {
     setNotice(`Dart ${slot + 1} confirmed as ${formatZone(draft.zone)} by the player.`);
   };
 
-  const exportDevelopmentEvidence = () => {
-    if (exportableDevelopmentEvidence.length === 0) return;
-    downloadCorrectedDevelopmentEvidence(exportableDevelopmentEvidence);
-    setNotice(
-      `${exportableDevelopmentEvidence.length} human-reviewed local development sample${exportableDevelopmentEvidence.length === 1 ? '' : 's'} downloaded. Nothing was uploaded.`,
-    );
-  };
-
   const addCameraProposal = (proposal: CameraTurnProposal): number | null => {
     if (gameComplete) {
       setNotice('This game is finished. Start a new game before recording another dart.');
@@ -252,9 +203,6 @@ export function App() {
               wireMarginMm: proposal.wireMarginMm,
               requiresReview: proposal.disposition === 'review',
               developmentSuggestion: proposal.developmentSuggestion === true,
-              ...(proposal.developmentEvidence === undefined
-                ? {}
-                : { developmentEvidence: proposal.developmentEvidence }),
               filled: true,
             }
           : draft,
@@ -312,16 +260,9 @@ export function App() {
         ...current,
       ].slice(0, 8),
     );
-    if (currentDevelopmentEvidence.length > 0) {
-      setDevelopmentEvidenceArchive((current) => [...current, ...currentDevelopmentEvidence]);
-    }
     setDrafts(blankDrafts());
     setSelectedSlot(null);
-    setNotice(
-      currentDevelopmentEvidence.length > 0
-        ? `${outcome} ${currentDevelopmentEvidence.length} reviewed development sample${currentDevelopmentEvidence.length === 1 ? '' : 's'} is ready for local export.`
-        : outcome,
-    );
+    setNotice(outcome);
     return true;
   };
 
@@ -550,37 +491,6 @@ export function App() {
                     OPEN LIVE SCORING
                   </button>
                 </div>
-
-                {(pendingDevelopmentReviewCount > 0 ||
-                  exportableDevelopmentEvidence.length > 0) && (
-                  <section className="development-evidence-review">
-                    <small>LOCAL DEVELOPMENT EVIDENCE</small>
-                    {pendingDevelopmentReviewCount > 0 ? (
-                      <p>
-                        Confirm as shown or correct {pendingDevelopmentReviewCount} development
-                        DartCard
-                        {pendingDevelopmentReviewCount === 1 ? '' : 's'} before it can become a
-                        training sample.
-                      </p>
-                    ) : (
-                      <p>
-                        {exportableDevelopmentEvidence.length} human-reviewed sample
-                        {exportableDevelopmentEvidence.length === 1 ? '' : 's'} is in page memory.
-                        Download JPEGs and a paired manifest manually; nothing uploads.
-                      </p>
-                    )}
-                    <button
-                      className="button secondary"
-                      onClick={exportDevelopmentEvidence}
-                      disabled={
-                        pendingDevelopmentReviewCount > 0 ||
-                        exportableDevelopmentEvidence.length === 0
-                      }
-                    >
-                      DOWNLOAD REVIEWED TEST SAMPLES
-                    </button>
-                  </section>
-                )}
 
                 <div className="notice" role="status">
                   <small>SESSION LOG</small>

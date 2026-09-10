@@ -22,9 +22,9 @@ from darts180_vision.deepdarts_yolo_audit import DatasetAuditError, audit_deepda
 _MANIFEST_SCHEMA_VERSION = 1
 _REQUIRED_NUMERIC_NAMES = ["0", "1", "2", "3", "4"]
 _DEFAULT_PUBLIC_ASSET_PATH = "/models/darts180-deepdarts-yolo-dev-v1.onnx"
-_TRAINING_DATA_KINDS = frozenset(
-    {"synthetic-only", "real-reviewed", "mixed-synthetic-and-real"}
-)
+_TRAINING_DATA_KINDS = frozenset({"synthetic-only", "real-reviewed", "mixed-synthetic-and-real"})
+_SYNTHETIC_BOOTSTRAP_REPORT = "darts180-synthetic-fivepoint-bootstrap.json"
+_MIXED_DATASET_REPORT = "darts180-mixed-fivepoint-dataset.json"
 
 
 class DevelopmentTrainingError(ValueError):
@@ -151,7 +151,6 @@ def build_development_manifest(
     }
 
 
-
 def _validate_training_data_kind(value: str) -> None:
     if value not in _TRAINING_DATA_KINDS:
         allowed = ", ".join(sorted(_TRAINING_DATA_KINDS))
@@ -159,36 +158,151 @@ def _validate_training_data_kind(value: str) -> None:
 
 
 def validate_dataset_provenance(root: Path, training_data_kind: str) -> None:
-    """Bind the repository's synthetic bootstrap report to an honest artifact provenance field."""
+    """Bind recognized local source reports to an honest development artifact provenance field."""
     _validate_training_data_kind(training_data_kind)
-    synthetic_report = root / "darts180-synthetic-fivepoint-bootstrap.json"
-    if synthetic_report.is_file():
-        try:
-            report = json.loads(synthetic_report.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    synthetic_report = root / _SYNTHETIC_BOOTSTRAP_REPORT
+    mixed_report = root / _MIXED_DATASET_REPORT
+    if synthetic_report.is_file() and mixed_report.is_file():
+        raise DevelopmentTrainingError(
+            "A dataset cannot carry both synthetic-only and mixed provenance reports."
+        )
+    if mixed_report.is_file():
+        _validate_mixed_dataset_report(mixed_report)
+        if training_data_kind != "mixed-synthetic-and-real":
             raise DevelopmentTrainingError(
-                "Could not read the synthetic bootstrap provenance report."
-            ) from error
-        provenance = report.get("syntheticProvenance") if isinstance(report, dict) else None
-        if not isinstance(provenance, dict):
-            raise DevelopmentTrainingError("Synthetic bootstrap report has no usable provenance object.")
-        if (
-            provenance.get("consentVersion") != "SYNTHETIC-NO-USER-DATA"
-            or provenance.get("admissionStatus") != "synthetic-not-real-world-evaluation"
-            or provenance.get("realWorldEvaluationEligible") is not False
-        ):
-            raise DevelopmentTrainingError(
-                "Synthetic bootstrap provenance is incomplete; do not train from an ambiguously labeled corpus."
+                "A reviewed mixed dataset must produce a mixed-synthetic-and-real development manifest."
             )
+        return
+    if synthetic_report.is_file():
+        _validate_synthetic_bootstrap_report(synthetic_report)
         if training_data_kind != "synthetic-only":
             raise DevelopmentTrainingError(
                 "A synthetic bootstrap dataset must produce a synthetic-only development manifest; "
                 "do not present it as reviewed real or mixed data."
             )
-    elif training_data_kind == "synthetic-only":
+        return
+    if training_data_kind == "synthetic-only":
         raise DevelopmentTrainingError(
             "synthetic-only training requires the generated synthetic bootstrap provenance report in dataset_root."
         )
+    if training_data_kind == "mixed-synthetic-and-real":
+        raise DevelopmentTrainingError(
+            "mixed-synthetic-and-real training requires the reviewed mixed dataset provenance report in dataset_root."
+        )
+
+
+def _validate_synthetic_bootstrap_report(path: Path) -> None:
+    report = _read_provenance_report(path, "synthetic bootstrap")
+    provenance = report.get("syntheticProvenance")
+    if not isinstance(provenance, dict):
+        raise DevelopmentTrainingError(
+            "Synthetic bootstrap report has no usable provenance object."
+        )
+    if (
+        provenance.get("consentVersion") != "SYNTHETIC-NO-USER-DATA"
+        or provenance.get("admissionStatus") != "synthetic-not-real-world-evaluation"
+        or provenance.get("realWorldEvaluationEligible") is not False
+    ):
+        raise DevelopmentTrainingError(
+            "Synthetic bootstrap provenance is incomplete; do not train from an ambiguously labeled corpus."
+        )
+
+
+def _validate_mixed_dataset_report(path: Path) -> None:
+    report = _read_provenance_report(path, "mixed dataset")
+    if report.get("mixingVersion") != 1:
+        raise DevelopmentTrainingError("Mixed dataset report has an unsupported mixingVersion.")
+    provenance = report.get("mixedProvenance")
+    if not isinstance(provenance, dict):
+        raise DevelopmentTrainingError("Mixed dataset report has no usable mixedProvenance object.")
+    if provenance.get("trainingDataKind") != "mixed-synthetic-and-real":
+        raise DevelopmentTrainingError(
+            "Mixed dataset report does not declare mixed-synthetic-and-real data."
+        )
+    operator_review = provenance.get("operatorReview")
+    if (
+        not isinstance(operator_review, dict)
+        or not _non_empty_string(operator_review.get("realReviewId"))
+        or not _non_empty_string(operator_review.get("syntheticReviewId"))
+        or operator_review.get("automaticTrainingAdmission") is not False
+    ):
+        raise DevelopmentTrainingError(
+            "Mixed dataset report requires explicit real/synthetic operator review and no automatic admission."
+        )
+    real = provenance.get("real")
+    if not isinstance(real, dict) or not _sha256_string(real.get("compilationReportSha256")):
+        raise DevelopmentTrainingError(
+            "Mixed dataset report lacks a reviewed real compilation fingerprint."
+        )
+    _require_non_empty_counts(real.get("includedImageCounts"), "Mixed dataset reviewed real")
+    synthetic = provenance.get("synthetic")
+    if (
+        not isinstance(synthetic, dict)
+        or not _sha256_string(synthetic.get("bootstrapReportSha256"))
+        or synthetic.get("usedForTrainingOnly") is not True
+        or synthetic.get("realWorldEvaluationEligible") is not False
+    ):
+        raise DevelopmentTrainingError(
+            "Mixed dataset report lacks synthetic bootstrap provenance restricted to training only."
+        )
+    synthetic_counts = synthetic.get("includedImageCounts")
+    if not isinstance(synthetic_counts, dict) or not isinstance(synthetic_counts.get("train"), int):
+        raise DevelopmentTrainingError(
+            "Mixed dataset report lacks a synthetic training image count."
+        )
+    if (
+        synthetic_counts["train"] < 1
+        or synthetic_counts.get("val") != 0
+        or synthetic_counts.get("test") != 0
+    ):
+        raise DevelopmentTrainingError(
+            "Mixed dataset synthetic examples must appear in train only, never real validation/test."
+        )
+    evaluation = provenance.get("evaluation")
+    if (
+        not isinstance(evaluation, dict)
+        or evaluation.get("validationContainsOnlyReviewedReal") is not True
+        or evaluation.get("testContainsOnlyReviewedReal") is not True
+        or evaluation.get("productionReady") is not False
+    ):
+        raise DevelopmentTrainingError(
+            "Mixed dataset report must preserve real-only validation/test and remain non-production."
+        )
+
+
+def _read_provenance_report(path: Path, label: str) -> dict[str, Any]:
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DevelopmentTrainingError(f"Could not read the {label} provenance report.") from error
+    if not isinstance(report, dict):
+        raise DevelopmentTrainingError(f"The {label} provenance report must contain an object.")
+    return report
+
+
+def _non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _sha256_string(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _require_non_empty_counts(value: Any, label: str) -> None:
+    if not isinstance(value, dict) or any(
+        not isinstance(value.get(split), int)
+        or isinstance(value.get(split), bool)
+        or value[split] < 1
+        for split in ("train", "val", "test")
+    ):
+        raise DevelopmentTrainingError(
+            f"{label} data must include at least one real example in train, val, and test."
+        )
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -340,6 +454,11 @@ def train_and_export(args: argparse.Namespace) -> dict[str, Any]:
                     "Collect and evaluate on held-out consented real throws before relying on any result.",
                 ]
                 if args.training_data_kind == "synthetic-only"
+                else [
+                    "This mixed artifact must report metrics on its preserved real-only validation and test sessions; synthetic metrics are not physical-board proof.",
+                    "Keep every first-pass score editable while additional real sessions test and improve the model.",
+                ]
+                if args.training_data_kind == "mixed-synthetic-and-real"
                 else []
             ),
             "Run the browser contract tests and inspect ONNX Runtime initialization on target phones.",
@@ -360,7 +479,9 @@ def main() -> None:
         )
     )
     parser.add_argument(
-        "dataset_root", type=Path, help="Local numeric five-point YOLO dataset containing data.yaml."
+        "dataset_root",
+        type=Path,
+        help="Local numeric five-point YOLO dataset containing data.yaml.",
     )
     parser.add_argument(
         "--base-model",

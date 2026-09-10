@@ -20,6 +20,10 @@ test('normal Live Scoring selects only learned runtime paths, never the retired 
     `${productionCamera}\n${developmentCamera}`,
     /cameraScoring|autoBoardFit|boardFit|startPlayReferenceCapture/,
   );
+  assert.doesNotMatch(
+    `${app}\n${developmentCamera}`,
+    /downloadCorrectedDevelopmentEvidence|DOWNLOAD REVIEWED TEST SAMPLES|Save local test evidence/,
+  );
 });
 
 test('the top-level app keeps manual labels in a consent-gated Data Lab with automatic private saving', () => {
@@ -46,7 +50,9 @@ test('the top-level app keeps manual labels in a consent-gated Data Lab with aut
   assert.match(consent, /DEVELOPMENT-DATA-LAB-CONSENT-V1/);
   assert.match(consent, /consented-development-unreviewed/);
   assert.match(developmentCamera, /trainingDataKind === 'synthetic-only'/);
+  assert.match(developmentCamera, /trainingDataKind === 'mixed-synthetic-and-real'/);
   assert.match(developmentCamera, /SYNTHETIC BOOTSTRAP ONLY · NOT VALIDATED ON REAL THROWS/);
+  assert.match(developmentCamera, /REVIEWED REAL \+ SIMULATED TRAINING · CHECK EVERY SUGGESTION/);
   assert.match(lab, /NEXT · TAP THE BOARD POINTS/);
   assert.match(lab, /COMPLETE REVIEW · AUTO-SAVE/);
   assert.match(lab, /automaticSaveStartedRef\.current = true/);

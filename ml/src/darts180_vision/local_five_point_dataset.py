@@ -1,9 +1,10 @@
 """Compile human-reviewed local captures into the five-point YOLO training shape.
 
-This is intentionally a local file-system tool. It takes browser-exported JPEG/annotation pairs that
-were made with the explicit five-point annotation profile, preserves session boundaries while making
-train/validation/test splits, and writes a conventional numeric YOLO dataset. It never downloads
-media or weights, contacts an API, or installs/deploys a model artifact.
+This is intentionally a local file-system tool. It takes approved JPEG/annotation pairs retrieved
+by a restricted storage operator after the explicit five-point annotation profile and manual review,
+preserves session boundaries while making train/validation/test splits, and writes a conventional
+numeric YOLO dataset. It never reads Blob, downloads media or weights, contacts an API, or
+installs/deploys a model artifact.
 """
 
 from __future__ import annotations

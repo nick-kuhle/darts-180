@@ -103,9 +103,10 @@ in the web Annotation Lab. Its four outer-double-rim junctions have a different 
 ordinary D20/D6/D3/D11 annotation profile; they match the development browser engine's `cal1`–`cal4`
 source frame exactly.
 
-Keep each approved JPEG and its exported annotation JSON together in a local folder outside this
-repository. Use a stable setup/session ID for one continuous phone/mount/light configuration, then
-compile only reviewed self-capture pairs:
+A restricted storage operator retrieves each approved private JPEG + annotation JSON pair into a
+protected local folder outside this repository. The Data Lab contributor never downloads it. Use a
+stable setup/session ID for one continuous phone/mount/light configuration, then compile only reviewed
+self-capture pairs:
 
 ```bash
 PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
@@ -122,6 +123,37 @@ labels. It never downloads, uploads, trains, or deploys. A completed private Dat
 automatic training admission; conduct restricted privacy/provenance/label review first. Read
 [`docs/19-build-the-first-camera-model.md`](../docs/19-build-the-first-camera-model.md) before starting
 a campaign.
+
+## Mix reviewed real throws with simulated training scenes
+
+Once a restricted operator has reviewed and compiled the private Darts 180 records, the offline
+mixer can combine those real examples with the procedural bootstrap **without contaminating the
+real-world exam**:
+
+```bash
+PYTHONPATH=src python -m darts180_vision.mixed_five_point_dataset \
+  --real-dataset-root /secure/path/to/compiled-five-point-v1 \
+  --synthetic-dataset-root /secure/path/to/darts180-synthetic-fivepoint-v1 \
+  --output-directory /secure/path/to/mixed-five-point-v1 \
+  --mix-id darts180-mixed-dev-v1 \
+  --real-review-id private-capture-review-v1 \
+  --synthetic-review-id procedural-renderer-review-v1
+```
+
+The mixer accepts only the repository's approved report shapes, re-audits both inputs, rejects exact
+JPEG duplicates, and creates one external-only data set with this fixed policy:
+
+| Split   | Contents                                                           |
+| ------- | ------------------------------------------------------------------ |
+| `train` | reviewed real train examples + procedural synthetic train examples |
+| `val`   | reviewed real validation examples only                             |
+| `test`  | reviewed real test examples only                                   |
+
+It writes `darts180-mixed-fivepoint-dataset.json`, including source-report hashes, explicit operator
+review IDs, source counts, and the rule that automatic training admission remains false. It does not
+read Vercel Blob, contact a service, access browser data, train, install, or deploy a model. Use
+`--training-data-kind mixed-synthetic-and-real` when training from this output; the trainer refuses a
+mixed manifest unless that report preserves real-only validation and test splits.
 
 ## External YOLO research intake
 
@@ -148,26 +180,28 @@ report's local paths to Git.
 ## Editable five-point development training/export
 
 Once a **locally compiled Darts 180 five-point set**, the external-only **fully synthetic five-point
-bootstrap**, or a lawfully acquired local DeepDarts-style export and a **local** YOLOv8-compatible base
-checkpoint are available, `darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX
-baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
+bootstrap**, a reviewed **mixed real + synthetic five-point set**, or a lawfully acquired local
+DeepDarts-style export and a **local** YOLOv8-compatible base checkpoint are available,
+`darts180_vision.deepdarts_yolo_train` can create an isolated browser ONNX baseline. It runs the structural audit first and refuses a changed five-class numeric map, label-integrity
 issues, or no dart-plus-four-anchor frame. It does not download data/weights, call Roboflow or another
 hosted inference service, copy output into `apps/web/public`, deploy, or make a production claim.
 
 The trainer requires `--training-data-kind` for every experiment. When training from the synthetic
 bootstrap, use `--training-data-kind synthetic-only` and a data ID such as `synthetic-five-point-v1`; the
 trainer verifies the bootstrap report and writes that provenance into the browser manifest. A synthetic-only
-model is not real-world validation and cannot be installed as a production scoring model.
+model is not real-world validation and cannot be installed as a production scoring model. For the reviewed
+mixed output above, use `mixed-synthetic-and-real`; the trainer requires its mixed-provenance report and
+refuses synthetic examples in validation or test.
 
 ```bash
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
-  /secure/path/to/compiled-five-point-v1 \
+  /secure/path/to/mixed-five-point-v1 \
   --base-model /secure/path/to/approved-yolov8n.pt \
-  --output-directory /secure/path/to/darts180-five-point-run \
-  --model-version darts180-local-dev-YYYY-MM-DD \
-  --training-data-id local-five-point-campaign-v1 \
-  --training-data-kind real-reviewed \
-  --license-review-id local-self-capture-review-v1 \
+  --output-directory /secure/path/to/darts180-mixed-five-point-run \
+  --model-version darts180-mixed-dev-YYYY-MM-DD \
+  --training-data-id darts180-mixed-dev-v1 \
+  --training-data-kind mixed-synthetic-and-real \
+  --license-review-id local-self-capture-and-procedural-review-v1 \
   --hash-images
 ```
 

@@ -108,18 +108,9 @@ model never outputs a score.
    DartCard.
 4. Open **Edit Scores**. Choose **Confirm as shown** when correct, or tap the board to set the corrected
    score. Development DartCards block visit confirmation until one of those explicit actions occurs.
-5. Optionally enable **Save local test evidence** before throwing. This captures a bounded JPEG and the
-   actual detector record in page memory only. It is not uploaded, placed in browser storage, or retained
-   after the page session.
-6. In Score Review, use **Download reviewed test samples**. The browser downloads one JPEG per
-   human-reviewed dart and a paired JSON manifest. The manifest names the JPEGs, final human score,
-   prediction, detector boxes, board point, exact model hash/version, and image-coordinate convention.
-
-The evidence JPEG is a post-suggestion settled camera frame, not falsely claimed to be the exact
-transferred `ImageBitmap`; detector coordinates are scaled into the exported JPEG coordinate frame. The
-export is an intake aid, not sacred ground truth. A reviewer still applies consent, face/background
-redaction, independent labeling, duplicate checks, and dataset/split governance before it can train a
-future model.
+5. Keep model-training collection in **Data Lab**, not Live Scoring. Live Scoring neither downloads nor
+   exports camera frames or labels. A completed Data Lab review automatically saves its matching private
+   JPEG/manifest/annotations record; a restricted operator screens it before any later training handoff.
 
 Before there is any model to make those suggestions, bootstrap real throws through the guided **Data Lab**
 using its explicit five-point rim-junction/tip labels. Its unchecked entry agreement records that completed
@@ -135,9 +126,11 @@ tool, not a normal Live Scoring step or user authentication. In the separately c
 `ml/src/darts180_vision/deepdarts_yolo_train.py` is a deliberate local-only recipe. It does not download
 data or base weights, call a hosted API, install an artifact into the web app, or deploy anything.
 
-On a dedicated ML machine, first compile approved browser-captured JPEG/annotation pairs into a
-session-disjoint five-point YOLO folder. The compiler is source-preserving: it rejects incorrect label
-schemes, unsafe paths, duplicates, missing session IDs, and fewer than three setup sessions.
+On a dedicated ML machine, a restricted operator first retrieves approved private Data Lab
+JPEG/annotation pairs into a protected local workspace, then compiles them into a session-disjoint
+five-point YOLO folder. The contributor-facing app has no browser download/export path. The compiler is
+source-preserving: it rejects incorrect label schemes, unsafe paths, duplicates, missing session IDs, and
+fewer than three setup sessions.
 
 ```bash
 cd ml
@@ -148,19 +141,33 @@ PYTHONPATH=src python -m darts180_vision.local_five_point_dataset \
   --accepted-consent-version DEVELOPMENT-DATA-LAB-CONSENT-V1
 ```
 
-Then supply that locally compiled folder and a local YOLOv8-compatible base checkpoint to training:
+For a first mixed development experiment, generate the external-only procedural bootstrap and mix it
+with the approved real compilation. The mixer copies synthetic examples into `train` only and retains
+real-only `val`/`test` sessions:
+
+```bash
+PYTHONPATH=src python -m darts180_vision.mixed_five_point_dataset \
+  --real-dataset-root /secure/path/to/compiled-five-point-v1 \
+  --synthetic-dataset-root /secure/path/to/darts180-synthetic-fivepoint-v1 \
+  --output-directory /secure/path/to/mixed-five-point-v1 \
+  --mix-id darts180-mixed-dev-v1 \
+  --real-review-id private-capture-review-v1 \
+  --synthetic-review-id procedural-renderer-review-v1
+```
+
+Then supply that reviewed mixed folder and a local YOLOv8-compatible base checkpoint to training:
 
 ```bash
 cd ml
 pip install -e '.[train,export,quality]'
 PYTHONPATH=src python -m darts180_vision.deepdarts_yolo_train \
-  /secure/path/to/compiled-five-point-v1 \
+  /secure/path/to/mixed-five-point-v1 \
   --base-model /secure/path/to/approved-yolov8n.pt \
-  --output-directory /secure/path/to/darts180-five-point-run \
-  --model-version darts180-local-dev-YYYY-MM-DD \
-  --training-data-id local-five-point-campaign-v1 \
-  --training-data-kind real-reviewed \
-  --license-review-id local-self-capture-review-v1 \
+  --output-directory /secure/path/to/darts180-mixed-five-point-run \
+  --model-version darts180-mixed-dev-YYYY-MM-DD \
+  --training-data-id darts180-mixed-dev-v1 \
+  --training-data-kind mixed-synthetic-and-real \
+  --license-review-id local-self-capture-and-procedural-review-v1 \
   --hash-images
 ```
 
@@ -169,9 +176,10 @@ mapping, or no dart-plus-four-anchor example. It exports a fixed-size raw ONNX g
 it, inspects its single output name, and writes a **development-only** manifest beside the artifact. Raw
 media, labels, base checkpoints, experiment runs, and model bytes remain outside Git.
 
-A reviewer must then inspect the artifact, browser-load it on target devices, copy the two reviewed files
-into the static models folder, run the web contract tests, and make a separate code/review decision before
-any development deployment. This is a training handoff—not a production release command.
+A reviewer must then inspect the artifact, browser-load it on target devices, place the two reviewed files
+into the ignored static-model build input without committing model bytes, run the web contract tests, and
+make a separate code/review decision before any development deployment. This is a training handoff—not a
+production release command.
 
 ## 7. Known limitations and next measurements
 

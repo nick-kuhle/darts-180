@@ -1,7 +1,7 @@
 # Guided Data Lab and consent-gated private Vercel capture intake
 
-**Snapshot date:** 2026-09-08 (America/Los_Angeles)<br />
-**Status:** implemented locally; fail-closed until the existing Vercel project has a connected private Blob store and the explicit development access mode<br />
+**Snapshot date:** 2026-09-09 (America/Los_Angeles)<br />
+**Status:** deployed on the existing Vercel project with its connected private Blob store and explicit development access mode; records remain fail-closed if either condition is removed<br />
 **Audience:** a Darts 180 development contributor and the restricted data operator
 
 ## Scope and non-goals
@@ -218,6 +218,16 @@ just because it looks photographic. Do not put one into supervised training unle
 synthetic-provenanced and receives separately reviewed, geometry-consistent labels. Do not relabel it as
 a real capture. The current bootstrap builder intentionally uses known procedural geometry rather than
 inventing labels for an AI image.
+
+### Mixed development model handoff
+
+After a restricted operator has reviewed private Darts 180 records, compile those real pairs locally and
+mix them with the procedural bootstrap using `darts180_vision.mixed_five_point_dataset`. Its fixed policy
+puts reviewed real plus synthetic examples in `train`, but leaves `val` and `test` **real-only**. It
+re-audits input pairs and duplicate bytes, writes an explicit `mixed-synthetic-and-real` provenance report,
+and does not retrieve Blob records, automatically admit data, train, or deploy a model. A candidate still
+must be trained and browser-tested as an editable development model before normal Live Scoring can make
+learned anchor/tip suggestions without manual point taps.
 
 See [`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) for the model-building
 gates and [`runbooks/capture-lab.md`](runbooks/capture-lab.md) for the operating sequence.
