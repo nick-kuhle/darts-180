@@ -256,6 +256,7 @@ function AutoCaptureLab({
   const sessionPoseRef = useRef<PoseSignature | null>(null);
   const sessionPoseSourceRef = useRef<'learned' | 'setup' | null>(null);
   const setupCalibrationRef = useRef<SetupCalibration | null>(null);
+  const developmentManifestRef = useRef<DeepDartsDevelopmentModelManifest | null>(null);
   const poseSourceRef = useRef<'learned' | 'setup' | null>(null);
   const setupTemplateRef = useRef<SetupAffineTemplate | null>(null);
   const templateDraggingRef = useRef(false);
@@ -465,7 +466,48 @@ function AutoCaptureLab({
     templateDragOriginRef.current = null;
   };
 
-  const lockSetupCalibration = () => {
+  const initializeDevelopmentModel = async (
+    manifest: DeepDartsDevelopmentModelManifest,
+    generation: number,
+  ): Promise<boolean> => {
+    const client = new DevelopmentWebInferenceClient();
+    clientRef.current = client;
+    try {
+      setPhase('loading-model');
+      const backend = await client.initialize(manifest);
+      if (generation !== runGenerationRef.current) {
+        await client.dispose();
+        return false;
+      }
+      modelRef.current = manifest;
+      backendRef.current = backend;
+      engineRef.current = new DeepDartsDevelopmentEngine();
+      sessionIdRef.current = newSessionId();
+      setSessionId(sessionIdRef.current);
+      sessionPoseRef.current = null;
+      sessionPoseSourceRef.current = null;
+      poseSourceRef.current = null;
+      lastCapturePoseRef.current = null;
+      lastCaptureDartCountRef.current = 0;
+      awaitingBlankRef.current = true;
+      wasOccupiedRef.current = false;
+      setRuntimeBackend(backend);
+      setModelManifest(manifest);
+      setPoseSource(null);
+      setPhase('running');
+      return true;
+    } catch (error) {
+      if (generation === runGenerationRef.current) {
+        setCameraError(messageForStartError(error));
+        setPhase('running');
+      }
+      clientRef.current = null;
+      await client.dispose();
+      return false;
+    }
+  };
+
+  const lockSetupCalibration = async () => {
     const template = setupTemplateRef.current;
     if (template === null) return;
     const anchorImagePoints = setupAffineAnchorImagePoints(template);
@@ -484,11 +526,25 @@ function AutoCaptureLab({
     const calibration: SetupCalibration = { anchorImagePoints, pose };
     setupCalibrationRef.current = calibration;
     setSetupCalibration(calibration);
-    setCalibrating(false);
     applySetupTemplate(null);
     templateDraggingRef.current = false;
     templateDragOriginRef.current = null;
-    pushActivity('info', 'Setup locked · the board template now fits the camera mount.');
+    const manifest = developmentManifestRef.current;
+    if (manifest === null) {
+      setCameraError('The local development model manifest is unavailable; restart the camera.');
+      setPhase('running');
+      applySetupTemplate(template);
+      setCalibrating(true);
+      return;
+    }
+    const ready = await initializeDevelopmentModel(manifest, runGenerationRef.current);
+    if (!ready) {
+      applySetupTemplate(template);
+      setCalibrating(true);
+      return;
+    }
+    setCalibrating(false);
+    pushActivity('info', 'Setup locked · anchor detection is now running.');
   };
 
   const canvasClientToVideoPoint = (clientX: number, clientY: number): ImagePoint | null => {
@@ -939,10 +995,12 @@ function AutoCaptureLab({
     setCameraActive(false);
     setRuntimeBackend(null);
     setModelManifest(null);
+    developmentManifestRef.current = null;
     setPoseReady(false);
     setPoseSource(null);
     setSetupCalibration(null);
     setCalibrating(false);
+    applySetupTemplate(null);
     setVisibleDartCount(0);
     setPhase('idle');
     setupCalibrationRef.current = null;
@@ -1023,19 +1081,7 @@ function AutoCaptureLab({
       if (generation !== runGenerationRef.current) return;
       setCameraActive(true);
 
-      setPhase('loading-model');
-      const client = new DevelopmentWebInferenceClient();
-      clientRef.current = client;
-      const backend = await client.initialize(loaded.manifest);
-      if (generation !== runGenerationRef.current) {
-        await client.dispose();
-        return;
-      }
-      modelRef.current = loaded.manifest;
-      backendRef.current = backend;
-      engineRef.current = new DeepDartsDevelopmentEngine();
-      sessionIdRef.current = newSessionId();
-      setSessionId(sessionIdRef.current);
+      developmentManifestRef.current = loaded.manifest;
       sessionPoseRef.current = null;
       sessionPoseSourceRef.current = null;
       setupCalibrationRef.current = null;
@@ -1044,13 +1090,15 @@ function AutoCaptureLab({
       lastCaptureDartCountRef.current = 0;
       awaitingBlankRef.current = true;
       wasOccupiedRef.current = false;
-      setRuntimeBackend(backend);
-      setModelManifest(loaded.manifest);
+      const template = defaultSetupTemplate();
+      if (template === null)
+        throw new Error('The camera frame is not ready for setup calibration.');
+      applySetupTemplate(template);
       setPoseSource(null);
       setSetupCalibration(null);
-      setCalibrating(false);
+      setCalibrating(true);
       setPhase('running');
-      pushActivity('info', 'Auto capture is live · frame the board and throw.');
+      pushActivity('info', 'Camera ready · fit the board overlay before anchor detection starts.');
       beginOverlay();
     } catch (error) {
       if (generation !== runGenerationRef.current) return;
@@ -1061,10 +1109,10 @@ function AutoCaptureLab({
   };
 
   useEffect(() => {
-    if (!cameraActive || phase !== 'running') return;
+    if (!cameraActive || phase !== 'running' || calibrating) return;
     const handle = window.setInterval(() => inferenceTickRef.current(), INFERENCE_INTERVAL_MS);
     return () => window.clearInterval(handle);
-  }, [cameraActive, phase]);
+  }, [cameraActive, calibrating, phase]);
 
   const collectionReady = vaultAvailability === 'ready';
   const busy = phase === 'opening' || phase === 'loading-model';
