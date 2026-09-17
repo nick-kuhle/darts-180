@@ -125,12 +125,50 @@ export interface SetupAffineTemplate {
   scaleX: number;
   /** Pixels per millimetre along the template's rotated vertical axis. */
   scaleY: number;
-  /** Clockwise template rotation in radians (video y grows downward). */
+  /** Board roll in radians (video y grows downward). */
   rotationRad: number;
+  /** Optional board tilt around the horizontal image axis. */
+  tiltXRad?: number;
+  /** Optional board tilt around the vertical image axis. */
+  tiltYRad?: number;
+}
+
+const SETUP_TEMPLATE_PERSPECTIVE_MM = 900;
+
+/** Map a canonical board point through the editable camera-fit template. */
+export function mapSetupTemplatePoint(
+  template: SetupAffineTemplate,
+  xMm: number,
+  yMm: number,
+): ImagePoint | null {
+  const tiltXRad = template.tiltXRad ?? 0;
+  const tiltYRad = template.tiltYRad ?? 0;
+  const rollSine = Math.sin(template.rotationRad);
+  const rollCosine = Math.cos(template.rotationRad);
+  const tiltXSine = Math.sin(tiltXRad);
+  const tiltXCosine = Math.cos(tiltXRad);
+  const tiltYSine = Math.sin(tiltYRad);
+  const tiltYCosine = Math.cos(tiltYRad);
+  const scaledX = template.scaleX * xMm;
+  const scaledY = template.scaleY * yMm;
+  const rolledX = rollCosine * scaledX - rollSine * scaledY;
+  const rolledY = rollSine * scaledX + rollCosine * scaledY;
+  const yawedX = tiltYCosine * rolledX;
+  const yawedZ = -tiltYSine * rolledX;
+  const pitchedY = tiltXCosine * rolledY - tiltXSine * yawedZ;
+  const pitchedZ = tiltXSine * rolledY + tiltXCosine * yawedZ;
+  const perspective = 1 + pitchedZ / SETUP_TEMPLATE_PERSPECTIVE_MM;
+  if (!Number.isFinite(perspective) || perspective <= 0) return null;
+  const projectedX = yawedX / perspective;
+  const projectedY = pitchedY / perspective;
+  return {
+    x: template.centre.x + projectedX,
+    y: template.centre.y + projectedY,
+  };
 }
 
 /**
- * Map the four calibration anchor canonical points through an affine board template fit. The
+ * Map the four calibration anchor canonical points through a board template fit. The
  * operator drags a fitted board overlay so its outer-double ring (170 mm canonical radius) matches
  * the board as seen from a tilted phone mount; independent horizontal/vertical scaling and a
  * rotation capture the apparent ellipse without requiring a face-on camera. `null` means the fit
@@ -141,30 +179,25 @@ export function setupAffineAnchorImagePoints(
   anchors: readonly AnnotationAnchor[] = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
 ): ImagePoint[] | null {
   if (anchors.length !== 4) return null;
-  const { centre, scaleX, scaleY, rotationRad } = template;
+  const { centre, scaleX, scaleY, rotationRad, tiltXRad = 0, tiltYRad = 0 } = template;
   if (
     !Number.isFinite(centre.x) ||
     !Number.isFinite(centre.y) ||
     !Number.isFinite(scaleX) ||
     !Number.isFinite(scaleY) ||
     !Number.isFinite(rotationRad) ||
+    !Number.isFinite(tiltXRad) ||
+    !Number.isFinite(tiltYRad) ||
     scaleX <= 0 ||
     scaleY <= 0
   ) {
     return null;
   }
-  const sine = Math.sin(rotationRad);
-  const cosine = Math.cos(rotationRad);
-  const basisX = { x: cosine * scaleX, y: sine * scaleX };
-  const basisY = { x: -sine * scaleY, y: cosine * scaleY };
-  return anchors.map((anchor) => {
-    const x = anchor.canonical.xMm;
-    const y = anchor.canonical.yMm;
-    return {
-      x: centre.x + basisX.x * x + basisY.x * y,
-      y: centre.y + basisX.y * x + basisY.y * y,
-    };
+  const points = anchors.map((anchor) => {
+    const point = mapSetupTemplatePoint(template, anchor.canonical.xMm, anchor.canonical.yMm);
+    return point;
   });
+  return points.every((point): point is ImagePoint => point !== null) ? points : null;
 }
 
 /** Row-major projective matrix mapping image pixels to canonical board millimetres. */

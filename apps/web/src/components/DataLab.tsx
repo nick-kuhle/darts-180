@@ -12,6 +12,7 @@ import {
   DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
   invertHomography,
   mapBoardPointToImage,
+  mapSetupTemplatePoint,
   setupAffineAnchorImagePoints,
   solveImageToBoardHomography,
   type CanonicalPoint,
@@ -537,7 +538,7 @@ function AutoCaptureLab({
   };
 
   const updateTemplateSlider = (
-    field: 'centreX' | 'centreY' | 'rotationDeg' | 'widthPct' | 'heightPct',
+    field: 'centreX' | 'centreY' | 'tiltXDeg' | 'tiltYDeg' | 'rollDeg' | 'widthPct' | 'heightPct',
     value: number,
   ) => {
     const template = setupTemplateRef.current;
@@ -549,7 +550,11 @@ function AutoCaptureLab({
       next = { ...template, centre: { x: (value / 100) * dims.width, y: template.centre.y } };
     } else if (field === 'centreY') {
       next = { ...template, centre: { x: template.centre.x, y: (value / 100) * dims.height } };
-    } else if (field === 'rotationDeg') {
+    } else if (field === 'tiltXDeg') {
+      next = { ...template, tiltXRad: (value * Math.PI) / 180 };
+    } else if (field === 'tiltYDeg') {
+      next = { ...template, tiltYRad: (value * Math.PI) / 180 };
+    } else if (field === 'rollDeg') {
       next = { ...template, rotationRad: (value * Math.PI) / 180 };
     } else if (field === 'widthPct') {
       const bannerScaleX = ((value / 100) * minDim) / (2 * BOARD_RADII_MM.doubleOuter);
@@ -572,7 +577,7 @@ function AutoCaptureLab({
     if (values === null) return null;
     const rows: Array<{
       label: string;
-      field: 'centreX' | 'centreY' | 'rotationDeg' | 'widthPct' | 'heightPct';
+      field: 'centreX' | 'centreY' | 'tiltXDeg' | 'tiltYDeg' | 'rollDeg' | 'widthPct' | 'heightPct';
       min: number;
       max: number;
       step: number;
@@ -595,12 +600,28 @@ function AutoCaptureLab({
         display: `${Math.round(values.bullY)}%`,
       },
       {
-        label: 'ROTATION',
-        field: 'rotationDeg',
+        label: 'TILT UP ↔ DOWN',
+        field: 'tiltXDeg',
+        min: -60,
+        max: 60,
+        step: 1,
+        display: `${Math.round(values.tiltXDeg)}°`,
+      },
+      {
+        label: 'TILT LEFT ↔ RIGHT',
+        field: 'tiltYDeg',
+        min: -60,
+        max: 60,
+        step: 1,
+        display: `${Math.round(values.tiltYDeg)}°`,
+      },
+      {
+        label: 'ROLL CW ↔ CCW',
+        field: 'rollDeg',
         min: -180,
         max: 180,
         step: 1,
-        display: `${Math.round(values.rotationDeg)}°`,
+        display: `${Math.round(values.rollDeg)}°`,
       },
       {
         label: 'WIDTH',
@@ -634,11 +655,15 @@ function AutoCaptureLab({
                   ? values.bullX
                   : row.field === 'centreY'
                     ? values.bullY
-                    : row.field === 'rotationDeg'
-                      ? values.rotationDeg
-                      : row.field === 'widthPct'
-                        ? values.widthPct
-                        : values.heightPct
+                    : row.field === 'tiltXDeg'
+                      ? values.tiltXDeg
+                      : row.field === 'tiltYDeg'
+                        ? values.tiltYDeg
+                        : row.field === 'rollDeg'
+                          ? values.rollDeg
+                          : row.field === 'widthPct'
+                            ? values.widthPct
+                            : values.heightPct
               }
               onChange={(event) => updateTemplateSlider(row.field, Number(event.target.value))}
             />
@@ -652,9 +677,11 @@ function AutoCaptureLab({
   const templateSliderValues = (): {
     bullX: number;
     bullY: number;
+    tiltXDeg: number;
+    tiltYDeg: number;
+    rollDeg: number;
     widthPct: number;
     heightPct: number;
-    rotationDeg: number;
   } | null => {
     const template = setupTemplateRef.current;
     const dims = frameDims();
@@ -663,9 +690,11 @@ function AutoCaptureLab({
     return {
       bullX: (template.centre.x / dims.width) * 100,
       bullY: (template.centre.y / dims.height) * 100,
+      tiltXDeg: ((template.tiltXRad ?? 0) * 180) / Math.PI,
+      tiltYDeg: ((template.tiltYRad ?? 0) * 180) / Math.PI,
+      rollDeg: (template.rotationRad * 180) / Math.PI,
       widthPct: ((template.scaleX * 2 * BOARD_RADII_MM.doubleOuter) / minDim) * 100,
       heightPct: ((template.scaleY * 2 * BOARD_RADII_MM.doubleOuter) / minDim) * 100,
-      rotationDeg: (template.rotationRad * 180) / Math.PI,
     };
   };
 
@@ -1667,13 +1696,9 @@ function drawMappedCircle(
 }
 
 function drawSetupTemplate(context: CanvasRenderingContext2D, template: SetupAffineTemplate): void {
-  const { centre, scaleX, scaleY, rotationRad } = template;
-  const sine = Math.sin(rotationRad);
-  const cosine = Math.cos(rotationRad);
-  const mapPoint = (xMm: number, yMm: number): ImagePoint => ({
-    x: centre.x + cosine * scaleX * xMm - sine * scaleY * yMm,
-    y: centre.y + sine * scaleX * xMm + cosine * scaleY * yMm,
-  });
+  const { centre } = template;
+  const mapPoint = (xMm: number, yMm: number): ImagePoint | null =>
+    mapSetupTemplatePoint(template, xMm, yMm);
 
   context.save();
   context.strokeStyle = 'rgba(247, 201, 111, 0.72)';
@@ -1687,6 +1712,7 @@ function drawSetupTemplate(context: CanvasRenderingContext2D, template: SetupAff
       Math.cos(angle) * BOARD_RADII_MM.doubleOuter,
       Math.sin(angle) * BOARD_RADII_MM.doubleOuter,
     );
+    if (edge === null) continue;
     context.moveTo(centre.x, centre.y);
     context.lineTo(edge.x, edge.y);
   }
@@ -1705,6 +1731,7 @@ function drawSetupTemplate(context: CanvasRenderingContext2D, template: SetupAff
     for (let step = 0; step <= steps; step += 1) {
       const angle = (step / steps) * Math.PI * 2;
       const point = mapPoint(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      if (point === null) continue;
       if (step === 0) context.moveTo(point.x, point.y);
       else context.lineTo(point.x, point.y);
     }

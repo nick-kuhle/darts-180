@@ -70,9 +70,10 @@ This loop has no download, key-entry, per-record Save, or review control:
    one settled tip is detected. A still without a usable pose is skipped.
 5. If the learned anchors stay elusive on a real board, tap **CALIBRATE SETUP**. A fitted board
    template (concentric rings plus spokes) appears over the live preview: drag inside the rings to
-   place the bull, drag the top handle to rotate, and drag the right/bottom handles to stretch the
-   ring fit for a tilted phone/mount perspective; then tap **LOCK SETUP**. The four anchors derive
-   from the fitted affine template and the board locks while the learned path is unavailable;
+   place the bull, then use the width, height, horizontal-tilt, vertical-tilt, and clockwise/
+   counter-clockwise roll sliders to fit the ring for a tilted phone/mount perspective; then tap
+   **LOCK SETUP**. The four anchors derive from the fitted perspective template and the board locks
+   while the learned path is unavailable;
    whenever the model resolves all four anchors itself, the learned frame takes over again. This is
    the only human gesture in the workflow and it is never a per-throw control.
 6. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If

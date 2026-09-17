@@ -199,6 +199,27 @@ test('setup template fit honours rotation and both pixel-per-mm axes', () => {
   }
 });
 
+test('setup template fit applies horizontal and vertical tilt independently from roll', () => {
+  const flat: SetupAffineTemplate = {
+    centre: { x: 640, y: 360 },
+    scaleX: 2.2,
+    scaleY: 2.6,
+    rotationRad: 0,
+  };
+  const tilted: SetupAffineTemplate = {
+    ...flat,
+    tiltXRad: (18 * Math.PI) / 180,
+    tiltYRad: (-24 * Math.PI) / 180,
+  };
+  const flatPoints = setupAffineAnchorImagePoints(flat);
+  const tiltedPoints = setupAffineAnchorImagePoints(tilted);
+  assert.notEqual(flatPoints, null);
+  assert.notEqual(tiltedPoints, null);
+  assert.ok(flatPoints !== null && tiltedPoints !== null);
+  assert.notDeepEqual(tiltedPoints, flatPoints);
+  assert.ok(tiltedPoints.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
+});
+
 test('rejects degenerate setup template fits', () => {
   assert.equal(
     setupAffineAnchorImagePoints({

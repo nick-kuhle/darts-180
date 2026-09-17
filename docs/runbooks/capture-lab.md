@@ -68,9 +68,9 @@ The camera loop has no download, key-entry, per-record Save, or review control:
    when a safe board pose is locked and, for a dart record, at least one settled tip is
    detected; otherwise that frame is skipped rather than inventing a point.
 6. If **Board set** never appears, select **CALIBRATE SETUP**: a fitted board template (concentric
-   rings plus spokes) appears over the live preview. Drag inside the rings to move the bull, the
-   top handle to rotate, and the right/bottom handles to stretch the ring fit for a tilted phone/mount
-   perspective, then select **LOCK SETUP**. The four anchors derive from the fitted affine template
+   rings plus spokes) appears over the live preview. Drag inside the rings to move the bull, then use
+   the width, height, horizontal-tilt, vertical-tilt, and clockwise/counter-clockwise roll sliders
+   to fit the ring for a tilted phone/mount perspective, then select **LOCK SETUP**. The four anchors derive from the fitted perspective template
    and the board locks; the learned path takes over whenever the model resolves all four anchors
    itself. Locking the setup counts as a board lock, never a per-throw input.
 7. Whenever the board is clear or the camera starts, Data Lab automatically saves one blank-board
