@@ -117,6 +117,56 @@ export function deriveSetupCalibrationAnchorImagePoints(
   }));
 }
 
+/** Editable setup-fit board template in intrinsic video pixel space. */
+export interface SetupAffineTemplate {
+  /** Bull image point (the template centre). */
+  centre: ImagePoint;
+  /** Pixels per millimetre along the template's rotated horizontal axis. */
+  scaleX: number;
+  /** Pixels per millimetre along the template's rotated vertical axis. */
+  scaleY: number;
+  /** Clockwise template rotation in radians (video y grows downward). */
+  rotationRad: number;
+}
+
+/**
+ * Map the four calibration anchor canonical points through an affine board template fit. The
+ * operator drags a fitted board overlay so its outer-double ring (170 mm canonical radius) matches
+ * the board as seen from a tilted phone mount; independent horizontal/vertical scaling and a
+ * rotation capture the apparent ellipse without requiring a face-on camera. `null` means the fit
+ * is degenerate or unusable.
+ */
+export function setupAffineAnchorImagePoints(
+  template: SetupAffineTemplate,
+  anchors: readonly AnnotationAnchor[] = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
+): ImagePoint[] | null {
+  if (anchors.length !== 4) return null;
+  const { centre, scaleX, scaleY, rotationRad } = template;
+  if (
+    !Number.isFinite(centre.x) ||
+    !Number.isFinite(centre.y) ||
+    !Number.isFinite(scaleX) ||
+    !Number.isFinite(scaleY) ||
+    !Number.isFinite(rotationRad) ||
+    scaleX <= 0 ||
+    scaleY <= 0
+  ) {
+    return null;
+  }
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const basisX = { x: cosine * scaleX, y: sine * scaleX };
+  const basisY = { x: -sine * scaleY, y: cosine * scaleY };
+  return anchors.map((anchor) => {
+    const x = anchor.canonical.xMm;
+    const y = anchor.canonical.yMm;
+    return {
+      x: centre.x + basisX.x * x + basisY.x * y,
+      y: centre.y + basisX.y * x + basisY.y * y,
+    };
+  });
+}
+
 /** Row-major projective matrix mapping image pixels to canonical board millimetres. */
 export type Homography = readonly [
   number,

@@ -4509,6 +4509,10 @@ h3 {
   cursor: crosshair;
 }
 
+.data-lab-camera-frame.is-calibrating .data-lab-auto-canvas {
+  touch-action: none;
+}
+
 .data-lab-calibration-notice {
   position: absolute;
   left: 12px;

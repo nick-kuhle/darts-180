@@ -21,8 +21,8 @@ const CALIBRATION_CLASS_IDS = [
 
 /**
  * Where a collected point came from. Learnt model proposals marked 'learned-suggestion' are never
- * treated as human confirmations; 'setup-calibration' marks a board anchor derived from the one-tap
- * bull-centre/rim-junction setup geometry rather than a detector.
+ * treated as human confirmations; 'setup-calibration' marks a board anchor derived from the fitted
+ * setup template geometry rather than a detector.
  */
 export type DataLabPointSource =
   'learned-suggestion' | 'human-adjusted' | 'human-added' | 'setup-calibration';
@@ -89,8 +89,8 @@ export function buildDataLabLearnedSuggestions(
 
 /**
  * Build suggestions for a board whose four-anchor transform could not be produced by the detector.
- * The anchors come from the one-tap setup calibration rather than learned detections, so every
- * anchored point reports a zero detector confidence. Darts still require learned class-0 evidence.
+ * The anchors come from the fitted setup template rather than learned detections, so every anchored
+ * point reports a zero detector confidence. Darts still require learned class-0 evidence.
  */
 export function buildSetupCalibrationSuggestions(
   inference: DeepDartsInferenceFrameResult,

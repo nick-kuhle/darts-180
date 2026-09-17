@@ -7,9 +7,11 @@ import {
   invertHomography,
   mapBoardPointToImage,
   mapImagePointToBoard,
+  setupAffineAnchorImagePoints,
   solveImageToBoardHomography,
   type CanonicalPoint,
   type ImagePoint,
+  type SetupAffineTemplate,
 } from '../src/lib/annotationGeometry.js';
 import { rotateSourceCanonicalPoint } from '../src/lib/developmentVision/engine.js';
 
@@ -151,4 +153,69 @@ test('setup calibration honours a rotated board orientation', () => {
     assert.ok(Math.abs(point.x - expectedX) < 0.001);
     assert.ok(Math.abs(point.y - expectedY) < 0.001);
   }
+});
+
+test('fits the four calibration anchors to an independent two-axis board template', () => {
+  const template: SetupAffineTemplate = {
+    centre: { x: 640, y: 360 },
+    scaleX: 2.2,
+    scaleY: 2.8,
+    rotationRad: 0,
+  };
+  const derived = setupAffineAnchorImagePoints(template);
+  assert.notEqual(derived, null);
+  assert.ok(derived !== null);
+  assert.equal(derived.length, 4);
+  for (const [index, anchor] of DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.entries()) {
+    const point = derived[index];
+    assert.ok(point !== undefined);
+    assert.ok(Math.abs(point.x - (640 + 2.2 * anchor.canonical.xMm)) < 0.001);
+    assert.ok(Math.abs(point.y - (360 + 2.8 * anchor.canonical.yMm)) < 0.001);
+  }
+});
+
+test('setup template fit honours rotation and both pixel-per-mm axes', () => {
+  const template: SetupAffineTemplate = {
+    centre: { x: 640, y: 360 },
+    scaleX: 2.2,
+    scaleY: 2.6,
+    rotationRad: (30 * Math.PI) / 180,
+  };
+  const { centre, scaleX, scaleY, rotationRad } = template;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const derived = setupAffineAnchorImagePoints(template);
+  assert.notEqual(derived, null);
+  assert.ok(derived !== null);
+  for (const [index, anchor] of DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.entries()) {
+    const point = derived[index];
+    assert.ok(point !== undefined);
+    const expectedX =
+      centre.x + (cosine * scaleX * anchor.canonical.xMm - sine * scaleY * anchor.canonical.yMm);
+    const expectedY =
+      centre.y + (sine * scaleX * anchor.canonical.xMm + cosine * scaleY * anchor.canonical.yMm);
+    assert.ok(Math.abs(point.x - expectedX) < 0.001);
+    assert.ok(Math.abs(point.y - expectedY) < 0.001);
+  }
+});
+
+test('rejects degenerate setup template fits', () => {
+  assert.equal(
+    setupAffineAnchorImagePoints({
+      centre: { x: 640, y: 360 },
+      scaleX: 0,
+      scaleY: 2.4,
+      rotationRad: 0,
+    }),
+    null,
+  );
+  assert.equal(
+    setupAffineAnchorImagePoints({
+      centre: { x: Infinity, y: 360 },
+      scaleX: 2.2,
+      scaleY: 2.4,
+      rotationRad: 0,
+    }),
+    null,
+  );
 });

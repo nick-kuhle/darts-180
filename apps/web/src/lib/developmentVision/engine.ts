@@ -82,7 +82,7 @@ export class DeepDartsDevelopmentEngine {
 
   /**
    * Continue the same joining logic with a board pose that did not come from the current frame's
-   * detectors. The development Data Lab uses this to track darts through a one-tap setup-calibrated
+   * detectors. The development Data Lab uses this to track darts through a setup-template-calibrated
    * board while the learned anchors are unseen. Dart suggestions still require learned class-0 tips.
    */
   public processWithPose(

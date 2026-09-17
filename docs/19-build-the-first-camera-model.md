@@ -105,12 +105,12 @@ can honestly provide ground truth.
 2. Wait until the private collection says **Ready**, then select **Start auto capture** once (the only
    camera button). Keep the full board/number ring visible and use a stable safe mount.
 3. Wait for **Board set**, then throw one to three darts and let them settle. If **Board set** never
-   appears on a real board, select **CALIBRATE SETUP**, centre the bull in the crosshair, and tap the
-   outer-double rim junction between **D5 and D20** once: the 170 mm canonical geometry then locks the
-   board so collection can proceed, with the learned anchors taking over whenever the model resolves
-   them itself. The displayed setup session rotates automatically when the camera moves to a
-   materially different pose; it also rotates on a lighting change, board change, or later collection
-   day. There are no lighting band or camera notes inputs.
+   appears on a real board, select **CALIBRATE SETUP**; drag the fitted rings (move/rotate/stretch)
+   to match the board from the mount perspective, then **LOCK SETUP**: the four anchors derive from
+   the fitted affine template and the board locks so collection can proceed, with the learned
+   anchors taking over whenever the model resolves them itself. The displayed setup session rotates
+   automatically when the camera moves to a materially different pose; it also rotates on a lighting
+   change, board change, or later collection day. There are no lighting band or camera notes inputs.
 4. A newly settled dart auto-captures one board-only JPEG: the entry agreement has already written
    `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance timestamp, and `consented-development-unreviewed`
    status into this record's metadata, and the record stays unreviewed until a restricted operator

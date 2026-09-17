@@ -79,13 +79,13 @@ test('the top-level app keeps a consent-gated Data Lab that auto-captures privat
   assert.match(lab, /sessionIdRef\.current = newSessionId\(\)/);
   assert.match(lab, /Camera moved · started a new setup session\./);
 
-  assert.match(lab, /deriveSetupCalibrationAnchorImagePoints/);
+  assert.match(lab, /setupAffineAnchorImagePoints/);
   assert.match(lab, /processWithPose/);
   assert.match(lab, /poseSignatureFromPose/);
   assert.match(lab, /buildSetupCalibrationSuggestions/);
   assert.match(lab, /CALIBRATE SETUP/);
-  assert.match(lab, /CANCEL SETUP/);
-  assert.match(lab, /D5<\/strong> and <strong>D20/);
+  assert.match(lab, /LOCK SETUP/);
+  assert.match(lab, /<strong>top<\/strong> handle to rotate/);
 
   assert.match(lab, /uploadPrivateCaptureAsset/);
   assert.match(lab, /getCaptureVaultStatus/);

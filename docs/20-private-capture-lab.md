@@ -68,11 +68,13 @@ This loop has no download, key-entry, per-record Save, or review control:
    visible dart tips. No geometry default, image threshold, or click history can manufacture a
    suggestion: a record only saves when a safe board pose is locked and, for a dart record, at least
    one settled tip is detected. A still without a usable pose is skipped.
-5. If the learned anchors stay elusive on a real board, tap **CALIBRATE SETUP**, centre the bull in
-   the crosshair, and tap the top-left outer double-wire junction between **D5 and D20** once. The
-   known 170 mm canonical geometry then derives all four anchors and locks the board while the learned
-   path is unavailable; whenever the model resolves all four anchors itself, the learned frame takes
-   over again. This is the only human tap in the workflow and it is never a per-throw control.
+5. If the learned anchors stay elusive on a real board, tap **CALIBRATE SETUP**. A fitted board
+   template (concentric rings plus spokes) appears over the live preview: drag inside the rings to
+   place the bull, drag the top handle to rotate, and drag the right/bottom handles to stretch the
+   ring fit for a tilted phone/mount perspective; then tap **LOCK SETUP**. The four anchors derive
+   from the fitted affine template and the board locks while the learned path is unavailable;
+   whenever the model resolves all four anchors itself, the learned frame takes over again. This is
+   the only human gesture in the workflow and it is never a per-throw control.
 6. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If
    you move the mount to a materially different setup, the pseudonymous setup session rotates
    automatically so the compiler can keep every session on one side of a split.
@@ -104,8 +106,8 @@ Each completed capture produces three immutable private objects below a random `
 
 The annotation sidecar records `labelSource` for each final anchor/tip and a versioned
 `annotationProvenance` block. Auto-captured records whose frame came from the learned anchors store
-`reviewMethod: learned-suggestion-auto-capture-v1`; records whose frame came from the one-tap
-bull-centred setup lock store `reviewMethod: setup-calibration-auto-capture-v1` plus
+`reviewMethod: learned-suggestion-auto-capture-v1`; records whose frame came from the fitted
+setup-template lock store `reviewMethod: setup-calibration-auto-capture-v1` plus
 `labelSource: setup-calibration` on the four anchors (their detector confidence is recorded as zero).
 Dart tips are always learned class-0 detections and keep `labelSource: learned-suggestion`. Either
 way the block also stores the immutable model identifier/version/SHA-256, declared training-data kind,

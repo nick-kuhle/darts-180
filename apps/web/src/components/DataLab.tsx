@@ -1,16 +1,17 @@
 import type { DartZone } from '@darts-180/contracts';
 import { BOARD_RADII_MM, formatZone } from '@darts-180/rules';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import {
-  deriveSetupCalibrationAnchorImagePoints,
   DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
   invertHomography,
   mapBoardPointToImage,
+  setupAffineAnchorImagePoints,
   solveImageToBoardHomography,
   type CanonicalPoint,
   type Homography,
   type ImagePoint,
+  type SetupAffineTemplate,
 } from '../lib/annotationGeometry';
 import { describeCameraAccessError, getCameraAccessPreflightMessage } from '../lib/cameraAccess';
 import {
@@ -130,10 +131,15 @@ interface AnnotationSidecar {
 }
 
 interface SetupCalibration {
-  /** cal1–cal4 image points derived from the bull-centred one-tap setup, in video pixels. */
+  /** cal1–cal4 image points derived from the fitted setup template, in video pixels. */
   anchorImagePoints: readonly ImagePoint[];
   pose: DeepDartsDevelopmentPose;
 }
+
+type TemplateHandle = 'rotate' | 'scaleX' | 'scaleY' | 'move';
+const TEMPLATE_HANDLE_HIT_PX = 26;
+const TEMPLATE_BULL_RING_FRACTION = 0.38;
+const TEMPLATE_MIN_SCALE = 0.02;
 
 interface PoseSignature {
   cx: number;
@@ -243,6 +249,9 @@ function AutoCaptureLab({
   const sessionPoseSourceRef = useRef<'learned' | 'setup' | null>(null);
   const setupCalibrationRef = useRef<SetupCalibration | null>(null);
   const poseSourceRef = useRef<'learned' | 'setup' | null>(null);
+  const setupTemplateRef = useRef<SetupAffineTemplate | null>(null);
+  const templateHandleRef = useRef<TemplateHandle | null>(null);
+  const templateDragOriginRef = useRef<ImagePoint | null>(null);
   const lastCapturePoseRef = useRef<PoseSignature | null>(null);
   const lastCaptureDartCountRef = useRef(0);
   const awaitingBlankRef = useRef(true);
@@ -402,44 +411,142 @@ function AutoCaptureLab({
     split: 'unassigned',
   });
 
-  const calibrateSetupNow = (junctionImagePoint: ImagePoint): boolean => {
+  const defaultSetupTemplate = (): SetupAffineTemplate | null => {
     const video = videoRef.current;
-    if (video === null || video.videoWidth <= 0 || video.videoHeight <= 0) return false;
-    const bullImagePoint = { x: video.videoWidth / 2, y: video.videoHeight / 2 };
-    const anchorImagePoints = deriveSetupCalibrationAnchorImagePoints(
-      bullImagePoint,
-      junctionImagePoint,
-    );
-    if (anchorImagePoints === null) return false;
+    if (video === null || video.videoWidth <= 0 || video.videoHeight <= 0) return null;
+    const seedScale =
+      (Math.min(video.videoWidth, video.videoHeight) * TEMPLATE_BULL_RING_FRACTION) /
+      BOARD_RADII_MM.doubleOuter;
+    return {
+      centre: { x: video.videoWidth / 2, y: video.videoHeight / 2 },
+      scaleX: seedScale,
+      scaleY: seedScale,
+      rotationRad: 0,
+    };
+  };
+
+  const enterSetupCalibration = () => {
+    const template = defaultSetupTemplate();
+    if (template === null) {
+      pushActivity('error', 'Start the camera before fitting the board template.');
+      return;
+    }
+    setupTemplateRef.current = template;
+    setCalibrating(true);
+  };
+
+  const cancelSetupCalibration = () => {
+    setCalibrating(false);
+    setupTemplateRef.current = null;
+    templateHandleRef.current = null;
+    templateDragOriginRef.current = null;
+  };
+
+  const lockSetupCalibration = () => {
+    const template = setupTemplateRef.current;
+    if (template === null) return;
+    const anchorImagePoints = setupAffineAnchorImagePoints(template);
+    if (anchorImagePoints === null) {
+      pushActivity('error', 'The fitted template is degenerate; drag the rings again and lock.');
+      return;
+    }
     const pose = poseFromAnchorImagePoints(anchorImagePoints);
-    if (pose === null) return false;
+    if (pose === null) {
+      pushActivity('error', 'The fitted template could not be turned into a board pose; retry.');
+      return;
+    }
     const calibration: SetupCalibration = { anchorImagePoints, pose };
     setupCalibrationRef.current = calibration;
     setSetupCalibration(calibration);
-    return true;
+    setCalibrating(false);
+    setupTemplateRef.current = null;
+    templateHandleRef.current = null;
+    templateDragOriginRef.current = null;
+    pushActivity('info', 'Setup locked · the board template now fits the camera mount.');
   };
 
-  const handleCanvasTap = (clientX: number, clientY: number) => {
-    if (!calibrating) return;
+  const canvasClientToVideoPoint = (clientX: number, clientY: number): ImagePoint | null => {
     const canvas = previewCanvasRef.current;
     const video = videoRef.current;
-    if (canvas === null || video === null || video.videoWidth <= 0) return;
+    if (canvas === null || video === null || video.videoWidth <= 0) return null;
     const scale = Math.min(1, OVERLAY_LONG_EDGE / Math.max(video.videoWidth, video.videoHeight));
     const rect = canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    if (rect.width <= 0 || rect.height <= 0) return null;
     const canvasX = ((clientX - rect.left) * canvas.width) / rect.width;
     const canvasY = ((clientY - rect.top) * canvas.height) / rect.height;
-    const videoX = canvasX / scale;
-    const videoY = canvasY / scale;
-    if (calibrateSetupNow({ x: videoX, y: videoY })) {
-      setCalibrating(false);
-      pushActivity('info', 'Setup calibrated · the board is locked to the bull-centred frame.');
-      return;
+    return { x: canvasX / scale, y: canvasY / scale };
+  };
+
+  const handleAtPoint = (
+    template: SetupAffineTemplate,
+    point: ImagePoint,
+  ): TemplateHandle | null => {
+    const positions = templateHandlePositions(template);
+    const handleEntries: Array<[TemplateHandle, ImagePoint]> = [
+      ['rotate', positions.rotate],
+      ['scaleX', positions.scaleX],
+      ['scaleY', positions.scaleY],
+    ];
+    for (const [handle, position] of handleEntries) {
+      if (Math.hypot(point.x - position.x, point.y - position.y) <= TEMPLATE_HANDLE_HIT_PX) {
+        return handle;
+      }
     }
-    pushActivity(
-      'error',
-      'That tap is too close to the bull to lock the board. Keep the bull centred, then tap the outer D5/D20 rim junction.',
-    );
+    return 'move';
+  };
+
+  const onTemplatePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!calibrating) return;
+    const template = setupTemplateRef.current;
+    if (template === null) return;
+    const point = canvasClientToVideoPoint(event.clientX, event.clientY);
+    if (point === null) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    templateHandleRef.current = handleAtPoint(template, point);
+    templateDragOriginRef.current = point;
+  };
+
+  const onTemplatePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const handle = templateHandleRef.current;
+    const template = setupTemplateRef.current;
+    if (handle === null || template === null || !calibrating) return;
+    const point = canvasClientToVideoPoint(event.clientX, event.clientY);
+    const origin = templateDragOriginRef.current;
+    if (point === null || origin === null) return;
+    const update: SetupAffineTemplate = { ...template };
+    if (handle === 'move') {
+      update.centre = {
+        x: template.centre.x + (point.x - origin.x),
+        y: template.centre.y + (point.y - origin.y),
+      };
+      templateDragOriginRef.current = point;
+    } else {
+      const relativeX = point.x - template.centre.x;
+      const relativeY = point.y - template.centre.y;
+      if (handle === 'rotate') {
+        update.rotationRad = Math.atan2(relativeY, relativeX) + Math.PI / 2;
+      } else {
+        const basisX = { x: Math.cos(template.rotationRad), y: Math.sin(template.rotationRad) };
+        const basisY = { x: -Math.sin(template.rotationRad), y: Math.cos(template.rotationRad) };
+        const projection =
+          handle === 'scaleX'
+            ? relativeX * basisX.x + relativeY * basisX.y
+            : relativeX * basisY.x + relativeY * basisY.y;
+        const scaled = projection / BOARD_RADII_MM.doubleOuter;
+        if (handle === 'scaleX') update.scaleX = Math.max(scaled, TEMPLATE_MIN_SCALE);
+        else update.scaleY = Math.max(scaled, TEMPLATE_MIN_SCALE);
+      }
+    }
+    setupTemplateRef.current = update;
+  };
+
+  const onTemplatePointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (templateHandleRef.current === null) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    templateHandleRef.current = null;
+    templateDragOriginRef.current = null;
   };
 
   const captureStillNow = async (intent: CaptureIntent) => {
@@ -646,23 +753,8 @@ function AutoCaptureLab({
         context.drawImage(video, 0, 0, width, height);
         context.save();
         context.scale(scale, scale);
-        if (calibrating) {
-          context.save();
-          context.strokeStyle = 'rgba(247, 201, 111, 0.95)';
-          context.fillStyle = 'rgba(247, 201, 111, 0.95)';
-          context.lineWidth = 2;
-          const crossX = video.videoWidth / 2;
-          const crossY = video.videoHeight / 2;
-          context.beginPath();
-          context.moveTo(crossX - 26, crossY);
-          context.lineTo(crossX + 26, crossY);
-          context.moveTo(crossX, crossY - 26);
-          context.lineTo(crossX, crossY + 26);
-          context.stroke();
-          context.beginPath();
-          context.arc(crossX, crossY, 9, 0, Math.PI * 2);
-          context.stroke();
-          context.restore();
+        if (calibrating && setupTemplateRef.current !== null) {
+          drawSetupTemplate(context, setupTemplateRef.current);
         }
         if (frame !== null) drawFrameOverlay(context, frame);
         context.restore();
@@ -894,8 +986,9 @@ function AutoCaptureLab({
           <p className="data-lab-camera-help">
             Keep the whole number ring sharp and in frame. Use a safe mount outside the throw path;
             the Lab reads the live preview locally and only stores the bounded stills it captures.
-            If the learned board points stay elusive, tap CALIBRATE SETUP, centre the bull, and tap
-            the D5/D20 rim junction once — the Lab then locks the board and keeps watching.
+            If the learned board points stay elusive, tap CALIBRATE SETUP, drag the rings to fit
+            your board from the mount, then tap LOCK SETUP — the Lab then locks the board and keeps
+            watching.
           </p>
           <div
             className={`camera-frame data-lab-camera-frame ${poseReady ? 'is-pose-ready' : ''} ${calibrating ? 'is-calibrating' : ''}`}
@@ -904,15 +997,20 @@ function AutoCaptureLab({
             <canvas
               ref={previewCanvasRef}
               className="data-lab-auto-canvas"
-              aria-label="Live rear camera preview with detected board points and one-tap setup calibration"
-              onClick={(event) => handleCanvasTap(event.clientX, event.clientY)}
+              aria-label="Live rear camera preview with detected board points and an editable board template fit"
+              onPointerDown={onTemplatePointerDown}
+              onPointerMove={onTemplatePointerMove}
+              onPointerUp={onTemplatePointerUp}
+              onPointerCancel={onTemplatePointerUp}
             />
             {calibrating && cameraActive && (
               <div className="data-lab-calibration-notice" role="status">
                 <strong>SETUP CALIBRATION</strong>
                 <p>
-                  Centre the bull in the crosshair, then tap the top-left outer double-wire junction
-                  between <strong>D5</strong> and <strong>D20</strong>.
+                  Fit the rings to the board from your mount. Drag inside to move, the{' '}
+                  <strong>top</strong> handle to rotate, and the <strong>right</strong> and{' '}
+                  <strong>bottom</strong> handles to fit the tilted width and height. Then tap{' '}
+                  <strong>LOCK SETUP</strong>.
                 </p>
               </div>
             )}
@@ -951,23 +1049,42 @@ function AutoCaptureLab({
                 STOP CAMERA
               </button>
             )}
-            {running && (
-              <button
-                className={`button ghost compact${calibrating ? ' is-calibrating' : ''}`}
-                onClick={() => setCalibrating((value) => !value)}
-                type="button"
-              >
-                {calibrating ? 'CANCEL SETUP' : 'CALIBRATE SETUP'}
-              </button>
-            )}
+            {running &&
+              (calibrating ? (
+                <>
+                  <button
+                    className="button primary compact"
+                    disabled={setupTemplateRef.current === null}
+                    onClick={lockSetupCalibration}
+                    type="button"
+                  >
+                    LOCK SETUP
+                  </button>
+                  <button
+                    className="button ghost compact is-calibrating"
+                    onClick={cancelSetupCalibration}
+                    type="button"
+                  >
+                    CANCEL
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="button ghost compact"
+                  onClick={enterSetupCalibration}
+                  type="button"
+                >
+                  CALIBRATE SETUP
+                </button>
+              ))}
             <button className="text-button" onClick={onExit} type="button">
               ← BACK TO LIVE SCORING
             </button>
           </div>
           <p className="data-lab-auto-note">
             One start and one stop. The Lab never invents a point: a record saves when the four
-            board points are locked — by the learned anchors or by the one-tap setup lock — and, for
-            a dart record, at least one settled learned tip is detected.
+            board points are locked — by the learned anchors or by the fitted setup template — and,
+            for a dart record, at least one settled learned tip is detected.
           </p>
         </section>
 
@@ -1426,6 +1543,92 @@ function drawMappedCircle(
   }
   context.closePath();
   context.stroke();
+}
+
+function templateHandlePositions(
+  template: SetupAffineTemplate,
+): Record<TemplateHandle, ImagePoint> {
+  const { centre, scaleX, scaleY, rotationRad } = template;
+  const radiusX = scaleX * BOARD_RADII_MM.doubleOuter;
+  const radiusY = scaleY * BOARD_RADII_MM.doubleOuter;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const axisX = { x: cosine, y: sine };
+  const axisY = { x: -sine, y: cosine };
+  const at = (distanceX: number, distanceY: number): ImagePoint => ({
+    x: centre.x + axisX.x * distanceX + axisY.x * distanceY,
+    y: centre.y + axisX.y * distanceX + axisY.y * distanceY,
+  });
+  return {
+    rotate: at(0, -radiusY),
+    scaleX: at(radiusX, 0),
+    scaleY: at(0, radiusY),
+    move: centre,
+  };
+}
+
+function drawSetupTemplate(context: CanvasRenderingContext2D, template: SetupAffineTemplate): void {
+  const { centre, scaleX, scaleY, rotationRad } = template;
+  const sine = Math.sin(rotationRad);
+  const cosine = Math.cos(rotationRad);
+  const mapPoint = (xMm: number, yMm: number): ImagePoint => ({
+    x: centre.x + cosine * scaleX * xMm - sine * scaleY * yMm,
+    y: centre.y + sine * scaleX * xMm + cosine * scaleY * yMm,
+  });
+
+  context.save();
+  context.strokeStyle = 'rgba(247, 201, 111, 0.72)';
+  context.fillStyle = 'rgba(247, 201, 111, 0.2)';
+  context.lineWidth = 1.5;
+
+  context.beginPath();
+  for (let step = 0; step < 8; step += 1) {
+    const angle = (step / 8) * Math.PI * 2;
+    const edge = mapPoint(
+      Math.cos(angle) * BOARD_RADII_MM.doubleOuter,
+      Math.sin(angle) * BOARD_RADII_MM.doubleOuter,
+    );
+    context.moveTo(centre.x, centre.y);
+    context.lineTo(edge.x, edge.y);
+  }
+  context.stroke();
+
+  for (const radius of [
+    BOARD_RADII_MM.doubleOuter,
+    BOARD_RADII_MM.doubleInner,
+    BOARD_RADII_MM.trebleOuter,
+    BOARD_RADII_MM.trebleInner,
+    BOARD_RADII_MM.outerBull,
+    BOARD_RADII_MM.innerBull,
+  ]) {
+    const steps = 72;
+    context.beginPath();
+    for (let step = 0; step <= steps; step += 1) {
+      const angle = (step / steps) * Math.PI * 2;
+      const point = mapPoint(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      if (step === 0) context.moveTo(point.x, point.y);
+      else context.lineTo(point.x, point.y);
+    }
+    context.closePath();
+    context.stroke();
+  }
+
+  const positions = templateHandlePositions(template);
+  context.strokeStyle = '#ffffff';
+  context.fillStyle = 'rgba(247, 201, 111, 0.95)';
+  context.lineWidth = 2;
+  for (const handle of ['rotate', 'scaleX', 'scaleY'] as const) {
+    const point = positions[handle];
+    context.beginPath();
+    context.arc(point.x, point.y, 9, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  }
+  context.beginPath();
+  context.arc(centre.x, centre.y, 5, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.restore();
 }
 
 async function makeBoundedJpeg(
