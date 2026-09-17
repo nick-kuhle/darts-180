@@ -4544,6 +4544,41 @@ h3 {
   color: #f7c96f;
 }
 
+.data-lab-fit-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid #3c5a4c;
+  border-radius: 13px;
+  background: #14251d;
+}
+
+.data-lab-fit-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 10px;
+  color: #8fa89c;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.data-lab-fit-label {
+  white-space: nowrap;
+}
+
+.data-lab-fit-value {
+  text-align: right;
+  color: #e7d9b6;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-lab-fit-row input[type='range'] {
+  width: 100%;
+  accent-color: #f7c96f;
+}
+
 .data-lab-auto-note {
   margin: 11px 0 0;
   color: #8fa89c;
