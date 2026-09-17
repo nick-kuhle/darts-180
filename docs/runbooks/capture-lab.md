@@ -65,15 +65,20 @@ The camera loop has no download, key-entry, per-record Save, or review control:
 5. Throw one to three darts and let them settle. When a newly thrown dart settles, Data Lab
    automatically captures one bounded board-only JPEG and records the detected CAL 1 D5/D20, CAL 2
    D17/D3, CAL 3 D8/D11, CAL 4 D13/D6 anchors plus the visible settled dart tips. A record saves only
-   when the four learned anchors form a safe pose and, for a dart record, at least one settled tip is
+   when a safe board pose is locked and, for a dart record, at least one settled tip is
    detected; otherwise that frame is skipped rather than inventing a point.
-6. Whenever the board is clear or the camera starts, Data Lab automatically saves one blank-board
+6. If **Board set** never appears, select **CALIBRATE SETUP**, centre the bull in the crosshair, and
+   tap the top-left outer double-wire junction between **D5 and D20** once. The known 170 mm board
+   geometry then derives all four anchors and locks the board; the learned path takes over whenever
+   the model resolves all four anchors itself. Tapping the intersection counts as a setup lock, never
+   a per-throw input.
+7. Whenever the board is clear or the camera starts, Data Lab automatically saves one blank-board
    anchor record.
-7. Records save themselves to private storage without confirmation. Keep the tab open and watch the
+8. Records save themselves to private storage without confirmation. Keep the tab open and watch the
    **Saved / Saving / Failed** counters until confirmed. A failed record is retried automatically a
    few times (there is no manual retry button); a 409 collision is treated as already confirmed, and
    confirmed immutable assets are never overwritten.
-8. Select **Stop camera** when finished; the camera is the only control while running.
+9. Select **Stop camera** when finished; the camera is the only control while running.
 
 The Lab stores nothing until a safe pose and a settled record are available. Automatic save does not
 replace later privacy screening, provenance review, de-identification, duplicate control, annotation
@@ -130,15 +135,15 @@ for faces, prove consent/rights, validate stated measurements, or establish anno
 
 ## 5. Troubleshooting
 
-| Symptom                                           | Expected action                                                                                                                                       |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Continue to Data Lab** is disabled              | Read the notice and select the entry agreement only if every statement is true. Otherwise return to Live Scoring.                                     |
-| Private collection is checking                    | Wait for the same-origin status check. Do not bypass disabled camera controls.                                                                        |
-| Private collection says setup needed              | Correct the same existing Vercel project as described in [`20-private-capture-lab.md`](../20-private-capture-lab.md); preserve private Blob access.   |
-| Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over the direct HTTPS URL; verify browser/site permission. Do not substitute an insecure upload.                  |
-| Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, then start auto capture again. Frames without a readable board are skipped, never forced.                            |
-| Status never shows **Board set**                  | Keep the whole number ring sharp and in frame. No record saves until the four learned anchors form a safe pose.                                       |
-| Auto capture saves nothing                        | A frame without a complete board pose—or, for a dart record, a settled tip—is skipped. The Lab never invents a point.                                 |
-| A private save fails                              | Keep the tab open; the Lab retries automatically a few times. Inspect private Blob before creating a duplicate record; a 409 means already confirmed. |
-| Camera moved to a new setup                       | The pseudonymous session rotates automatically on a materially different pose. Keep phone, mount, board, and light stable for a continuous session.   |
-| A face or sensitive detail was noticed after save | Delete the complete private record through the restricted storage process; do not train or share it.                                                  |
+| Symptom                                           | Expected action                                                                                                                                                                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Continue to Data Lab** is disabled              | Read the notice and select the entry agreement only if every statement is true. Otherwise return to Live Scoring.                                                                                                                    |
+| Private collection is checking                    | Wait for the same-origin status check. Do not bypass disabled camera controls.                                                                                                                                                       |
+| Private collection says setup needed              | Correct the same existing Vercel project as described in [`20-private-capture-lab.md`](../20-private-capture-lab.md); preserve private Blob access.                                                                                  |
+| Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over the direct HTTPS URL; verify browser/site permission. Do not substitute an insecure upload.                                                                                                 |
+| Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, then start auto capture again. Frames without a readable board are skipped, never forced.                                                                                                           |
+| Status never shows **Board set**                  | Keep the whole number ring sharp and in frame. If the learned anchors stay elusive, select **CALIBRATE SETUP**, centre the bull in the crosshair, and tap the D5/D20 outer double-wire rim junction once to lock the board geometry. |
+| Auto capture saves nothing                        | A frame without a safe board pose—either the learned anchors or the setup lock—or, for a dart record, a settled tip is skipped. The Lab never invents a point.                                                                       |
+| A private save fails                              | Keep the tab open; the Lab retries automatically a few times. Inspect private Blob before creating a duplicate record; a 409 means already confirmed.                                                                                |
+| Camera moved to a new setup                       | The pseudonymous session rotates automatically on a materially different pose. Keep phone, mount, board, and light stable for a continuous session.                                                                                  |
+| A face or sensitive detail was noticed after save | Delete the complete private record through the restricted storage process; do not train or share it.                                                                                                                                 |

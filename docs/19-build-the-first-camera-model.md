@@ -104,19 +104,22 @@ can honestly provide ground truth.
    improvement. Normal players never use the data tools.
 2. Wait until the private collection says **Ready**, then select **Start auto capture** once (the only
    camera button). Keep the full board/number ring visible and use a stable safe mount.
-3. Wait for **Board set**, then throw one to three darts and let them settle. The displayed setup
-   session rotates automatically when the camera moves to a materially different pose; it also rotates
-   on a lighting change, board change, or later collection day. There are no lighting band or camera
-   notes inputs.
+3. Wait for **Board set**, then throw one to three darts and let them settle. If **Board set** never
+   appears on a real board, select **CALIBRATE SETUP**, centre the bull in the crosshair, and tap the
+   outer-double rim junction between **D5 and D20** once: the 170 mm canonical geometry then locks the
+   board so collection can proceed, with the learned anchors taking over whenever the model resolves
+   them itself. The displayed setup session rotates automatically when the camera moves to a
+   materially different pose; it also rotates on a lighting change, board change, or later collection
+   day. There are no lighting band or camera notes inputs.
 4. A newly settled dart auto-captures one board-only JPEG: the entry agreement has already written
    `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance timestamp, and `consented-development-unreviewed`
    status into this record's metadata, and the record stays unreviewed until a restricted operator
    screens it. Whenever the board is clear, Data Lab auto-saves one blank-board anchor record.
 5. When a dart record saves, the detected anchors are CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4
    D13/D6 with the visible settled class-0 tips. If the package is absent, invalid, unsupported by the
-   browser, or cannot produce a complete safe learned pose, the Lab says auto capture stays off and
-   saves nothing instead of deriving points from image geometry or defaults. A frame without a safe
-   pose—or, for a dart record, a settled tip—is skipped.
+   browser, or can neither learn nor be setup-locked to a safe board pose, the Lab says auto capture
+   stays off and saves nothing instead of deriving points from ad-hoc image thresholds. A frame
+   without a safe pose—or, for a dart record, a settled tip—is skipped.
 6. Watch the **Saved / Saving / Failed** counters and keep the tab open. Records save themselves to
    private storage with no confirmation; a failed save retries automatically a few times, and there is
    no manual retry. Select **Stop camera** when finished.

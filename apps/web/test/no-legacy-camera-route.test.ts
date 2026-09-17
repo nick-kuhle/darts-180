@@ -60,10 +60,16 @@ test('the top-level app keeps a consent-gated Data Lab that auto-captures privat
   assert.match(lab, /No verified local development model is installed/);
 
   assert.match(lab, /AUTO_REVIEW_METHOD = 'learned-suggestion-auto-capture-v1'/);
-  assert.match(lab, /reviewMethod: AUTO_REVIEW_METHOD/);
+  assert.match(lab, /SETUP_REVIEW_METHOD = 'setup-calibration-auto-capture-v1'/);
+  assert.match(lab, /reviewMethod,/);
+  assert.match(
+    lab,
+    /anchorSource === 'setup-calibration' \? SETUP_REVIEW_METHOD : AUTO_REVIEW_METHOD/,
+  );
   assert.match(lab, /annotationProvenance/);
   assert.match(dataLabSuggestions, /deriveDeepDartsDevelopmentPose/);
   assert.match(dataLabSuggestions, /DEEPDARTS_CLASS_IDS\.dartEntryPoint/);
+  assert.match(dataLabSuggestions, /buildSetupCalibrationSuggestions/);
   assert.doesNotMatch(dataLabSuggestions, /DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS/);
 
   assert.match(lab, /evaluateAutoCapture/);
@@ -72,6 +78,14 @@ test('the top-level app keeps a consent-gated Data Lab that auto-captures privat
   assert.match(lab, /void captureStillNow\('static-dart'\)/);
   assert.match(lab, /sessionIdRef\.current = newSessionId\(\)/);
   assert.match(lab, /Camera moved · started a new setup session\./);
+
+  assert.match(lab, /deriveSetupCalibrationAnchorImagePoints/);
+  assert.match(lab, /processWithPose/);
+  assert.match(lab, /poseSignatureFromPose/);
+  assert.match(lab, /buildSetupCalibrationSuggestions/);
+  assert.match(lab, /CALIBRATE SETUP/);
+  assert.match(lab, /CANCEL SETUP/);
+  assert.match(lab, /D5<\/strong> and <strong>D20/);
 
   assert.match(lab, /uploadPrivateCaptureAsset/);
   assert.match(lab, /getCaptureVaultStatus/);
@@ -95,5 +109,6 @@ test('the top-level app keeps a consent-gated Data Lab that auto-captures privat
 
   assert.match(styles, /\.data-lab-consent-card/);
   assert.match(styles, /\.data-lab-auto-grid/);
+  assert.match(styles, /\.data-lab-calibration-notice/);
   assert.doesNotMatch(styles, /data-lab-key-input/);
 });

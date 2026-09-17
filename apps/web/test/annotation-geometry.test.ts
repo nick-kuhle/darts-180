@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  deriveSetupCalibrationAnchorImagePoints,
   DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
   invertHomography,
   mapBoardPointToImage,
@@ -101,4 +102,53 @@ test('rejects degenerate calibration anchors', () => {
     { xMm: -166, yMm: 0 },
   ];
   assert.equal(solveImageToBoardHomography(degenerate, boardPoints), null);
+});
+
+test('derives all four calibration anchors from a bull-centred single D5/D20 junction tap', () => {
+  const bull: ImagePoint = { x: 640, y: 360 };
+  const scale = 2.4;
+  const cal1 = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS[0];
+  assert.ok(cal1 !== undefined);
+  const junction: ImagePoint = {
+    x: bull.x + scale * cal1.canonical.xMm,
+    y: bull.y + scale * cal1.canonical.yMm,
+  };
+  const derived = deriveSetupCalibrationAnchorImagePoints(bull, junction);
+  assert.notEqual(derived, null);
+  assert.ok(derived !== null);
+  assert.equal(derived.length, 4);
+  for (const [index, anchor] of DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.entries()) {
+    const point = derived[index];
+    assert.ok(point !== undefined);
+    assert.ok(Math.abs(point.x - (bull.x + scale * anchor.canonical.xMm)) < 0.001);
+    assert.ok(Math.abs(point.y - (bull.y + scale * anchor.canonical.yMm)) < 0.001);
+  }
+  assert.equal(deriveSetupCalibrationAnchorImagePoints(bull, { x: bull.x + 3, y: bull.y }), null);
+});
+
+test('setup calibration honours a rotated board orientation', () => {
+  const bull: ImagePoint = { x: 640, y: 360 };
+  const scale = 2.4;
+  const angle = (25 * Math.PI) / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const cal1 = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS[0];
+  assert.ok(cal1 !== undefined);
+  const junction: ImagePoint = {
+    x: bull.x + scale * (cosine * cal1.canonical.xMm - sine * cal1.canonical.yMm),
+    y: bull.y + scale * (sine * cal1.canonical.xMm + cosine * cal1.canonical.yMm),
+  };
+  const derived = deriveSetupCalibrationAnchorImagePoints(bull, junction);
+  assert.notEqual(derived, null);
+  assert.ok(derived !== null);
+  for (const [index, anchor] of DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.entries()) {
+    const point = derived[index];
+    assert.ok(point !== undefined);
+    const expectedX =
+      bull.x + scale * (cosine * anchor.canonical.xMm - sine * anchor.canonical.yMm);
+    const expectedY =
+      bull.y + scale * (sine * anchor.canonical.xMm + cosine * anchor.canonical.yMm);
+    assert.ok(Math.abs(point.x - expectedX) < 0.001);
+    assert.ok(Math.abs(point.y - expectedY) < 0.001);
+  }
 });

@@ -3,8 +3,11 @@ import { BOARD_RADII_MM, formatZone } from '@darts-180/rules';
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  deriveSetupCalibrationAnchorImagePoints,
   DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
+  invertHomography,
   mapBoardPointToImage,
+  solveImageToBoardHomography,
   type CanonicalPoint,
   type Homography,
   type ImagePoint,
@@ -24,6 +27,7 @@ import {
 } from '../lib/captureConsent';
 import {
   buildDataLabLearnedSuggestions,
+  buildSetupCalibrationSuggestions,
   type DataLabLearnedSuggestionResult,
   type DataLabPointSource,
 } from '../lib/developmentVision/dataLabSuggestions';
@@ -120,9 +124,15 @@ interface AnnotationSidecar {
   }>;
   annotationProvenance: {
     schemaVersion: 1;
-    reviewMethod: 'learned-suggestion-auto-capture-v1';
+    reviewMethod: 'learned-suggestion-auto-capture-v1' | 'setup-calibration-auto-capture-v1';
     learnedSuggestion: LearnedSuggestionProvenance | null;
   };
+}
+
+interface SetupCalibration {
+  /** cal1–cal4 image points derived from the bull-centred one-tap setup, in video pixels. */
+  anchorImagePoints: readonly ImagePoint[];
+  pose: DeepDartsDevelopmentPose;
 }
 
 interface PoseSignature {
@@ -167,6 +177,7 @@ const SESSION_MOVE_RADIUS_FRACTION = 0.12;
 const SESSION_MOVE_DIAMETER_FRACTION = 0.16;
 const SESSION_MOVE_ANGLE_DEGREES = 12;
 const AUTO_REVIEW_METHOD = 'learned-suggestion-auto-capture-v1';
+const SETUP_REVIEW_METHOD = 'setup-calibration-auto-capture-v1';
 const CALIBRATION_CLASS_IDS = [1, 2, 3, 4] as const;
 
 /**
@@ -229,6 +240,9 @@ function AutoCaptureLab({
 
   const sessionIdRef = useRef(newSessionId());
   const sessionPoseRef = useRef<PoseSignature | null>(null);
+  const sessionPoseSourceRef = useRef<'learned' | 'setup' | null>(null);
+  const setupCalibrationRef = useRef<SetupCalibration | null>(null);
+  const poseSourceRef = useRef<'learned' | 'setup' | null>(null);
   const lastCapturePoseRef = useRef<PoseSignature | null>(null);
   const lastCaptureDartCountRef = useRef(0);
   const awaitingBlankRef = useRef(true);
@@ -247,6 +261,9 @@ function AutoCaptureLab({
   );
   const [runtimeBackend, setRuntimeBackend] = useState<DevelopmentInferenceBackend | null>(null);
   const [poseReady, setPoseReady] = useState(false);
+  const [poseSource, setPoseSource] = useState<'learned' | 'setup' | null>(null);
+  const [setupCalibration, setSetupCalibration] = useState<SetupCalibration | null>(null);
+  const [calibrating, setCalibrating] = useState(false);
   const [visibleDartCount, setVisibleDartCount] = useState(0);
   const [sessionId, setSessionId] = useState(sessionIdRef.current);
   const [savedCount, setSavedCount] = useState(0);
@@ -385,6 +402,46 @@ function AutoCaptureLab({
     split: 'unassigned',
   });
 
+  const calibrateSetupNow = (junctionImagePoint: ImagePoint): boolean => {
+    const video = videoRef.current;
+    if (video === null || video.videoWidth <= 0 || video.videoHeight <= 0) return false;
+    const bullImagePoint = { x: video.videoWidth / 2, y: video.videoHeight / 2 };
+    const anchorImagePoints = deriveSetupCalibrationAnchorImagePoints(
+      bullImagePoint,
+      junctionImagePoint,
+    );
+    if (anchorImagePoints === null) return false;
+    const pose = poseFromAnchorImagePoints(anchorImagePoints);
+    if (pose === null) return false;
+    const calibration: SetupCalibration = { anchorImagePoints, pose };
+    setupCalibrationRef.current = calibration;
+    setSetupCalibration(calibration);
+    return true;
+  };
+
+  const handleCanvasTap = (clientX: number, clientY: number) => {
+    if (!calibrating) return;
+    const canvas = previewCanvasRef.current;
+    const video = videoRef.current;
+    if (canvas === null || video === null || video.videoWidth <= 0) return;
+    const scale = Math.min(1, OVERLAY_LONG_EDGE / Math.max(video.videoWidth, video.videoHeight));
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const canvasX = ((clientX - rect.left) * canvas.width) / rect.width;
+    const canvasY = ((clientY - rect.top) * canvas.height) / rect.height;
+    const videoX = canvasX / scale;
+    const videoY = canvasY / scale;
+    if (calibrateSetupNow({ x: videoX, y: videoY })) {
+      setCalibrating(false);
+      pushActivity('info', 'Setup calibrated · the board is locked to the bull-centred frame.');
+      return;
+    }
+    pushActivity(
+      'error',
+      'That tap is too close to the bull to lock the board. Keep the bull centred, then tap the outer D5/D20 rim junction.',
+    );
+  };
+
   const captureStillNow = async (intent: CaptureIntent) => {
     const client = clientRef.current;
     const model = modelRef.current;
@@ -408,10 +465,28 @@ function AutoCaptureLab({
       const snapshot = await makeBoundedJpeg(video);
       const bitmap = await createImageBitmap(snapshot.blob);
       const result = await client.infer(bitmap, snapshot.width, snapshot.height, performance.now());
-      const suggestions = buildDataLabLearnedSuggestions(result, model);
-      const pose = suggestions.pose;
+      let suggestions = buildDataLabLearnedSuggestions(result, model);
+      let pose = suggestions.pose;
+      let anchorSource: DataLabPointSource = 'learned-suggestion';
+      if (pose === null && setupCalibrationRef.current !== null) {
+        const scaleFactor = snapshot.width / video.videoWidth;
+        const calibratedAnchors = setupCalibrationRef.current.anchorImagePoints.map((point) => ({
+          x: point.x * scaleFactor,
+          y: point.y * scaleFactor,
+        }));
+        pose = poseFromAnchorImagePoints(calibratedAnchors);
+        if (pose !== null) {
+          suggestions = buildSetupCalibrationSuggestions(result, model, calibratedAnchors, pose);
+          anchorSource = 'setup-calibration';
+        }
+      }
       if (pose === null) {
-        pushActivity('skipped', 'No complete board pose in that still, so it was not saved.');
+        pushActivity(
+          'skipped',
+          setupCalibrationRef.current === null
+            ? 'No complete board pose in that still, so it was not saved.'
+            : 'No usable board frame in that still, so it was not saved.',
+        );
         return;
       }
       if (intent === 'static-dart' && suggestions.darts.length === 0) {
@@ -427,7 +502,14 @@ function AutoCaptureLab({
         height: snapshot.height,
         manifest,
       };
-      const annotation = buildAutoAnnotation(still, suggestions, pose, model, backend);
+      const annotation = buildAutoAnnotation(
+        still,
+        suggestions,
+        pose,
+        model,
+        backend,
+        anchorSource,
+      );
       const summary: RecordSummary = {
         intent,
         dartCount: annotation.darts.length,
@@ -463,11 +545,14 @@ function AutoCaptureLab({
 
   const evaluateAutoCapture = (frame: DevelopmentVisionFrame) => {
     if (captureInFlightRef.current || frame.pose === null) return;
-    const signature = poseSignatureFromFrame(frame);
+    const signature = poseSignatureFromFrame(frame) ?? poseSignatureFromPose(frame.pose);
     if (signature === null) return;
+    const source = poseSourceRef.current;
 
-    if (sessionPoseRef.current === null) sessionPoseRef.current = signature;
-    if (poseSignificantlyDifferent(signature, sessionPoseRef.current)) {
+    if (sessionPoseRef.current === null || sessionPoseSourceRef.current !== source) {
+      sessionPoseRef.current = signature;
+      sessionPoseSourceRef.current = source;
+    } else if (poseSignificantlyDifferent(signature, sessionPoseRef.current)) {
       // Moving the camera is expected. A materially different board pose starts a new pseudonymous
       // setup session so the compiler can keep every session on one side of a split.
       sessionIdRef.current = newSessionId();
@@ -523,9 +608,17 @@ function AutoCaptureLab({
         captured.capturedAtMs,
       );
       if (generation !== runGenerationRef.current) return;
-      const frame = engine.process(result, model);
+      let usedSetupCalibration = false;
+      let frame = engine.process(result, model);
+      if (frame.pose === null && setupCalibrationRef.current !== null) {
+        frame = engine.processWithPose(result, model, setupCalibrationRef.current.pose);
+        usedSetupCalibration = true;
+      }
+      const source = frame.pose === null ? null : usedSetupCalibration ? 'setup' : 'learned';
+      poseSourceRef.current = source;
       latestFrameRef.current = frame;
       setPoseReady(frame.pose !== null);
+      setPoseSource(source);
       setVisibleDartCount(frame.tracks.filter((track) => track.isSettled).length);
       evaluateAutoCapture(frame);
     } catch (error) {
@@ -553,6 +646,24 @@ function AutoCaptureLab({
         context.drawImage(video, 0, 0, width, height);
         context.save();
         context.scale(scale, scale);
+        if (calibrating) {
+          context.save();
+          context.strokeStyle = 'rgba(247, 201, 111, 0.95)';
+          context.fillStyle = 'rgba(247, 201, 111, 0.95)';
+          context.lineWidth = 2;
+          const crossX = video.videoWidth / 2;
+          const crossY = video.videoHeight / 2;
+          context.beginPath();
+          context.moveTo(crossX - 26, crossY);
+          context.lineTo(crossX + 26, crossY);
+          context.moveTo(crossX, crossY - 26);
+          context.lineTo(crossX, crossY + 26);
+          context.stroke();
+          context.beginPath();
+          context.arc(crossX, crossY, 9, 0, Math.PI * 2);
+          context.stroke();
+          context.restore();
+        }
         if (frame !== null) drawFrameOverlay(context, frame);
         context.restore();
       }
@@ -587,8 +698,14 @@ function AutoCaptureLab({
     setRuntimeBackend(null);
     setModelManifest(null);
     setPoseReady(false);
+    setPoseSource(null);
+    setSetupCalibration(null);
+    setCalibrating(false);
     setVisibleDartCount(0);
     setPhase('idle');
+    setupCalibrationRef.current = null;
+    poseSourceRef.current = null;
+    sessionPoseSourceRef.current = null;
     if (client !== null) void client.dispose();
   };
   stopRef.current = stopAutoCapture;
@@ -678,12 +795,18 @@ function AutoCaptureLab({
       sessionIdRef.current = newSessionId();
       setSessionId(sessionIdRef.current);
       sessionPoseRef.current = null;
+      sessionPoseSourceRef.current = null;
+      setupCalibrationRef.current = null;
+      poseSourceRef.current = null;
       lastCapturePoseRef.current = null;
       lastCaptureDartCountRef.current = 0;
       awaitingBlankRef.current = true;
       wasOccupiedRef.current = false;
       setRuntimeBackend(backend);
       setModelManifest(loaded.manifest);
+      setPoseSource(null);
+      setSetupCalibration(null);
+      setCalibrating(false);
       setPhase('running');
       pushActivity('info', 'Auto capture is live · frame the board and throw.');
       beginOverlay();
@@ -759,20 +882,40 @@ function AutoCaptureLab({
               <h2>{statusHeading(phase, poseReady, visibleDartCount)}</h2>
             </div>
             <span className={`camera-state ${cameraActive ? 'on' : ''}`}>
-              {running ? 'WATCHING' : cameraActive ? 'STARTING' : 'CAMERA OFF'}
+              {running
+                ? calibrating
+                  ? 'CALIBRATING'
+                  : 'WATCHING'
+                : cameraActive
+                  ? 'STARTING'
+                  : 'CAMERA OFF'}
             </span>
           </div>
           <p className="data-lab-camera-help">
             Keep the whole number ring sharp and in frame. Use a safe mount outside the throw path;
             the Lab reads the live preview locally and only stores the bounded stills it captures.
+            If the learned board points stay elusive, tap CALIBRATE SETUP, centre the bull, and tap
+            the D5/D20 rim junction once — the Lab then locks the board and keeps watching.
           </p>
-          <div className={`camera-frame data-lab-camera-frame ${poseReady ? 'is-pose-ready' : ''}`}>
+          <div
+            className={`camera-frame data-lab-camera-frame ${poseReady ? 'is-pose-ready' : ''} ${calibrating ? 'is-calibrating' : ''}`}
+          >
             <video ref={videoRef} className="data-lab-auto-source" autoPlay muted playsInline />
             <canvas
               ref={previewCanvasRef}
               className="data-lab-auto-canvas"
-              aria-label="Live rear camera preview with detected board points"
+              aria-label="Live rear camera preview with detected board points and one-tap setup calibration"
+              onClick={(event) => handleCanvasTap(event.clientX, event.clientY)}
             />
+            {calibrating && cameraActive && (
+              <div className="data-lab-calibration-notice" role="status">
+                <strong>SETUP CALIBRATION</strong>
+                <p>
+                  Centre the bull in the crosshair, then tap the top-left outer double-wire junction
+                  between <strong>D5</strong> and <strong>D20</strong>.
+                </p>
+              </div>
+            )}
             {!cameraActive && (
               <div className="camera-empty">
                 <span>◉</span>
@@ -808,14 +951,23 @@ function AutoCaptureLab({
                 STOP CAMERA
               </button>
             )}
+            {running && (
+              <button
+                className={`button ghost compact${calibrating ? ' is-calibrating' : ''}`}
+                onClick={() => setCalibrating((value) => !value)}
+                type="button"
+              >
+                {calibrating ? 'CANCEL SETUP' : 'CALIBRATE SETUP'}
+              </button>
+            )}
             <button className="text-button" onClick={onExit} type="button">
               ← BACK TO LIVE SCORING
             </button>
           </div>
           <p className="data-lab-auto-note">
-            One start and one stop. The Lab never invents a point: a record only saves when the four
-            learned board points are found and, for a dart record, at least one settled tip is
-            detected.
+            One start and one stop. The Lab never invents a point: a record saves when the four
+            board points are locked — by the learned anchors or by the one-tap setup lock — and, for
+            a dart record, at least one settled learned tip is detected.
           </p>
         </section>
 
@@ -829,7 +981,9 @@ function AutoCaptureLab({
             <dl>
               <div>
                 <dt>BOARD</dt>
-                <dd>{poseReady ? 'SET' : '—'}</dd>
+                <dd>
+                  {poseReady ? (poseSource === 'setup' ? 'SET · SETUP' : 'SET · LEARNED') : '—'}
+                </dd>
               </div>
               <div>
                 <dt>DARTS</dt>
@@ -1005,10 +1159,11 @@ function buildAutoAnnotation(
   pose: DeepDartsDevelopmentPose,
   model: DeepDartsDevelopmentModelManifest,
   backend: DevelopmentInferenceBackend,
+  anchorSource: DataLabPointSource = 'learned-suggestion',
 ): AnnotationSidecar {
   const anchors = suggestions.anchors.map((anchor) => anchor?.imagePoint ?? null);
   const anchorSources = suggestions.anchors.map((anchor) =>
-    anchor === null ? null : ('learned-suggestion' as const),
+    anchor === null ? null : anchorSource,
   );
   const darts: AnnotatedDart[] = suggestions.darts.map((dart, index) => ({
     id: `auto-${captured.manifest.captureId}-dart-${index + 1}`,
@@ -1033,6 +1188,7 @@ function buildAutoAnnotation(
       trainingDataKind: model.provenance.trainingDataKind,
       backend,
     },
+    anchorSource === 'setup-calibration' ? SETUP_REVIEW_METHOD : AUTO_REVIEW_METHOD,
   );
 }
 
@@ -1043,6 +1199,7 @@ function createAnnotationSidecar(
   homography: Homography,
   darts: readonly AnnotatedDart[],
   learnedSuggestion: LearnedSuggestionProvenance | null,
+  reviewMethod: 'learned-suggestion-auto-capture-v1' | 'setup-calibration-auto-capture-v1',
 ): AnnotationSidecar {
   return {
     schemaVersion: 1,
@@ -1078,9 +1235,55 @@ function createAnnotationSidecar(
     })),
     annotationProvenance: {
       schemaVersion: 1,
-      reviewMethod: AUTO_REVIEW_METHOD,
+      reviewMethod,
       learnedSuggestion,
     },
+  };
+}
+
+function poseFromAnchorImagePoints(
+  anchorImagePoints: readonly ImagePoint[],
+): DeepDartsDevelopmentPose | null {
+  if (anchorImagePoints.length !== 4) return null;
+  const canonicalPoints = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.map(
+    (anchor) => anchor.canonical,
+  );
+  const imageToBoardHomography = solveImageToBoardHomography(anchorImagePoints, canonicalPoints);
+  if (imageToBoardHomography === null) return null;
+  const boardToImageHomography = invertHomography(imageToBoardHomography);
+  if (boardToImageHomography === null) return null;
+  const first = anchorImagePoints[0];
+  const second = anchorImagePoints[1];
+  const third = anchorImagePoints[2];
+  const fourth = anchorImagePoints[3];
+  if (first === undefined || second === undefined || third === undefined || fourth === undefined) {
+    return null;
+  }
+  const boardDiameterPixels =
+    (Math.hypot(first.x - second.x, first.y - second.y) +
+      Math.hypot(third.x - fourth.x, third.y - fourth.y)) /
+    2;
+  if (!Number.isFinite(boardDiameterPixels) || boardDiameterPixels <= 0) return null;
+  return {
+    imageToBoardHomography,
+    boardToImageHomography,
+    boardDiameterPixels,
+    minimumAnchorConfidence: 0,
+  };
+}
+
+function poseSignatureFromPose(pose: DeepDartsDevelopmentPose): PoseSignature | null {
+  const centre = mapBoardPointToImage({ xMm: 0, yMm: 0 }, pose.boardToImageHomography);
+  const cal1 = mapBoardPointToImage(
+    DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS[0]!.canonical,
+    pose.boardToImageHomography,
+  );
+  if (centre === null || cal1 === null || !(pose.boardDiameterPixels > 0)) return null;
+  return {
+    cx: centre.x,
+    cy: centre.y,
+    radius: pose.boardDiameterPixels / 2,
+    angleDegrees: (Math.atan2(cal1.y - centre.y, cal1.x - centre.x) * 180) / Math.PI,
   };
 }
 

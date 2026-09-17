@@ -4505,6 +4505,41 @@ h3 {
   object-fit: contain;
 }
 
+.data-lab-camera-frame.is-calibrating {
+  cursor: crosshair;
+}
+
+.data-lab-calibration-notice {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 11px 13px;
+  border: 1px solid rgba(247, 201, 111, 0.55);
+  border-radius: 12px;
+  background: rgba(15, 26, 21, 0.94);
+}
+
+.data-lab-calibration-notice > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #f7c96f;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.data-lab-calibration-notice p {
+  margin: 0;
+  color: #e7d9b6;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.data-lab-calibration-notice p strong {
+  color: #f7c96f;
+}
+
 .data-lab-auto-note {
   margin: 11px 0 0;
   color: #8fa89c;

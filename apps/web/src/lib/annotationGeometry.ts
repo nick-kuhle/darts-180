@@ -79,6 +79,44 @@ export const DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS: readonly AnnotationAncho
   },
 ] as const;
 
+/**
+ * Derive the four calibration anchor image points from a one-tap setup alignment. The operator
+ * centres the bull on the frame centre and taps the D5/D20 outer-double rim junction (cal1). The
+ * known 170 mm canonical geometry fixes scale and rotation for the whole board, so the remaining
+ * cal2–4 junctions follow from that single tap. `null` means the tap is degenerate or unusable.
+ */
+export function deriveSetupCalibrationAnchorImagePoints(
+  bullImagePoint: ImagePoint,
+  junctionImagePoint: ImagePoint,
+  anchors: readonly AnnotationAnchor[] = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS,
+): ImagePoint[] | null {
+  if (anchors.length !== 4) return null;
+  const cal1 = anchors[0];
+  if (cal1 === undefined) return null;
+  const sourceX = cal1.canonical.xMm;
+  const sourceY = cal1.canonical.yMm;
+  const sourceLength = Math.hypot(sourceX, sourceY);
+  const imageX = junctionImagePoint.x - bullImagePoint.x;
+  const imageY = junctionImagePoint.y - bullImagePoint.y;
+  const imageLength = Math.hypot(imageX, imageY);
+  if (
+    !Number.isFinite(sourceLength) ||
+    !Number.isFinite(imageX) ||
+    !Number.isFinite(imageY) ||
+    imageLength < 10
+  ) {
+    return null;
+  }
+  const scale = imageLength / sourceLength;
+  const angle = Math.atan2(imageY, imageX) - Math.atan2(sourceY, sourceX);
+  const sine = Math.sin(angle);
+  const cosine = Math.cos(angle);
+  return anchors.map((anchor) => ({
+    x: bullImagePoint.x + scale * (cosine * anchor.canonical.xMm - sine * anchor.canonical.yMm),
+    y: bullImagePoint.y + scale * (sine * anchor.canonical.xMm + cosine * anchor.canonical.yMm),
+  }));
+}
+
 /** Row-major projective matrix mapping image pixels to canonical board millimetres. */
 export type Homography = readonly [
   number,

@@ -19,8 +19,13 @@ const CALIBRATION_CLASS_IDS = [
   DEEPDARTS_CLASS_IDS.calibration4,
 ] as const;
 
-/** A point has either been proposed by a learned model or deliberately supplied/adjusted by a person. */
-export type DataLabPointSource = 'learned-suggestion' | 'human-adjusted' | 'human-added';
+/**
+ * Where a collected point came from. Learnt model proposals marked 'learned-suggestion' are never
+ * treated as human confirmations; 'setup-calibration' marks a board anchor derived from the one-tap
+ * bull-centre/rim-junction setup geometry rather than a detector.
+ */
+export type DataLabPointSource =
+  'learned-suggestion' | 'human-adjusted' | 'human-added' | 'setup-calibration';
 
 export interface DataLabSuggestedAnchor {
   imagePoint: ImagePoint;
@@ -70,7 +75,76 @@ export function buildDataLabLearnedSuggestions(
     };
   });
   const pose = deriveDeepDartsDevelopmentPose(inference.detections, model);
-  const dartDetections = inference.detections
+  if (pose === null) {
+    return {
+      anchors,
+      darts: [],
+      pose: null,
+      omittedDartDetectionCount: dartDetectionCandidates(inference, model).length,
+    };
+  }
+  const mapped = mapDartDetections(inference, model, pose);
+  return { anchors, darts: mapped.darts, pose, omittedDartDetectionCount: mapped.omitted };
+}
+
+/**
+ * Build suggestions for a board whose four-anchor transform could not be produced by the detector.
+ * The anchors come from the one-tap setup calibration rather than learned detections, so every
+ * anchored point reports a zero detector confidence. Darts still require learned class-0 evidence.
+ */
+export function buildSetupCalibrationSuggestions(
+  inference: DeepDartsInferenceFrameResult,
+  model: DeepDartsDevelopmentModelManifest,
+  calibratedAnchorImagePoints: readonly ImagePoint[],
+  calibratedPose: DeepDartsDevelopmentPose,
+): DataLabLearnedSuggestionResult {
+  const anchors = CALIBRATION_CLASS_IDS.map((classId, index) => {
+    const imagePoint = calibratedAnchorImagePoints[index];
+    if (imagePoint === undefined) return null;
+    return { imagePoint, confidence: 0 };
+  });
+  const mapped = mapDartDetections(inference, model, calibratedPose);
+  return {
+    anchors,
+    darts: mapped.darts,
+    pose: calibratedPose,
+    omittedDartDetectionCount: mapped.omitted,
+  };
+}
+
+function mapDartDetections(
+  inference: DeepDartsInferenceFrameResult,
+  model: DeepDartsDevelopmentModelManifest,
+  pose: DeepDartsDevelopmentPose,
+): { darts: DataLabSuggestedDart[]; omitted: number } {
+  const dartDetections = dartDetectionCandidates(inference, model);
+  const darts: DataLabSuggestedDart[] = [];
+  let omitted = 0;
+  for (const detection of dartDetections) {
+    const boardPoint = mapImagePointToBoard(
+      { x: detection.center.xPx, y: detection.center.yPx },
+      pose.imageToBoardHomography,
+    );
+    if (boardPoint === null || !isFinitePoint(boardPoint) || darts.length >= 3) {
+      omitted += 1;
+      continue;
+    }
+    darts.push({
+      imagePoint: { x: detection.center.xPx, y: detection.center.yPx },
+      boardPoint,
+      zone: decodeBoardPoint(boardPoint),
+      wireMarginMm: nearestWireMarginMm(boardPoint),
+      confidence: detection.confidence,
+    });
+  }
+  return { darts, omitted };
+}
+
+function dartDetectionCandidates(
+  inference: DeepDartsInferenceFrameResult,
+  model: DeepDartsDevelopmentModelManifest,
+): DeepDartsDetection[] {
+  return inference.detections
     .filter(
       (detection) =>
         detection.classId === DEEPDARTS_CLASS_IDS.dartEntryPoint &&
@@ -82,35 +156,6 @@ export function buildDataLabLearnedSuggestions(
         left.center.xPx - right.center.xPx ||
         left.center.yPx - right.center.yPx,
     );
-  if (pose === null) {
-    return {
-      anchors,
-      darts: [],
-      pose: null,
-      omittedDartDetectionCount: dartDetections.length,
-    };
-  }
-
-  const darts: DataLabSuggestedDart[] = [];
-  let omittedDartDetectionCount = 0;
-  for (const detection of dartDetections) {
-    const boardPoint = mapImagePointToBoard(
-      { x: detection.center.xPx, y: detection.center.yPx },
-      pose.imageToBoardHomography,
-    );
-    if (boardPoint === null || !isFinitePoint(boardPoint) || darts.length >= 3) {
-      omittedDartDetectionCount += 1;
-      continue;
-    }
-    darts.push({
-      imagePoint: { x: detection.center.xPx, y: detection.center.yPx },
-      boardPoint,
-      zone: decodeBoardPoint(boardPoint),
-      wireMarginMm: nearestWireMarginMm(boardPoint),
-      confidence: detection.confidence,
-    });
-  }
-  return { anchors, darts, pose, omittedDartDetectionCount };
 }
 
 function bestDetection(

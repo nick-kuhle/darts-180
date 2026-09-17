@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import { formatZone } from '@darts-180/rules';
 
-import { buildDataLabLearnedSuggestions } from '../src/lib/developmentVision/dataLabSuggestions.js';
+import { DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS } from '../src/lib/annotationGeometry.js';
+import {
+  buildDataLabLearnedSuggestions,
+  buildSetupCalibrationSuggestions,
+} from '../src/lib/developmentVision/dataLabSuggestions.js';
 import {
   DEEPDARTS_SOURCE_TO_STANDARD_ROTATION_DEGREES,
   DeepDartsDevelopmentEngine,
@@ -306,6 +310,61 @@ test('Data Lab suggestions preserve only learned anchor/tip evidence and withhol
   );
   assert.equal(fourModelTips.darts.length, 3);
   assert.equal(fourModelTips.omittedDartDetectionCount, 1);
+});
+
+test('setup calibration suggestions report zero-confidence anchors yet map tips through the calibrated pose', () => {
+  const anchorImagePoints = DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS.map((anchor) => ({
+    x: anchor.canonical.xMm + 400,
+    y: anchor.canonical.yMm + 400,
+  }));
+  const calibratedPose = deriveDeepDartsDevelopmentPose(
+    orientedAnchorDetections(),
+    developmentManifest,
+  );
+  assert.notEqual(calibratedPose, null);
+  if (calibratedPose === null) return;
+  const dartPoint = standardToImage({ xMm: 0, yMm: -103 });
+  const suggestions = buildSetupCalibrationSuggestions(
+    {
+      frameTimestampMs: 1_000,
+      detections: [detection(0, dartPoint.xPx, dartPoint.yPx)],
+      inferenceMs: 7,
+      backend: 'wasm',
+    },
+    developmentManifest,
+    anchorImagePoints,
+    calibratedPose,
+  );
+  assert.equal(suggestions.anchors.filter((anchor) => anchor !== null).length, 4);
+  assert.ok(suggestions.anchors.every((anchor) => anchor === null || anchor.confidence === 0));
+  assert.notEqual(suggestions.pose, null);
+  assert.equal(suggestions.darts.length, 1);
+  assert.equal(formatZone(suggestions.darts[0]!.zone), 'T20');
+  assert.equal(suggestions.omittedDartDetectionCount, 0);
+});
+
+test('development engine tracks a dart through a supplied calibrated pose when learned anchors are absent', () => {
+  const engine = new DeepDartsDevelopmentEngine();
+  const dartPoint = standardToImage({ xMm: 0, yMm: -103 });
+  const calibratedPose = deriveDeepDartsDevelopmentPose(
+    orientedAnchorDetections(),
+    developmentManifest,
+  );
+  assert.notEqual(calibratedPose, null);
+  if (calibratedPose === null) return;
+  const dartOnly = (frameTimestampMs: number): DeepDartsInferenceFrameResult => ({
+    frameTimestampMs,
+    detections: [detection(0, dartPoint.xPx, dartPoint.yPx)],
+    inferenceMs: 9,
+    backend: 'wasm',
+  });
+
+  const first = engine.processWithPose(dartOnly(1_000), developmentManifest, calibratedPose);
+  assert.notEqual(first.pose, null);
+  assert.equal(first.suggestion, null);
+  const settled = engine.processWithPose(dartOnly(1_250), developmentManifest, calibratedPose);
+  assert.equal(settled.suggestion?.disposition, 'review');
+  assert.equal(formatZone(settled.suggestion!.zone), 'T20');
 });
 
 test('development engine requires genuine anchors plus a genuine class-0 dart and always emits an editable review suggestion', () => {

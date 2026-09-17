@@ -66,12 +66,17 @@ This loop has no download, key-entry, per-record Save, or review control:
 4. When a newly thrown dart settles, the Lab automatically captures one bounded board-only JPEG and
    records the detected CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6 anchors plus the
    visible dart tips. No geometry default, image threshold, or click history can manufacture a
-   suggestion: a record only saves when all four learned anchors form a safe pose and, for a dart
-   record, at least one settled tip is detected. A still without a complete pose is skipped.
-5. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If
+   suggestion: a record only saves when a safe board pose is locked and, for a dart record, at least
+   one settled tip is detected. A still without a usable pose is skipped.
+5. If the learned anchors stay elusive on a real board, tap **CALIBRATE SETUP**, centre the bull in
+   the crosshair, and tap the top-left outer double-wire junction between **D5 and D20** once. The
+   known 170 mm canonical geometry then derives all four anchors and locks the board while the learned
+   path is unavailable; whenever the model resolves all four anchors itself, the learned frame takes
+   over again. This is the only human tap in the workflow and it is never a per-throw control.
+6. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If
    you move the mount to a materially different setup, the pseudonymous setup session rotates
    automatically so the compiler can keep every session on one side of a split.
-6. Records save themselves to private storage without confirmation. Keep the tab open and watch the
+7. Records save themselves to private storage without confirmation. Keep the tab open and watch the
    **Saved / Saving / Failed** counters until confirmed. A failed record is retried automatically a
    few times; confirmed immutable assets are never overwritten.
 
@@ -98,11 +103,15 @@ Each completed capture produces three immutable private objects below a random `
 - `annotations.json`
 
 The annotation sidecar records `labelSource` for each final anchor/tip and a versioned
-`annotationProvenance` block. Auto-captured records store
-`reviewMethod: learned-suggestion-auto-capture-v1` and the immutable model identifier/version/SHA-256,
-declared training-data kind, and local backend of the pass that produced the labels. This is an audit
-clue for later restricted review—not proof that a browser-controlled submission is correct or that an
-automatically captured label became ground truth without any human confirmation.
+`annotationProvenance` block. Auto-captured records whose frame came from the learned anchors store
+`reviewMethod: learned-suggestion-auto-capture-v1`; records whose frame came from the one-tap
+bull-centred setup lock store `reviewMethod: setup-calibration-auto-capture-v1` plus
+`labelSource: setup-calibration` on the four anchors (their detector confidence is recorded as zero).
+Dart tips are always learned class-0 detections and keep `labelSource: learned-suggestion`. Either
+way the block also stores the immutable model identifier/version/SHA-256, declared training-data kind,
+and local backend of the pass that produced the labels. This is an audit clue for later restricted
+review—not proof that a browser-controlled submission is correct or that an automatically captured
+label became ground truth without any human confirmation.
 
 The Function accepts JPEG only for `board.jpg`, JSON only for the sidecars, limits an image to 3.5 MB
 and each JSON document to 192 KiB, checks JPEG framing, validates opaque capture/session/record IDs,
