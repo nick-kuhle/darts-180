@@ -11,13 +11,13 @@ The web app has two deliberately separate front doors:
 - **LIVE SCORING** is the player flow. It uses browser-local inference only when a real, verified
   model package is present. It never asks a player to tap calibration points, upload a photo, use a
   collection credential, or manually save a capture.
-- **DATA LAB** is a consent-gated development workflow. It takes a board-only JPEG and, when a
-  verified local five-point development package is actually installed, runs that local detector on
-  the held still to prefill its four semantic anchors and visible dart-tip labels. Every marker
-  remains editable: the collector can confirm it, move it, remove a false tip, or add a missed tip.
-  If no runnable local package exists—or it cannot form a safe learned result—the Lab says so and
-  retains the manual labels rather than inventing a suggestion. It then **automatically saves the
-  completed-review JPEG, manifest, and annotation sidecar** to private storage.
+- **DATA LAB** is a consent-gated, no-button development workflow. Once the collector agrees and
+  starts the camera, the browser keeps one local inference loop running against the board. When a
+  newly thrown dart settles it automatically captures one bounded board-only JPEG and saves the
+  detected four semantic anchors plus visible dart-tip labels; whenever the board is clear it saves
+  one blank-board anchor record. If no runnable local package exists—or it cannot form a safe learned
+  result—the Lab says so and saves nothing rather than inventing a point. The JPEG, manifest, and
+  annotation sidecar are **saved automatically** to private storage with no review step.
 
 Data Lab is not a model release, a prediction service, an automated privacy review, an identity
 system, a general-purpose upload portal, or authorization for production auto-recording. It is
@@ -32,11 +32,11 @@ screen, and private storage status are not rendered until the visitor explicitly
 > be collected privately for Darts 180 product and model improvement. I will not include people,
 > faces, audio, sensitive material, or content I lack permission to submit.
 
-The notice also explains that a completed record contains a board-focused JPEG, reviewed board/tip
-labels (including any corrected local-model suggestions), and limited setup metadata: a pseudonymous
-setup ID, optional board/camera notes, estimated angle/distance, and lighting. It states that the app
-does not publicly display or make records available, and that records wait for manual privacy, quality,
-provenance, and training/evaluation review.
+The notice also explains that a completed record contains a board-focused JPEG, learned board/tip
+labels, and limited setup metadata: a pseudonymous setup ID, optional board/camera notes, estimated
+angle/distance, and lighting. It states that the app does not publicly display or make records
+available, and that records wait for manual privacy, quality, provenance, and training/evaluation
+review.
 
 Every saved manifest and annotation sidecar carries:
 
@@ -54,36 +54,30 @@ writes trusted. The Data Lab intake and any future model handoff must retain man
 
 ## Contributor flow
 
-This small loop has no download, key-entry, or per-record Save control:
+This loop has no download, key-entry, per-record Save, or review control:
 
 1. Open the direct HTTPS Darts 180 app and choose **DATA LAB**. Read the notice; leave through
    **Back to Live Scoring** if you do not agree. Check the entry agreement to reveal the Lab.
 2. Wait for its same-origin intake Function to report **Ready**. The camera remains disabled until
    private storage is configured and reachable.
-3. Choose **Blank board** or **Dart test**, frame only the board, and take one rear-camera still.
-   The browser bounds the JPEG and holds it only in the current tab at this point.
-4. Inspect the exact still. Confirm that it has no person, face, sensitive room detail, or audio and
-   that you own or have permission to use the board-focused image. Discard and retake if either
-   statement is not true.
-5. After **Take this photo**, the held still automatically gets one local inference pass when a
-   verified development package is installed; it remains in the tab and cannot save at this stage.
-   Once the per-still checks are complete, choose **Next · Review camera suggestions** to see any
-   prefilled CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6, and up to three learned visible
-   tips. No geometry default, image threshold, or click history can manufacture a suggestion. If all
-   four learned anchors do not form a safe pose, any learned tips are withheld. A blank-board record
-   always withholds dart candidates.
-6. Keep correct markers exactly as shown, or select an anchor/tip row and tap the image to move it.
-   Remove a false tip and add every missed clearly visible physical entry tip (at most three). A
-   missing/invalid model or unsupported browser reports **Manual labeling ready**; complete the
-   same manual labels instead of treating the absence as a prediction.
-7. Recheck the label statement and choose **Confirm review · Auto-save**. The app creates an opaque
-   record ID and automatically sends `board.jpg`, `manifest.json`, then `annotations.json`.
-8. Keep the tab open until all three status items say **Saved**. Only a failed asset exposes
-   **Retry unsaved file**; confirmed immutable assets are skipped on retry.
+3. Choose **Start auto capture** once. The Lab opens the rear camera, verifies the local development
+   package, and begins watching. Keep the whole number ring sharp and in frame; there is nothing to
+   press per throw.
+4. When a newly thrown dart settles, the Lab automatically captures one bounded board-only JPEG and
+   records the detected CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6 anchors plus the
+   visible dart tips. No geometry default, image threshold, or click history can manufacture a
+   suggestion: a record only saves when all four learned anchors form a safe pose and, for a dart
+   record, at least one settled tip is detected. A still without a complete pose is skipped.
+5. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If
+   you move the mount to a materially different setup, the pseudonymous setup session rotates
+   automatically so the compiler can keep every session on one side of a split.
+6. Records save themselves to private storage without confirmation. Keep the tab open and watch the
+   **Saved / Saving / Failed** counters until confirmed. A failed record is retried automatically a
+   few times; confirmed immutable assets are never overwritten.
 
-The setup/session ID is pseudonymous. Keep it only while the phone, mount, board, and lighting stay
-materially the same; start a new session after a move, lighting change, board change, or later
-collection day. The local compiler assigns a complete session to only one train/validation/test split.
+Keep the pseudonymous session ID only while the phone, mount, board, and lighting stay materially the
+same. A move, lighting change, board change, or later collection day rotates to a new session. The local
+compiler assigns a complete session to only one train/validation/test split.
 
 Blank-board examples are accepted as anchor-only examples. They supplement—not replace—dart tests:
 the compiler still refuses a compilation with no dart entry labels at all.
@@ -97,18 +91,18 @@ Consent-gated development visitor
             └─ Vercel Blob private object: darts180/capture-lab/v2/record_<opaque>/...
 ```
 
-Each completed review produces three immutable private objects below a random `record_…` folder:
+Each completed capture produces three immutable private objects below a random `record_…` folder:
 
 - `board.jpg`
 - `manifest.json`
 - `annotations.json`
 
 The annotation sidecar records `labelSource` for each final anchor/tip and a versioned
-`annotationProvenance` block. When a genuine local model pass ran, that block records its immutable
-model identifier/version/SHA-256, declared training-data kind, and local backend; otherwise it records
-manual review. This is an audit clue for later restricted review—not proof that a browser-controlled
-submission is correct or that a learned suggestion became ground truth without the collector's explicit
-confirmation.
+`annotationProvenance` block. Auto-captured records store
+`reviewMethod: learned-suggestion-auto-capture-v1` and the immutable model identifier/version/SHA-256,
+declared training-data kind, and local backend of the pass that produced the labels. This is an audit
+clue for later restricted review—not proof that a browser-controlled submission is correct or that an
+automatically captured label became ground truth without any human confirmation.
 
 The Function accepts JPEG only for `board.jpg`, JSON only for the sidecars, limits an image to 3.5 MB
 and each JSON document to 192 KiB, checks JPEG framing, validates opaque capture/session/record IDs,
@@ -172,11 +166,11 @@ or a `VITE_` variable.
    separate edge setting deliberately rather than claiming a checkbox supplies authentication.
 4. Merge and deploy through the existing project. In a fresh browser profile, open **DATA LAB** and
    verify the agreement is initially unchecked and **Continue to Data Lab** is disabled. After agreeing,
-   verify that the private collection becomes **Ready** before camera controls enable.
-5. Make one safe blank-board record. After the automatic save reports all three assets confirmed,
-   verify in the restricted private Blob dashboard that exactly the three objects exist below a random
-   `darts180/capture-lab/v2/record_…` folder, remain private, and have no public URL. Then test one
-   dart-test record.
+   verify that the private collection becomes **Ready** before **Start auto capture** enables.
+5. Start auto capture on a clear board so a blank-board anchor record is captured and its three assets
+   report confirmed, then throw one dart and let it settle so a dart record saves. Verify in the
+   restricted private Blob dashboard that exactly the three objects exist below each random
+   `darts180/capture-lab/v2/record_…` folder, remain private, and have no public URL.
 
 If the Lab shows **Setup needed** or **Unavailable**, it intentionally leaves camera capture disabled and
 sends nothing. Correct the private store connection or the two server environment conditions above; do
@@ -185,14 +179,14 @@ not make the store public or add a browser credential to bypass the state.
 ## Failure, retention, retrieval, and review
 
 The save order is JPEG → manifest → annotations. A network or Function error marks only the current
-asset failed. Keep the tab open and choose **Retry unsaved file** after connectivity or deployment
-setup is restored. The retry reuses the same reviewed bytes and record ID; it never overwrites an
-already confirmed object or substitutes different content.
+asset failed and the Lab retries the queue automatically a few times, reusing the same captured bytes
+and record ID; it never overwrites an already confirmed object or substitutes different content. Keep
+the tab open while **Saving** is non-zero.
 
-There is deliberately no local download/export path. Closing or reloading the tab before an
-unconfirmed record is retried discards the browser-held copy. A rare timeout can leave uncertainty about
-whether the final immutable object reached Blob. Inspect the private dashboard before creating a second
-record; do not assume a 409 collision is permission to replace an object.
+There is deliberately no local download/export path. Closing or reloading the tab before an unconfirmed
+record is retried discards the browser-held copy. A rare timeout can leave uncertainty about whether the
+final immutable object reached Blob. Inspect the private dashboard before creating a second record; do
+not assume a 409 collision is permission to replace an object. A 409 is treated as already confirmed.
 
 A failed partial record has no automatic cleanup. A restricted storage operator should periodically
 review incomplete `record_…` folders and securely delete rejected/partial records under the approved
@@ -246,7 +240,7 @@ mix them with the procedural bootstrap using `darts180_vision.mixed_five_point_d
 puts reviewed real plus synthetic examples in `train`, but leaves `val` and `test` **real-only**. It
 re-audits input pairs and duplicate bytes, writes an explicit `mixed-synthetic-and-real` provenance report,
 and does not retrieve Blob records, automatically admit data, train, or deploy a model. A candidate still
-must be trained and browser-tested as an editable development model before normal Live Scoring can make
+must be trained and browser-tested as a development model before normal Live Scoring can make
 learned anchor/tip suggestions without manual point taps.
 
 See [`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) for the model-building
@@ -256,7 +250,7 @@ gates and [`runbooks/capture-lab.md`](runbooks/capture-lab.md) for the operating
 
 Unit coverage exercises fail-closed exact-mode/store configuration, consent timestamp/admission
 validation, path/type/size/pairing policy, same-origin credential-free browser requests, no browser Blob
-credential, automatic-review-save regression, and the local five-point suggestion adapter: only immutable
+credential, automatic-capture-save regression, and the local five-point suggestion adapter: only immutable
 class-1–4 detector evidence can prefill anchors, and class-0 tips are withheld without a full learned pose.
 It also covers synthetic provenance and the SPA/API rewrite boundary.
 The local synthetic builder additionally validates a fully paired numeric YOLO bootstrap and refuses to

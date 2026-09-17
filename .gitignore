@@ -32,6 +32,9 @@ ml/runs/
 ml/artifacts/
 *.onnx
 *.tflite
+
+# Reviewed development model package (installed beside the build, never committed)
+apps/web/public/models/darts180-deepdarts-yolo-dev-v1.json
 *.mlmodel
 *.mlpackage
 *.pt
@@ -51,3 +54,5 @@ minio-data/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+.vercel
+.env*

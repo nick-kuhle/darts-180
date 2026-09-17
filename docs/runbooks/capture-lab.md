@@ -1,18 +1,21 @@
-# Data Lab: consent-gated guided capture and private intake
+# Data Lab: consent-gated auto capture and private intake
 
 **Status:** small-scale development collection runbook<br />
 **Audience:** a Darts 180 development contributor and restricted data operator<br />
 **Purpose:** create useful board-focused stills without sending camera media before the required
-entry agreement and final review.
+entry agreement; every record stays unreviewed until a restricted operator screens it.
 
 Data Lab is the separate development workspace in the Darts 180 web app. It is **not** production
 auto-scoring, automated consent review, a truth machine, an identity system, or a general-purpose
-upload service. It creates one board-focused JPEG, capture manifest, and five-point reviewed-label
-sidecar. When a verified local five-point development package is installed, the Lab can prefill
-editable detector suggestions for the held still; otherwise it deliberately keeps the manual path.
-Once the contributor completes final label review, the matched trio saves automatically through the
-same-origin private Vercel intake. There is no download, collection-key entry, browser
-credential, or manual Save button.
+upload service. Once the collector agrees and starts the camera, the browser keeps one local
+inference loop running against the board. When a newly thrown dart settles it automatically
+captures one bounded board-only JPEG and saves the detected four semantic anchors plus visible
+dart-tip labels; whenever the board is clear it saves one blank-board anchor record. If the private
+collection is not ready, or the learned result cannot form a safe pose, the Lab says so and saves
+nothing rather than inventing a point. The JPEG, manifest, and annotation sidecar are **saved
+automatically** to private storage with no review step, and each record stays
+`consented-development-unreviewed` until a restricted operator screens it. There is no download,
+collection-key entry, browser credential, or manual Save button.
 
 Use it only after the setup in [guided private Data Lab intake](../20-private-capture-lab.md) is
 complete. Read that document with the [field-capture protocol](field-capture.md),
@@ -27,16 +30,16 @@ Before opening the camera:
    Darts 180 product/model improvement.
 2. If you agree, select the required entry checkbox. It records
    `DEVELOPMENT-DATA-LAB-CONSENT-V1`, an ISO acceptance time, and
-   `consented-development-unreviewed` with every completed record. It is not login, identity
-   verification, proof of rights, or permission to skip manual data review.
+   `consented-development-unreviewed` with every auto-captured record. It is not login, identity
+   verification, proof of rights, or permission to skip data review.
 3. Wait until the private collection says **Ready**. Camera controls stay disabled until the private
    Blob connection and exact `DARTS180_CAPTURE_ACCESS_MODE=development-consent-v1` setting are ready.
 4. Use only a permitted location and a stable camera position outside the throw path.
 5. Frame the board only. Exclude people, faces, reflections, screens, documents, addresses, family
    photos, and other identifying room detail. Prefer a tight crop with a neutral background.
 6. Never record audio. Data Lab requests `video` only.
-7. Submit only a board-focused still you own or have clear permission to use. If it includes a person
-   or sensitive detail, choose **Back to Live Scoring** or **Discard and retake**; do not casually
+7. Submit only board-focused stills you own or have clear permission to use. If the preview shows a
+   person or sensitive detail, stop and reframe, or choose **Back to Live Scoring**; do not casually
    crop/redact it or transfer it to Darts 180.
 
 The UI statements are contributor attestations, not automated privacy detection or a replacement for
@@ -44,51 +47,52 @@ consent and data review. The development access mode intentionally does not auth
 Private storage prevents public reads, but records must remain unreviewed until a restricted operator
 has screened them.
 
-## 2. Make one reviewed private record
+## 2. Make one private auto-captured record
+
+The camera loop has no download, key-entry, per-record Save, or review control:
 
 1. Open the direct deployed HTTPS app and choose **DATA LAB**, not **LIVE SCORING**. The initial
    unchecked agreement is required before Data Lab checks `/api/capture-ingest` or enables the camera.
-2. Select **Start rear camera** only after the scene satisfies the safety rules. The Lab requests
-   video only; it never requests a microphone.
-3. Mount/reframe until the complete board, double ring, and number ring are visible and sharp.
-   Start with **Blank board** for an anchor-only example; select **Dart test** only after one to
-   three darts have settled visibly in the board.
-4. Keep the displayed pseudonymous **setup session** ID for a continuous phone/mount/light setup.
-   Choose the lighting band and optional board/camera notes. Start a new session after a meaningful
-   change; never use a player name as the ID.
-5. Select **Take this photo**. The bounded JPEG and metadata snapshot are paired in this browser tab.
-   Changing the plan afterward affects only the next photo.
-6. Inspect the still. If it is unsafe or unusable, select **Discard and retake**. Otherwise complete
-   both per-still confirmations: board-only/no sensitive detail, and authority to use the photo for
-   Darts 180 development. Both reset for every new photo.
-7. After **Take this photo**, the held still automatically receives one local pass if a verified
-   five-point development model is installed. After the per-still checks, select
-   **Next · Review camera suggestions** to see any prefilled four named anchors plus up to three
-   visible class-0 tips. A missing/invalid model, unsupported browser, or incomplete learned pose says
-   **Manual labeling ready** rather than inventing a point.
-8. Review every marker. Keep a correct marker, or select an anchor/tip row and tap the image to move
-   it. Remove a false tip; add every missed clearly visible physical entry tip. For manual anchors use
-   CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4 D13/D6. A blank-board record intentionally has no
-   dart tip.
-9. Recheck the label statement and select **Confirm review · Auto-save**. This starts the automatic
-   private save. Keep the tab open while the Board JPEG, Capture manifest, and Annotation sidecar each
-   change to **Saved**.
-10. Stop/revoke camera permission when finished if desired.
+2. Select **Start auto capture** once—the only camera button—after the scene satisfies the safety
+   rules and the private collection says **Ready**. The Lab requests video only; it never requests a
+   microphone.
+3. Mount/reframe until the complete board, double ring, and number ring are visible and sharp and the
+   status shows **Board set**. Keep the whole number ring sharp and in frame; the Lab reads one local
+   inference pass about every 0.9 seconds while running.
+4. Keep the displayed pseudonymous **setup session** ID for a continuous phone/mount/light setup. The
+   session rotates automatically when the camera moves to a materially different pose; never use a
+   player name as the ID. There are no separate lighting or notes inputs.
+5. Throw one to three darts and let them settle. When a newly thrown dart settles, Data Lab
+   automatically captures one bounded board-only JPEG and records the detected CAL 1 D5/D20, CAL 2
+   D17/D3, CAL 3 D8/D11, CAL 4 D13/D6 anchors plus the visible settled dart tips. A record saves only
+   when the four learned anchors form a safe pose and, for a dart record, at least one settled tip is
+   detected; otherwise that frame is skipped rather than inventing a point.
+6. Whenever the board is clear or the camera starts, Data Lab automatically saves one blank-board
+   anchor record.
+7. Records save themselves to private storage without confirmation. Keep the tab open and watch the
+   **Saved / Saving / Failed** counters until confirmed. A failed record is retried automatically a
+   few times (there is no manual retry button); a 409 collision is treated as already confirmed, and
+   confirmed immutable assets are never overwritten.
+8. Select **Stop camera** when finished; the camera is the only control while running.
 
-The Lab sends nothing until step 9. It does not replace later privacy screening, provenance review,
-de-identification, duplicate control, annotation QA, or training admission.
+The Lab stores nothing until a safe pose and a settled record are available. Automatic save does not
+replace later privacy screening, provenance review, de-identification, duplicate control, annotation
+QA, or training admission.
 
 ## 3. Failed saves, sensitive captures, and retention
 
-A failed upload marks only the current asset **Retry needed**. Keep the tab open, restore connectivity
-or private collection setup, and select **Retry unsaved file**. Confirmed files are immutable and are
-not uploaded again. There is no local backup/export: leaving or reloading before all assets are confirmed
-discards the browser-held copy.
+A failed upload marks only the affected asset, and the Lab retries the queue automatically a few
+times, reusing the exact captured bytes and record ID. Confirmed files are immutable and are not
+uploaded again. There is no local backup/export: leaving or reloading before all assets are confirmed
+discards the browser-held copy, so inspect private Blob before creating a duplicate record.
 
-If the Lab says **Setup needed** or **Unavailable**, do not take a photo. Correct the existing Vercel
-project's private Blob connection and exact development-consent environment setting as described in
-[`20-private-capture-lab.md`](../20-private-capture-lab.md). Do not make Blob public, add a password/key
-to the browser, or use an insecure upload substitute.
+If the Lab says **Setup needed** or **Unavailable**, do not start the camera. Correct the existing
+Vercel project's private Blob connection and exact development-consent environment setting as
+described in [`20-private-capture-lab.md`](../20-private-capture-lab.md). Do not make Blob public, add
+a password/key to the browser, or use an insecure upload substitute.
+
+If the preview is sideways, too dark, or blurry, stop and reframe/re-light/re-mount before restarting;
+the Lab skips a frame rather than forcing a low-quality record.
 
 If a face or sensitive detail is noticed after a save, identify the record from the current Lab screen
 or restricted Blob dashboard and ask the authorized storage operator to delete the complete private
@@ -97,9 +101,9 @@ review and secure deletion under the retention policy.
 
 ## 4. Authorized model-building handoff
 
-No raw media belongs in this repository. When enough reviewed records exist, only an authorized storage
-operator may retrieve matching JPEG/manifest/annotation triplets from private Blob into a protected local
-training workspace. At that gate:
+No raw media belongs in this repository. When a restricted operator has screened enough auto-captured
+(unreviewed) records, that operator may retrieve matching JPEG/manifest/annotation triplets from
+private Blob into a protected local training workspace. At that gate:
 
 1. Verify the recorded development agreement and any applicable source/rights information.
 2. Screen the image for people, identifiers, and sensitive detail.
@@ -126,15 +130,15 @@ for faces, prove consent/rights, validate stated measurements, or establish anno
 
 ## 5. Troubleshooting
 
-| Symptom                                           | Expected action                                                                                                                                     |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Continue to Data Lab** is disabled              | Read the notice and select the entry agreement only if every statement is true. Otherwise return to Live Scoring.                                   |
-| Private collection is checking                    | Wait for the same-origin status check. Do not bypass disabled camera controls.                                                                      |
-| Private collection says setup needed              | Correct the same existing Vercel project as described in [`20-private-capture-lab.md`](../20-private-capture-lab.md); preserve private Blob access. |
-| Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over the direct HTTPS URL; verify browser/site permission. Do not substitute an insecure upload.                |
-| Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, and take a new still. Do not force a low-quality label.                                                            |
-| Next button is disabled                           | Take and inspect a still, then complete both per-still privacy/authority confirmations only when true.                                              |
-| Manual labeling ready                             | No verified local model result was safe or available. Complete the manual review; do not infer a hidden camera prediction.                          |
-| Confirm review is disabled                        | Finish all four named rim junctions, keep/add a visible dart tip for a dart test, then complete the explicit review statement.                      |
-| A private save fails                              | Keep the tab open, inspect the deployment/connection, then retry only the unsaved file. Inspect private Blob before creating a duplicate record.    |
-| A face or sensitive detail was noticed after save | Delete the complete private record through the restricted storage process; do not train or share it.                                                |
+| Symptom                                           | Expected action                                                                                                                                       |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Continue to Data Lab** is disabled              | Read the notice and select the entry agreement only if every statement is true. Otherwise return to Live Scoring.                                     |
+| Private collection is checking                    | Wait for the same-origin status check. Do not bypass disabled camera controls.                                                                        |
+| Private collection says setup needed              | Correct the same existing Vercel project as described in [`20-private-capture-lab.md`](../20-private-capture-lab.md); preserve private Blob access.   |
+| Browser says camera is unavailable                | Use current Safari, Chrome, or Edge over the direct HTTPS URL; verify browser/site permission. Do not substitute an insecure upload.                  |
+| Preview is sideways, too dark, or blurry          | Stop, reframe/re-light/re-mount, then start auto capture again. Frames without a readable board are skipped, never forced.                            |
+| Status never shows **Board set**                  | Keep the whole number ring sharp and in frame. No record saves until the four learned anchors form a safe pose.                                       |
+| Auto capture saves nothing                        | A frame without a complete board pose—or, for a dart record, a settled tip—is skipped. The Lab never invents a point.                                 |
+| A private save fails                              | Keep the tab open; the Lab retries automatically a few times. Inspect private Blob before creating a duplicate record; a 409 means already confirmed. |
+| Camera moved to a new setup                       | The pseudonymous session rotates automatically on a materially different pose. Keep phone, mount, board, and light stable for a continuous session.   |
+| A face or sensitive detail was noticed after save | Delete the complete private record through the restricted storage process; do not train or share it.                                                  |

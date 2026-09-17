@@ -109,15 +109,16 @@ model never outputs a score.
 4. Open **Edit Scores**. Choose **Confirm as shown** when correct, or tap the board to set the corrected
    score. Development DartCards block visit confirmation until one of those explicit actions occurs.
 5. Keep model-training collection in **Data Lab**, not Live Scoring. Live Scoring neither downloads nor
-   exports camera frames or labels. A completed Data Lab review automatically saves its matching private
-   JPEG/manifest/annotations record; a restricted operator screens it before any later training handoff.
+   exports camera frames or labels. Data Lab auto-captures each settled dart and blank board and saves the
+   matching private JPEG/manifest/annotations record with no review step; a restricted operator screens
+   every unreviewed record before any later training handoff.
 
 Before there is any model to make those suggestions, bootstrap real throws through the guided **Data Lab**
-using its explicit five-point rim-junction/tip labels. Its unchecked entry agreement records that completed
-board-only records are collected privately for product/model improvement; it is a controlled data-operation
-tool, not a normal Live Scoring step or user authentication. In the separately configured
-`development-consent-v1` deployment, completed review automatically saves a private record marked
-`consented-development-unreviewed`; it neither trains nor activates a model. See
+using its auto-captured five-point rim-junction/tip records. Its unchecked entry agreement records that
+board-only records are collected privately for product/model improvement while the camera runs; it is a
+controlled data-operation tool, not a normal Live Scoring step or user authentication. In the separately
+configured `development-consent-v1` deployment, auto-captured records save privately marked
+`consented-development-unreviewed`; they neither train nor activate a model. See
 [`19-build-the-first-camera-model.md`](19-build-the-first-camera-model.md) and
 [`20-private-capture-lab.md`](20-private-capture-lab.md).
 

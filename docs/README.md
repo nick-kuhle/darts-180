@@ -37,7 +37,7 @@ names what is known, what is a deliberate hypothesis, and what must be proven in
 
 - [Controlled field capture](runbooks/field-capture.md)
 - [Guided Data Lab capture and private intake](runbooks/capture-lab.md)
-- [Data Lab label-review workflow](runbooks/local-annotation.md)
+- [Data Lab auto-capture annotation workflow](runbooks/local-annotation.md)
 - [Scoring error / model-quality incident](runbooks/scoring-error-incident.md)
 - [Model release and rollback](runbooks/model-release-rollback.md)
 

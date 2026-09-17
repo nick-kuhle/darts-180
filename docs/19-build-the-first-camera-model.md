@@ -17,13 +17,14 @@ We give it that practice in four simple stages:
    dart tips and board points. This tests the data/training plumbing, not real-phone accuracy.
 2. **Take board pictures** after real throws. Keep people out of the picture and obtain the displayed
    Data Lab agreement before opening the camera.
-3. **Tell the computer where the dart tip and four board guide points are** in each real picture. This
-   is done in the special data tools, not in normal Live Scoring.
+3. **Auto-record where the dart tip and four board guide points are** in each real picture. Data Lab
+   captures these from the local learned model while it runs; every label stays unreviewed until a
+   restricted operator screens it. This is done in the special data tools, not in normal Live Scoring.
 4. **Train the model** from approved examples. Then Live Scoring can suggest scores, and you can
    correct the suggestions to make the next model better.
 
-Normal players never have to do the clicking in step 3. It is only the temporary, honest way to teach
-the first version what it is looking for.
+Normal players never interact with the data tools directly. The automatic capture is only the
+temporary, honest way to teach the first version what it is looking for.
 
 ## What to collect first
 
@@ -31,14 +32,15 @@ Start small enough to prove the workflow, then grow it:
 
 | Stage                    | Goal                                                                       | What “done” means                                                                           |
 | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Dry run                  | 12–20 one-dart board pictures from **at least 3 different setup sessions** | JPEG + manifest + five-point label sidecar export works; no privacy/split mistake           |
+| Dry run                  | 12–20 one-dart board pictures from **at least 3 different setup sessions** | JPEG + manifest + five-point label sidecar auto-captures; no privacy/split mistake          |
 | First experimental model | roughly 200–300 clearly labeled dart entries across 10+ sessions           | Enough varied material to train a real, editable development model—not to promise accuracy  |
 | Improvement campaign     | up to ~1,000 or more balanced real throws                                  | Use the model's confirmed/corrected results plus independent labels to cover its weak spots |
 
 A **setup session** means a continuous run with the same phone, mount position, board, and lighting.
-Start a new session in Data Lab after moving the camera, changing room/light, changing board, or starting
-another day. The compiler keeps a whole session in either training, validation, or test. That prevents a
-model from appearing smart merely because it saw nearly identical pictures during training.
+Data Lab rotates to a new session automatically after moving the camera, changing room/light, changing
+board, or starting another day. The compiler keeps a whole session in either training, validation, or
+test. That prevents a model from appearing smart merely because it saw nearly identical pictures during
+training.
 
 Do not collect 1,000 copies of T20 from one perfect view. Spread examples across:
 
@@ -99,44 +101,36 @@ can honestly provide ground truth.
 1. Open the direct HTTPS Darts 180 page in Safari/Chrome—not an embedded preview—and choose
    **DATA LAB**. This is separate from **LIVE SCORING**. Read its development collection notice and
    select the required agreement only if you accept automatic private collection for product/model
-   improvement. Normal players never need the label taps.
-2. Start with **Blank board**. Keep the full board/number ring visible, use a stable safe mount, and
-   take a board-only photo. Later choose **Dart test** after one to three darts have settled.
-3. Keep the generated setup session ID while the phone, mount, board, and light stay the same. Use
-   **Start a new setup session** after a material change. Select the lighting band and optional
-   camera notes honestly.
-4. Inspect the exact still. Confirm both statements only when true: no person/sensitive room detail
-   is visible, and you own the board-focused capture or have permission to use it for Darts 180
-   development. The entry agreement has already written `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its
-   acceptance timestamp, and `consented-development-unreviewed` status into this record's metadata.
-5. After **Take this photo**, Data Lab automatically starts one local pass when a verified five-point
-   development package is installed. Once the per-still checks are complete, choose
-   **Next · Review camera suggestions** to see any genuine detector evidence: CAL 1 D5/D20, CAL 2
-   D17/D3, CAL 3 D8/D11, CAL 4 D13/D6, and visible class-0 dart tips. If the package is absent,
-   invalid, unsupported by the browser, or cannot produce a complete safe learned pose, the Lab
-   plainly keeps the manual path instead of deriving points from image geometry or defaults.
-6. Review every marker. Keep a correct marker as shown, or select its row and tap the exact location
-   to move it; remove a false tip and add any missed visible tip. A **Blank board** intentionally
-   withholds tips. For a **Dart test**, every final tip must be a clearly visible physical entry—not
-   the flight, shaft end, or a guessed hidden point. If you need to label manually, use these four
-   outer-double-rim junctions in the displayed order:
+   improvement. Normal players never use the data tools.
+2. Wait until the private collection says **Ready**, then select **Start auto capture** once (the only
+   camera button). Keep the full board/number ring visible and use a stable safe mount.
+3. Wait for **Board set**, then throw one to three darts and let them settle. The displayed setup
+   session rotates automatically when the camera moves to a materially different pose; it also rotates
+   on a lighting change, board change, or later collection day. There are no lighting band or camera
+   notes inputs.
+4. A newly settled dart auto-captures one board-only JPEG: the entry agreement has already written
+   `DEVELOPMENT-DATA-LAB-CONSENT-V1`, its acceptance timestamp, and `consented-development-unreviewed`
+   status into this record's metadata, and the record stays unreviewed until a restricted operator
+   screens it. Whenever the board is clear, Data Lab auto-saves one blank-board anchor record.
+5. When a dart record saves, the detected anchors are CAL 1 D5/D20, CAL 2 D17/D3, CAL 3 D8/D11, CAL 4
+   D13/D6 with the visible settled class-0 tips. If the package is absent, invalid, unsupported by the
+   browser, or cannot produce a complete safe learned pose, the Lab says auto capture stays off and
+   saves nothing instead of deriving points from image geometry or defaults. A frame without a safe
+   pose—or, for a dart record, a settled tip—is skipped.
+6. Watch the **Saved / Saving / Failed** counters and keep the tab open. Records save themselves to
+   private storage with no confirmation; a failed save retries automatically a few times, and there is
+   no manual retry. Select **Stop camera** when finished.
 
-   | Model point | Physical point to tap                            |
-   | ----------- | ------------------------------------------------ |
-   | CAL 1       | the outer-double rim junction between D5 and D20 |
-   | CAL 2       | the outer-double rim junction between D17 and D3 |
-   | CAL 3       | the outer-double rim junction between D8 and D11 |
-   | CAL 4       | the outer-double rim junction between D13 and D6 |
+No manual marker review exists. The anchors follow the same five-point coordinate convention as the
+isolated development Live Scoring engine, so a model trained from your pictures can use the same
+detector layout without an invented landmark map:
 
-7. Recheck the label statement and choose **Confirm review · Auto-save**. On the configured
-   consent-gated development deployment, that completed review automatically saves the matched trio
-   to private Blob. The Lab keeps its camera disabled until the exact `development-consent-v1`/
-   private-store setup in [`20-private-capture-lab.md`](20-private-capture-lab.md) is ready; it has
-   no download, collection-key, browser credential, or manual per-record Save workflow.
-
-The unusual four points are deliberate. They use the same five-point coordinate convention as the
-isolated development Live Scoring engine, so a model trained from your pictures can use real
-detections without an invented landmark map.
+| Model point | Physical point on the board                      |
+| ----------- | ------------------------------------------------ |
+| CAL 1       | the outer-double rim junction between D5 and D20 |
+| CAL 2       | the outer-double rim junction between D17 and D3 |
+| CAL 3       | the outer-double rim junction between D8 and D11 |
+| CAL 4       | the outer-double rim junction between D13 and D6 |
 
 ### 2. Store and screen the pairs safely
 
@@ -161,7 +155,7 @@ dart entry labels—the compiler rejects that state.
 
 ### 4. Build the local training folder
 
-On a dedicated ML machine, compile the reviewed pairs to the strict five-class YOLO layout:
+On a dedicated ML machine, compile the operator-screened pairs to the strict five-class YOLO layout:
 
 ```bash
 cd ml
@@ -227,9 +221,10 @@ suggestions**. It still never becomes production auto-recording from this workfl
 
 The model suggests a score; you either choose **Confirm as shown** or correct the DartCard. For this
 consent-gated development program, collect any later training examples through **Data Lab** instead of a
-Live Scoring download/export path. A completed Data Lab review automatically saves its matching private
-JPEG/manifest/annotations trio, but it is still not automatically a valid training label. A restricted
-operator must screen, deduplicate, split, and approve it before the next training run.
+Live Scoring download/export path. Data Lab auto-captures each settled dart and blank board and saves the
+matching private JPEG/manifest/annotations trio with no review step, but it is still not automatically a
+valid training label. A restricted operator must screen, deduplicate, split, and approve each unreviewed
+record before the next training run.
 
 Keep an untouched set of whole sessions as the exam for each new model. Never move a model's own training
 pictures into that exam just to get a nicer number.

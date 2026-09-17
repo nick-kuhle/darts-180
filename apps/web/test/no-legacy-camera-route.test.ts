@@ -26,70 +26,74 @@ test('normal Live Scoring selects only learned runtime paths, never the retired 
   );
 });
 
-test('the top-level app keeps a consent-gated Data Lab with genuine optional learned suggestions and automatic private saving', () => {
+test('the top-level app keeps a consent-gated Data Lab that auto-captures private records with learned suggestions', () => {
   const app = source('../src/App.tsx');
   const lab = source('../src/components/DataLab.tsx');
   const dataLabSuggestions = source('../src/lib/developmentVision/dataLabSuggestions.ts');
   const consent = source('../src/lib/captureConsent.ts');
-  const developmentCamera = source('../src/components/DeepDartsDevelopmentCameraPlay.tsx');
+  const vault = source('../src/lib/captureVault.ts');
   const styles = source('../src/styles.css');
 
   assert.match(app, /LIVE SCORING/);
   assert.match(app, /DATA LAB/);
   assert.match(app, /<DataLab onExit/);
   assert.doesNotMatch(app, /AnnotationLab|CaptureLab/);
+
   assert.match(lab, /DEVELOPMENT COLLECTION NOTICE/);
   assert.match(lab, /CONTINUE TO DATA LAB/);
   assert.match(lab, /disabled={!checked}/);
   assert.match(lab, /if \(dataLabConsent === null\)/);
   assert.ok(
-    lab.indexOf('if (dataLabConsent === null)') < lab.indexOf('<CaptureStep'),
-    'the consent return must appear before camera controls are rendered',
+    lab.indexOf('if (dataLabConsent === null)') < lab.indexOf('<AutoCaptureLab'),
+    'the consent return must appear before the auto-capture camera UI is rendered',
   );
   assert.match(lab, /consentAcceptedAt/);
   assert.match(lab, /admissionStatus/);
   assert.match(consent, /DEVELOPMENT-DATA-LAB-CONSENT-V1/);
   assert.match(consent, /consented-development-unreviewed/);
-  assert.match(developmentCamera, /trainingDataKind === 'synthetic-only'/);
-  assert.match(developmentCamera, /trainingDataKind === 'mixed-synthetic-and-real'/);
-  assert.match(developmentCamera, /SYNTHETIC BOOTSTRAP ONLY · NOT VALIDATED ON REAL THROWS/);
-  assert.match(developmentCamera, /REVIEWED REAL \+ SIMULATED TRAINING · CHECK EVERY SUGGESTION/);
+
   assert.match(lab, /loadDevelopmentModelManifest/);
   assert.match(lab, /DevelopmentWebInferenceClient/);
   assert.match(lab, /getDevelopmentBrowserVisionSupport/);
   assert.match(lab, /buildDataLabLearnedSuggestions/);
-  assert.match(lab, /hasCompletePose: suggestions\.pose !== null/);
-  assert.match(
-    lab,
-    /Dart-tip suggestions were withheld because the learned anchors did not form a safe complete board pose/,
-  );
-  const heldStillDeclaration = lab.indexOf('const still: CapturedStill');
-  const automaticSuggestionInvocation = lab.indexOf('void runLearnedSuggestions(still)');
-  assert.ok(
-    heldStillDeclaration >= 0 && automaticSuggestionInvocation > heldStillDeclaration,
-    'every successfully held still must begin the local suggestion pass before review',
-  );
-  assert.match(lab, /suggestionRequestRef/);
-  assert.match(lab, /suggestionClientRef/);
+  assert.match(lab, /captureModelFrame/);
   assert.match(lab, /No verified local development model is installed/);
-  assert.match(lab, /NEXT · REVIEW CAMERA SUGGESTIONS/);
-  assert.match(lab, /CONFIRM REVIEW · AUTO-SAVE/);
-  assert.match(lab, /RETRY LOCAL MODEL · REPLACE POINTS/);
+
+  assert.match(lab, /AUTO_REVIEW_METHOD = 'learned-suggestion-auto-capture-v1'/);
+  assert.match(lab, /reviewMethod: AUTO_REVIEW_METHOD/);
   assert.match(lab, /annotationProvenance/);
   assert.match(dataLabSuggestions, /deriveDeepDartsDevelopmentPose/);
   assert.match(dataLabSuggestions, /DEEPDARTS_CLASS_IDS\.dartEntryPoint/);
   assert.doesNotMatch(dataLabSuggestions, /DEVELOPMENT_FIVE_POINT_ANNOTATION_ANCHORS/);
-  assert.match(lab, /automaticSaveStartedRef\.current = true/);
-  assert.match(lab, /automaticUploadAttemptedRecordRef/);
-  assert.match(lab, /void uploadPrivateRecord\(\)/);
-  assert.match(lab, /disabled={captured !== null \|\| !collectionReady}/);
+
+  assert.match(lab, /evaluateAutoCapture/);
+  assert.match(lab, /frame\.tracks\.filter\(\(track\) => track\.isSettled\)/);
+  assert.match(lab, /void captureStillNow\('empty-board'\)/);
+  assert.match(lab, /void captureStillNow\('static-dart'\)/);
+  assert.match(lab, /sessionIdRef\.current = newSessionId\(\)/);
+  assert.match(lab, /Camera moved · started a new setup session\./);
+
+  assert.match(lab, /uploadPrivateCaptureAsset/);
+  assert.match(lab, /getCaptureVaultStatus/);
+  assert.match(lab, /void processQueue\(\)/);
+  assert.match(vault, /\/api\/capture-ingest/);
+  assert.match(vault, /MAX_CAPTURE_IMAGE_BYTES/);
+
+  assert.match(lab, /START AUTO CAPTURE/);
+  assert.match(lab, /STOP CAMERA/);
+  assert.match(lab, /disabled={busy \|\| !collectionReady}/);
   assert.doesNotMatch(
     lab,
-    /collectionKey|hasUsableCollectionKey|X-Darts180-Collection-Key|DOWNLOAD LOCAL BACKUP|downloadBlob|SAVE TO PRIVATE STORAGE/,
+    /NEXT · REVIEW CAMERA SUGGESTIONS|CONFIRM REVIEW · AUTO-SAVE|RETRY LOCAL MODEL|CaptureStep|LabelStep|SaveStep|automaticSaveStartedRef/,
   );
   assert.doesNotMatch(lab, /download/i);
   assert.doesNotMatch(lab, /type="password"/);
-  assert.doesNotMatch(lab, /localStorage|sessionStorage|BLOB_READ_WRITE_TOKEN|VITE_BLOB/);
+  assert.doesNotMatch(
+    lab,
+    /collectionKey|X-Darts180-Collection-Key|localStorage|sessionStorage|BLOB_READ_WRITE_TOKEN|VITE_BLOB/,
+  );
+
   assert.match(styles, /\.data-lab-consent-card/);
+  assert.match(styles, /\.data-lab-auto-grid/);
   assert.doesNotMatch(styles, /data-lab-key-input/);
 });

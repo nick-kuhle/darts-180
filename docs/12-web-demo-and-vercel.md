@@ -24,11 +24,13 @@ Protection configuration, Blob/OIDC behavior, or real-device camera behavior has
   creation with single-threaded WASM fallback, serialized Worker requests, and resource cleanup;
 - an inspectable **Learned Vision Diagnostics** page, which reports runtime/model gates but is not an
   alternate score engine; and
-- a clearly separate guided **Data Lab** for separately consented blank-board and dart-test examples.
+- a clearly separate no-button **Data Lab** for separately consented blank-board and dart-test examples.
   An unchecked development collection agreement appears before camera controls; it records consent version/
-  time and marks every completed browser record unreviewed. After label review, the app automatically sends
-  the reviewed JPEG/manifest/annotation trio through a same-origin guarded Function to a private Vercel Blob
-  store. It has no browser collection credential, local-download path, or manual per-record Save control.
+  time and marks every captured browser record unreviewed (`consented-development-unreviewed`). Once the
+  collector starts auto capture, one local inference loop watches the board and each newly settled dart or
+  clear board automatically saves a JPEG/manifest/annotation trio through a same-origin guarded Function to
+  a private Vercel Blob store, with no label-review screen. It has no browser collection credential,
+  local-download path, or manual per-record Save control.
 
 The retired red/green color-fit and frame-difference Live Scoring components and scoring modules are no
 longer reachable or bundled by the product route. Their historical failure record is retained in
@@ -96,10 +98,10 @@ criteria, not merely a Vite build success.
 
 The app-root and repository-root configurations both include the same `api/capture-ingest` Function so the
 existing Vercel project can keep its current Root Directory configuration. It is not a public read endpoint:
-it accepts only completed-review bounded JPEG/JSON assets, writes them to a **private** Blob store, and
-exposes no browser read/list/download route. It reports ready only when the exact development-consent
-acknowledgement and linked `BLOB_STORE_ID` are present; otherwise the Lab fail-closes and disables camera
-capture.
+it accepts only consented, auto-captured bounded JPEG/JSON assets (every record remains unreviewed), writes
+them to a **private** Blob store, and exposes no browser read/list/download route. It reports ready only
+when the exact development-consent acknowledgement and linked `BLOB_STORE_ID` are present; otherwise the
+Lab fail-closes and disables camera capture.
 
 `DARTS180_CAPTURE_ACCESS_MODE=development-consent-v1` deliberately supports the requested small-scale,
 consent-gated development intake without paid All Deployments protection. The browser sends no Blob

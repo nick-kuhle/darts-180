@@ -5,9 +5,9 @@
 uncontrolled video dataset.
 
 For a guided browser still, follow the more specific [Data Lab capture and private intake workflow](capture-lab.md).
-It does not replace this controlled, consented field protocol. Its completed-review automatic private
+It does not replace this controlled, consented field protocol. Its no-button automatic private
 save is a consent-gated small-scale development intake with private reads—not a public training admission,
-identity system, or informal upload path. Its checkbox is provenance, not authentication; follow the manual
+identity system, or informal upload path. Its checkbox is provenance, not authentication; follow the
 screening boundary in the Data Lab runbook.
 
 ## Stop conditions

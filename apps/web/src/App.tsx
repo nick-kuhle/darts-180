@@ -291,8 +291,8 @@ export function App() {
           </h1>
           <p className="lede">
             Two clear paths: <b>Live Scoring</b> is the eventual player experience; <b>Data Lab</b>
-            is the private, guided place to teach the first real camera model with your own board
-            photos.
+            is the private, no-button place where a consented camera watches your board and
+            automatically saves the stills that teach the first real camera model.
           </p>
         </div>
         <div className="hero-side">
