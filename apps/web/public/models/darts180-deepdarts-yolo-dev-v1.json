@@ -1,0 +1,45 @@
+{
+  "assetPath": "/models/darts180-deepdarts-yolo-dev-v1.onnx",
+  "classMap": {
+    "calibration1": 1,
+    "calibration2": 2,
+    "calibration3": 3,
+    "calibration4": 4,
+    "dartEntryPoint": 0
+  },
+  "input": {
+    "colorOrder": "rgb",
+    "height": 640,
+    "normalization": "zero-to-one",
+    "resizeMode": "stretch",
+    "width": 640
+  },
+  "modelId": "darts180-deepdarts-yolo",
+  "modelVersion": "darts180-synthetic-dev-2026-09-16",
+  "output": {
+    "classCount": 5,
+    "detections": "output0",
+    "layout": "yolov8-raw-cxcywh-class-scores"
+  },
+  "policy": {
+    "maxDetections": 32,
+    "maxTipTrackSpreadMm": 6,
+    "minCalibrationConfidence": 0.1,
+    "minDartConfidence": 0.1,
+    "minDetectionConfidence": 0.1,
+    "nmsIouThreshold": 0.45,
+    "tipTrackMatchDistanceMm": 12,
+    "tipTrackSettleMs": 250,
+    "tipTrackStaleAfterMs": 1200
+  },
+  "provenance": {
+    "licenseReviewId": "procedural-renderer-and-yolov8n-checkpoint-review-v1",
+    "trainedAt": "2026-09-17T00:01:37Z",
+    "trainingDataId": "synthetic-fivepoint-v1",
+    "trainingDataKind": "synthetic-only"
+  },
+  "releaseStage": "development",
+  "runtime": "onnxruntime-web",
+  "schemaVersion": 1,
+  "sha256": "543fdae544a0191b43ec162592ecf3120b10fbfabc90040f68a687b6cd531925"
+}

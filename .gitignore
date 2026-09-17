@@ -33,8 +33,9 @@ ml/artifacts/
 *.onnx
 *.tflite
 
-# Reviewed development model package (installed beside the build, never committed)
-apps/web/public/models/darts180-deepdarts-yolo-dev-v1.json
+# Reviewed development model package (the development artifact is deployable; production artifacts remain gated)
+!apps/web/public/models/darts180-deepdarts-yolo-dev-v1.json
+!apps/web/public/models/darts180-deepdarts-yolo-dev-v1.onnx
 *.mlmodel
 *.mlpackage
 *.pt
