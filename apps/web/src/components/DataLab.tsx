@@ -551,12 +551,15 @@ function AutoCaptureLab({
     const canvas = previewCanvasRef.current;
     const video = videoRef.current;
     if (canvas === null || video === null || video.videoWidth <= 0) return null;
-    const scale = Math.min(1, OVERLAY_LONG_EDGE / Math.max(video.videoWidth, video.videoHeight));
+    const sourceSize = Math.min(video.videoWidth, video.videoHeight);
+    const sourceX = (video.videoWidth - sourceSize) / 2;
+    const sourceY = (video.videoHeight - sourceSize) / 2;
+    const scale = Math.min(1, OVERLAY_LONG_EDGE / sourceSize);
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
     const canvasX = ((clientX - rect.left) * canvas.width) / rect.width;
     const canvasY = ((clientY - rect.top) * canvas.height) / rect.height;
-    return { x: canvasX / scale, y: canvasY / scale };
+    return { x: sourceX + canvasX / scale, y: sourceY + canvasY / scale };
   };
 
   const onTemplatePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -947,17 +950,20 @@ function AutoCaptureLab({
     const canvas = previewCanvasRef.current;
     const frame = latestFrameRef.current;
     if (video !== null && canvas !== null && video.videoWidth > 0 && video.videoHeight > 0) {
-      const scale = Math.min(1, OVERLAY_LONG_EDGE / Math.max(video.videoWidth, video.videoHeight));
-      const width = Math.max(1, Math.round(video.videoWidth * scale));
-      const height = Math.max(1, Math.round(video.videoHeight * scale));
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
+      const sourceSize = Math.min(video.videoWidth, video.videoHeight);
+      const sourceX = (video.videoWidth - sourceSize) / 2;
+      const sourceY = (video.videoHeight - sourceSize) / 2;
+      const scale = Math.min(1, OVERLAY_LONG_EDGE / sourceSize);
+      const size = Math.max(1, Math.round(sourceSize * scale));
+      if (canvas.width !== size || canvas.height !== size) {
+        canvas.width = size;
+        canvas.height = size;
       }
       const context = canvas.getContext('2d');
       if (context !== null) {
-        context.drawImage(video, 0, 0, width, height);
+        context.drawImage(video, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
         context.save();
+        context.translate(-sourceX * scale, -sourceY * scale);
         context.scale(scale, scale);
         if (calibrating && setupTemplateRef.current !== null) {
           drawSetupTemplate(context, setupTemplateRef.current);
@@ -1201,16 +1207,6 @@ function AutoCaptureLab({
               onPointerUp={onTemplatePointerUp}
               onPointerCancel={onTemplatePointerUp}
             />
-            {calibrating && cameraActive && (
-              <div className="data-lab-calibration-notice" role="status">
-                <strong>SETUP CALIBRATION</strong>
-                <p>
-                  Drag on the preview to move the template onto the board, then use the sliders to
-                  fit its size and tilt. The bull ring should sit on the bull's-eye and the outer
-                  ring on the double ring. Then tap <strong>LOCK SETUP</strong>.
-                </p>
-              </div>
-            )}
             {!cameraActive && (
               <div className="camera-empty">
                 <span>◉</span>
@@ -1226,6 +1222,16 @@ function AutoCaptureLab({
               </div>
             )}
           </div>
+          {calibrating && cameraActive && (
+            <div className="data-lab-calibration-notice" role="status">
+              <strong>SETUP CALIBRATION</strong>
+              <p>
+                Drag on the square preview to move the template onto the board, then use the sliders
+                to fit its size and tilt. The bull ring should sit on the bull's-eye and the outer
+                ring on the double ring. Then tap <strong>LOCK SETUP</strong>.
+              </p>
+            </div>
+          )}
           {calibrating && setupTemplate !== null && renderSetupSliders()}
           {cameraError !== null && !cameraActive && (
             <p className="camera-error" role="alert">
