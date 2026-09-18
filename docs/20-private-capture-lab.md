@@ -73,7 +73,8 @@ This loop has no download, key-entry, per-record Save, or review control:
    place the bull, then use the width, height, horizontal-tilt, vertical-tilt, and clockwise/
    counter-clockwise roll sliders to fit the ring for a tilted phone/mount perspective; then tap
    **LOCK SETUP**. The four anchors derive from the fitted perspective template and the board locks
-   while the learned path is unavailable;
+   while the learned path is unavailable. Confirm **ANCHORS READY** before throwing; dart detection
+   stays paused until that confirmation;
    whenever the model resolves all four anchors itself, the learned frame takes over again. This is
    the only human gesture in the workflow and it is never a per-throw control.
 6. Whenever the board is clear or the camera starts, the Lab saves one blank-board anchor record. If

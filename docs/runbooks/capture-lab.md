@@ -71,8 +71,8 @@ The camera loop has no download, key-entry, per-record Save, or review control:
    rings plus spokes) appears over the live preview. Drag inside the rings to move the bull, then use
    the width, height, horizontal-tilt, vertical-tilt, and clockwise/counter-clockwise roll sliders
    to fit the ring for a tilted phone/mount perspective, then select **LOCK SETUP**. The four anchors derive from the fitted perspective template
-   and the board locks; the learned path takes over whenever the model resolves all four anchors
-   itself. Locking the setup counts as a board lock, never a per-throw input.
+   and the board locks; select **CONFIRM ANCHORS · START THROWING** before dart detection begins.
+   Locking the setup counts as a board lock, never a per-throw input.
 7. Whenever the board is clear or the camera starts, Data Lab automatically saves one blank-board
    anchor record.
 8. Records save themselves to private storage without confirmation. Keep the tab open and watch the

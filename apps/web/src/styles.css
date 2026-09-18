@@ -4514,6 +4514,79 @@ h3 {
   touch-action: none;
 }
 
+.data-lab-edge-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.data-lab-edge-control {
+  position: absolute;
+  display: grid;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border: 1px solid rgba(247, 201, 111, 0.6);
+  border-radius: 9px;
+  background: rgba(8, 13, 11, 0.78);
+  color: #f7c96f;
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  pointer-events: auto;
+}
+
+.data-lab-edge-control.top,
+.data-lab-edge-control.bottom {
+  left: 23%;
+  right: 23%;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.data-lab-edge-control.top {
+  top: 7px;
+}
+
+.data-lab-edge-control.bottom {
+  bottom: 7px;
+}
+
+.data-lab-edge-control.left,
+.data-lab-edge-control.right {
+  top: 23%;
+  bottom: 23%;
+  width: 34px;
+  justify-items: center;
+  padding: 8px 4px;
+}
+
+.data-lab-edge-control.left {
+  left: 7px;
+}
+
+.data-lab-edge-control.right {
+  right: 7px;
+}
+
+.data-lab-edge-control.left span,
+.data-lab-edge-control.right span {
+  writing-mode: vertical-rl;
+}
+
+.data-lab-edge-control input[type='range'] {
+  width: 100%;
+  accent-color: #f7c96f;
+}
+
+.data-lab-edge-control.left input[type='range'],
+.data-lab-edge-control.right input[type='range'] {
+  width: 24px;
+  height: 100%;
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
+
 .data-lab-calibration-notice {
   margin: 12px 0 0;
   padding: 11px 13px;
@@ -4539,41 +4612,6 @@ h3 {
 
 .data-lab-calibration-notice p strong {
   color: #f7c96f;
-}
-
-.data-lab-fit-controls {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 13px 14px;
-  border: 1px solid #3c5a4c;
-  border-radius: 13px;
-  background: #14251d;
-}
-
-.data-lab-fit-row {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 46px;
-  align-items: center;
-  gap: 10px;
-  color: #8fa89c;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-}
-
-.data-lab-fit-label {
-  white-space: nowrap;
-}
-
-.data-lab-fit-value {
-  text-align: right;
-  color: #e7d9b6;
-  font-variant-numeric: tabular-nums;
-}
-
-.data-lab-fit-row input[type='range'] {
-  width: 100%;
-  accent-color: #f7c96f;
 }
 
 .data-lab-auto-note {

@@ -86,6 +86,9 @@ test('the top-level app keeps a consent-gated Data Lab that auto-captures privat
   assert.match(lab, /CALIBRATE SETUP/);
   assert.match(lab, /LOCK SETUP/);
   assert.match(lab, /sliders to/);
+  assert.match(lab, /CONFIRM ANCHORS · START THROWING/);
+  assert.match(lab, /X TILT/);
+  assert.match(lab, /SPIN \/ ROLL/);
 
   assert.match(lab, /uploadPrivateCaptureAsset/);
   assert.match(lab, /getCaptureVaultStatus/);

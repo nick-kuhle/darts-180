@@ -282,6 +282,7 @@ function AutoCaptureLab({
   const [poseSource, setPoseSource] = useState<'learned' | 'setup' | null>(null);
   const [setupCalibration, setSetupCalibration] = useState<SetupCalibration | null>(null);
   const [calibrating, setCalibrating] = useState(false);
+  const [anchorsConfirmed, setAnchorsConfirmed] = useState(false);
   const [setupTemplate, setSetupTemplate] = useState<SetupAffineTemplate | null>(null);
   const [visibleDartCount, setVisibleDartCount] = useState(0);
   const [sessionId, setSessionId] = useState(sessionIdRef.current);
@@ -544,7 +545,17 @@ function AutoCaptureLab({
       return;
     }
     setCalibrating(false);
-    pushActivity('info', 'Setup locked · anchor detection is now running.');
+    setAnchorsConfirmed(false);
+    pushActivity('info', 'Anchors ready · confirm the overlay before throwing.');
+  };
+
+  const confirmAnchors = () => {
+    if (setupCalibrationRef.current === null) return;
+    engineRef.current?.resetVisit();
+    setAnchorsConfirmed(true);
+    applySetupTemplate(null);
+    setPoseReady(true);
+    pushActivity('info', 'Anchors confirmed · dart detection is now running.');
   };
 
   const canvasClientToVideoPoint = (clientX: number, clientY: number): ImagePoint | null => {
@@ -620,6 +631,7 @@ function AutoCaptureLab({
       next = {
         ...template,
         scaleX: Math.max(bannerScaleX, TEMPLATE_MIN_SCALE),
+        scaleY: Math.max(bannerScaleX, TEMPLATE_MIN_SCALE),
       };
     } else if (field === 'heightPct') {
       const bannerScaleY = ((value / 100) * minDim) / (2 * BOARD_RADII_MM.doubleOuter);
@@ -629,108 +641,6 @@ function AutoCaptureLab({
       };
     }
     applySetupTemplate(next);
-  };
-
-  const renderSetupSliders = (): ReactElement | null => {
-    const values = templateSliderValues();
-    if (values === null) return null;
-    const rows: Array<{
-      label: string;
-      field: 'centreX' | 'centreY' | 'tiltXDeg' | 'tiltYDeg' | 'rollDeg' | 'widthPct' | 'heightPct';
-      min: number;
-      max: number;
-      step: number;
-      display: string;
-    }> = [
-      {
-        label: 'BULL LEFT → RIGHT',
-        field: 'centreX',
-        min: 0,
-        max: 100,
-        step: 0.5,
-        display: `${Math.round(values.bullX)}%`,
-      },
-      {
-        label: 'BULL UP → DOWN',
-        field: 'centreY',
-        min: 0,
-        max: 100,
-        step: 0.5,
-        display: `${Math.round(values.bullY)}%`,
-      },
-      {
-        label: 'TILT UP ↔ DOWN',
-        field: 'tiltXDeg',
-        min: -60,
-        max: 60,
-        step: 1,
-        display: `${Math.round(values.tiltXDeg)}°`,
-      },
-      {
-        label: 'TILT LEFT ↔ RIGHT',
-        field: 'tiltYDeg',
-        min: -60,
-        max: 60,
-        step: 1,
-        display: `${Math.round(values.tiltYDeg)}°`,
-      },
-      {
-        label: 'ROLL CW ↔ CCW',
-        field: 'rollDeg',
-        min: -180,
-        max: 180,
-        step: 1,
-        display: `${Math.round(values.rollDeg)}°`,
-      },
-      {
-        label: 'WIDTH',
-        field: 'widthPct',
-        min: TEMPLATE_SIZE_MIN_PERCENT,
-        max: TEMPLATE_SIZE_MAX_PERCENT,
-        step: 1,
-        display: `${Math.round(values.widthPct)}%`,
-      },
-      {
-        label: 'HEIGHT',
-        field: 'heightPct',
-        min: TEMPLATE_SIZE_MIN_PERCENT,
-        max: TEMPLATE_SIZE_MAX_PERCENT,
-        step: 1,
-        display: `${Math.round(values.heightPct)}%`,
-      },
-    ];
-    return (
-      <div className="data-lab-fit-controls" aria-label="Board template fit sliders">
-        {rows.map((row) => (
-          <label key={row.field} className="data-lab-fit-row">
-            <span className="data-lab-fit-label">{row.label}</span>
-            <input
-              type="range"
-              min={row.min}
-              max={row.max}
-              step={row.step}
-              value={
-                row.field === 'centreX'
-                  ? values.bullX
-                  : row.field === 'centreY'
-                    ? values.bullY
-                    : row.field === 'tiltXDeg'
-                      ? values.tiltXDeg
-                      : row.field === 'tiltYDeg'
-                        ? values.tiltYDeg
-                        : row.field === 'rollDeg'
-                          ? values.rollDeg
-                          : row.field === 'widthPct'
-                            ? values.widthPct
-                            : values.heightPct
-              }
-              onChange={(event) => updateTemplateSlider(row.field, Number(event.target.value))}
-            />
-            <span className="data-lab-fit-value">{row.display}</span>
-          </label>
-        ))}
-      </div>
-    );
   };
 
   const templateSliderValues = (): {
@@ -755,6 +665,59 @@ function AutoCaptureLab({
       widthPct: ((template.scaleX * 2 * BOARD_RADII_MM.doubleOuter) / minDim) * 100,
       heightPct: ((template.scaleY * 2 * BOARD_RADII_MM.doubleOuter) / minDim) * 100,
     };
+  };
+
+  const renderSetupEdgeControls = (): ReactElement | null => {
+    const values = templateSliderValues();
+    if (values === null) return null;
+    return (
+      <div className="data-lab-edge-controls" aria-label="Board overlay controls">
+        <label className="data-lab-edge-control top">
+          <span>SIZE</span>
+          <input
+            aria-label="Board size"
+            type="range"
+            min={TEMPLATE_SIZE_MIN_PERCENT}
+            max={TEMPLATE_SIZE_MAX_PERCENT}
+            value={values.widthPct}
+            onChange={(event) => updateTemplateSlider('widthPct', Number(event.target.value))}
+          />
+        </label>
+        <label className="data-lab-edge-control right">
+          <span>X TILT</span>
+          <input
+            aria-label="Board horizontal tilt"
+            type="range"
+            min={-60}
+            max={60}
+            value={values.tiltXDeg}
+            onChange={(event) => updateTemplateSlider('tiltXDeg', Number(event.target.value))}
+          />
+        </label>
+        <label className="data-lab-edge-control bottom">
+          <span>SPIN / ROLL</span>
+          <input
+            aria-label="Board clockwise counter-clockwise roll"
+            type="range"
+            min={-180}
+            max={180}
+            value={values.rollDeg}
+            onChange={(event) => updateTemplateSlider('rollDeg', Number(event.target.value))}
+          />
+        </label>
+        <label className="data-lab-edge-control left">
+          <span>Y TILT</span>
+          <input
+            aria-label="Board vertical tilt"
+            type="range"
+            min={-60}
+            max={60}
+            value={values.tiltYDeg}
+            onChange={(event) => updateTemplateSlider('tiltYDeg', Number(event.target.value))}
+          />
+        </label>
+      </div>
+    );
   };
 
   const captureStillNow = async (intent: CaptureIntent) => {
@@ -932,6 +895,14 @@ function AutoCaptureLab({
       }
       const source = frame.pose === null ? null : usedSetupCalibration ? 'setup' : 'learned';
       poseSourceRef.current = source;
+      if (!anchorsConfirmed) {
+        engine.resetVisit();
+        latestFrameRef.current = { ...frame, tracks: [], suggestion: null };
+        setPoseReady(frame.pose !== null);
+        setPoseSource(source);
+        setVisibleDartCount(0);
+        return;
+      }
       latestFrameRef.current = frame;
       setPoseReady(frame.pose !== null);
       setPoseSource(source);
@@ -965,10 +936,10 @@ function AutoCaptureLab({
         context.save();
         context.translate(-sourceX * scale, -sourceY * scale);
         context.scale(scale, scale);
-        if (calibrating && setupTemplateRef.current !== null) {
+        if ((calibrating || !anchorsConfirmed) && setupTemplateRef.current !== null) {
           drawSetupTemplate(context, setupTemplateRef.current);
         }
-        if (frame !== null && !calibrating) drawFrameOverlay(context, frame);
+        if (frame !== null && !calibrating && anchorsConfirmed) drawFrameOverlay(context, frame);
         context.restore();
       }
     }
@@ -1006,6 +977,7 @@ function AutoCaptureLab({
     setPoseSource(null);
     setSetupCalibration(null);
     setCalibrating(false);
+    setAnchorsConfirmed(false);
     applySetupTemplate(null);
     setVisibleDartCount(0);
     setPhase('idle');
@@ -1103,6 +1075,7 @@ function AutoCaptureLab({
       setPoseSource(null);
       setSetupCalibration(null);
       setCalibrating(true);
+      setAnchorsConfirmed(false);
       setPhase('running');
       pushActivity('info', 'Camera ready · fit the board overlay before anchor detection starts.');
       beginOverlay();
@@ -1207,6 +1180,7 @@ function AutoCaptureLab({
               onPointerUp={onTemplatePointerUp}
               onPointerCancel={onTemplatePointerUp}
             />
+            {calibrating && cameraActive && renderSetupEdgeControls()}
             {!cameraActive && (
               <div className="camera-empty">
                 <span>◉</span>
@@ -1226,13 +1200,18 @@ function AutoCaptureLab({
             <div className="data-lab-calibration-notice" role="status">
               <strong>SETUP CALIBRATION</strong>
               <p>
-                Drag on the square preview to move the template onto the board, then use the sliders
-                to fit its size and tilt. The bull ring should sit on the bull's-eye and the outer
-                ring on the double ring. Then tap <strong>LOCK SETUP</strong>.
+                Drag on the square preview to move the template. Use the edge controls to fit size,
+                tilt, and spin. Match the labeled 20, 3, 11, and 6 anchor guides, then lock the
+                setup.
               </p>
             </div>
           )}
-          {calibrating && setupTemplate !== null && renderSetupSliders()}
+          {!calibrating && running && !anchorsConfirmed && (
+            <div className="data-lab-calibration-notice" role="status">
+              <strong>ANCHORS READY</strong>
+              <p>Confirm that the 20, 3, 11, and 6 guides match the board before throwing darts.</p>
+            </div>
+          )}
           {cameraError !== null && !cameraActive && (
             <p className="camera-error" role="alert">
               {cameraError}
@@ -1272,6 +1251,10 @@ function AutoCaptureLab({
                     CANCEL
                   </button>
                 </>
+              ) : !anchorsConfirmed ? (
+                <button className="button primary compact" onClick={confirmAnchors} type="button">
+                  CONFIRM ANCHORS · START THROWING
+                </button>
               ) : (
                 <button
                   className="button ghost compact"
@@ -1791,6 +1774,25 @@ function drawSetupTemplate(context: CanvasRenderingContext2D, template: SetupAff
     }
     context.closePath();
     context.stroke();
+  }
+
+  const anchorLabels: readonly [string, number, number][] = [
+    ['20', 0, -148],
+    ['3', 0, 148],
+    ['11', -148, 0],
+    ['6', 148, 0],
+  ];
+  context.font = '700 22px system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  for (const [label, xMm, yMm] of anchorLabels) {
+    const point = mapPoint(xMm, yMm);
+    if (point === null) continue;
+    context.lineWidth = 6;
+    context.strokeStyle = 'rgba(8, 13, 11, 0.9)';
+    context.strokeText(label, point.x, point.y);
+    context.fillStyle = '#ffffff';
+    context.fillText(label, point.x, point.y);
   }
 
   context.strokeStyle = '#ffffff';
